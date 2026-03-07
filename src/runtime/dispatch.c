@@ -1,0 +1,280 @@
+#include "runtime/internal.h"
+
+#include <stdatomic.h>
+#include <string.h>
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+#pragma clang diagnostic ignored "-Wpre-c11-compat"
+#endif
+
+#if defined(__clang__) || defined(__GNUC__)
+#define SF_ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#define SF_ALWAYS_INLINE inline
+#endif
+
+SFDispatchEntry_t g_dispatch_cache[SF_DISPATCH_CACHE_SIZE];
+#if SF_RUNTIME_THREADSAFE
+__thread SFDispatchEntry_t g_dispatch_l0;
+#else
+SFDispatchEntry_t g_dispatch_l0;
+#endif
+
+#if SF_RUNTIME_THREADSAFE
+static SFRuntimeRwlock_t g_dispatch_cache_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
+#endif
+
+#if SF_DISPATCH_STATS
+#if SF_RUNTIME_THREADSAFE
+static _Atomic(uint64_t) g_cache_hits;
+static _Atomic(uint64_t) g_cache_misses;
+static _Atomic(uint64_t) g_method_walks;
+#define SF_STATS_INC(counter) atomic_fetch_add_explicit(&(counter), 1, memory_order_relaxed)
+#define SF_STATS_LOAD(counter) atomic_load_explicit(&(counter), memory_order_relaxed)
+#define SF_STATS_STORE(counter, value) atomic_store_explicit(&(counter), (value), memory_order_relaxed)
+#else
+static uint64_t g_cache_hits;
+static uint64_t g_cache_misses;
+static uint64_t g_method_walks;
+#define SF_STATS_INC(counter) (++(counter))
+#define SF_STATS_LOAD(counter) (counter)
+#define SF_STATS_STORE(counter, value) ((counter) = (value))
+#endif
+#else
+#define SF_STATS_INC(counter) ((void)0)
+#endif
+
+static id nil_imp(id self, SEL cmd, ...) {
+    (void)self;
+    (void)cmd;
+    return (id)0;
+}
+
+static int selector_equal_local(SEL lhs, SEL rhs) {
+    if (lhs == rhs) {
+        return 1;
+    }
+    if (lhs == NULL || rhs == NULL) {
+        return 0;
+    }
+
+    if (lhs->name == rhs->name && lhs->types == rhs->types) {
+        return 1;
+    }
+
+    if (lhs->name == NULL || rhs->name == NULL) {
+        return 0;
+    }
+    if (strcmp(lhs->name, rhs->name) != 0) {
+        return 0;
+    }
+
+    if (lhs->types == NULL || rhs->types == NULL) {
+        return 1;
+    }
+    return strcmp(lhs->types, rhs->types) == 0;
+}
+
+int sf_selector_equal(SEL a, SEL b) {
+    return selector_equal_local(a, b);
+}
+
+int sf_dispatch_imp_is_nil(IMP imp) {
+    return imp == (IMP)nil_imp;
+}
+
+static size_t cache_index_for(Class cls, SEL op) {
+    uintptr_t cls_bits = ((uintptr_t)cls) >> 4U;
+    uintptr_t sel_bits = ((uintptr_t)op) >> 4U;
+    uintptr_t mixed = cls_bits ^ sel_bits ^ (sel_bits >> 9U) ^ (cls_bits >> 11U);
+    return (size_t)(mixed & (SF_DISPATCH_CACHE_SIZE - 1U));
+}
+
+static SF_ALWAYS_INLINE int entry_match_inline(const SFDispatchEntry_t *entry, Class cls, SEL op, IMP *out_imp) {
+    IMP cached_imp = NULL;
+
+    if (entry->cls != cls) {
+        return 0;
+    }
+
+    if (entry->sel != op) {
+        return 0;
+    }
+
+    cached_imp = entry->imp;
+    if (cached_imp == NULL) return 0;
+
+    *out_imp = cached_imp;
+    return 1;
+}
+
+static SF_ALWAYS_INLINE void entry_store(SFDispatchEntry_t *entry, Class cls, SEL op, IMP imp) {
+    entry->cls = cls;
+    entry->sel = op;
+    entry->imp = imp;
+    entry->reserved = 0;
+}
+
+IMP sf_lookup_imp_in_class(Class cls, SEL op) {
+    SFObjCClass_t *c = NULL;
+    SFObjCClass_t *next = NULL;
+
+    if (cls == NULL || op == NULL) {
+        return NULL;
+    }
+
+    c = (SFObjCClass_t *)cls;
+    while (c != NULL) {
+        SFObjCMethodList_t *list = c->methods;
+        while (list != NULL) {
+            int32_t i = 0;
+            for (i = 0; i < list->count; ++i) {
+                SFObjCMethod_t *m = &list->methods[i];
+                if (m->selector == op ||
+                    (m->selector != NULL && op != NULL &&
+                     m->selector->name == op->name && m->selector->types == op->types) ||
+                    selector_equal_local(m->selector, op)) {
+                    return m->imp;
+                }
+            }
+            list = list->next;
+        }
+        next = c->superclass;
+        c = (next == c) ? NULL : next;
+    }
+
+    return NULL;
+}
+
+IMP sf_lookup_imp_miss(Class cls, SEL op) {
+    IMP imp = NULL;
+    SFDispatchEntry_t *entry = NULL;
+    size_t index = 0;
+
+    SF_STATS_INC(g_cache_misses);
+    SF_STATS_INC(g_method_walks);
+
+    imp = sf_lookup_imp_in_class(cls, op);
+    if (imp == NULL) {
+        imp = (IMP)nil_imp;
+    }
+
+    index = cache_index_for(cls, op);
+    entry = &g_dispatch_cache[index];
+
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_wrlock(&g_dispatch_cache_lock);
+#endif
+    entry_store(entry, cls, op, imp);
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
+#endif
+    entry_store(&g_dispatch_l0, cls, op, imp);
+
+    return imp;
+}
+
+static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op) {
+    IMP imp = NULL;
+    SFDispatchEntry_t *entry = NULL;
+    size_t index = 0;
+
+    if (entry_match_inline(&g_dispatch_l0, cls, op, &imp)) {
+        SF_STATS_INC(g_cache_hits);
+        return imp;
+    }
+
+    index = cache_index_for(cls, op);
+    entry = &g_dispatch_cache[index];
+
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_rdlock(&g_dispatch_cache_lock);
+#endif
+    if (entry_match_inline(entry, cls, op, &imp)) {
+#if SF_RUNTIME_THREADSAFE
+        sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
+#endif
+        entry_store(&g_dispatch_l0, cls, op, imp);
+        SF_STATS_INC(g_cache_hits);
+        return imp;
+    }
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
+#endif
+
+    return sf_lookup_imp_miss(cls, op);
+}
+
+IMP sf_lookup_imp(id receiver, SEL op) {
+    Class cls = NULL;
+
+    if (receiver == NULL || op == NULL) {
+        return (IMP)nil_imp;
+    }
+
+    cls = *(Class *)receiver;
+    if (cls == NULL) {
+        return (IMP)nil_imp;
+    }
+
+    return lookup_cached_inline(cls, op);
+}
+
+IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op) {
+    if (super_info == NULL || super_info->super_class == NULL || op == NULL) {
+        return (IMP)nil_imp;
+    }
+    return lookup_cached_inline(super_info->super_class, op);
+}
+
+uint64_t sf_dispatch_cache_hits(void) {
+#if SF_DISPATCH_STATS
+    return SF_STATS_LOAD(g_cache_hits);
+#else
+    return UINT64_C(0);
+#endif
+}
+
+uint64_t sf_dispatch_cache_misses(void) {
+#if SF_DISPATCH_STATS
+    return SF_STATS_LOAD(g_cache_misses);
+#else
+    return UINT64_C(0);
+#endif
+}
+
+uint64_t sf_dispatch_method_walks(void) {
+#if SF_DISPATCH_STATS
+    return SF_STATS_LOAD(g_method_walks);
+#else
+    return UINT64_C(0);
+#endif
+}
+
+void sf_dispatch_reset_stats(void) {
+    size_t i = 0;
+
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_wrlock(&g_dispatch_cache_lock);
+#endif
+    for (i = 0; i < SF_DISPATCH_CACHE_SIZE; ++i) {
+        entry_store(&g_dispatch_cache[i], NULL, NULL, NULL);
+    }
+#if SF_RUNTIME_THREADSAFE
+    sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
+#endif
+
+    entry_store(&g_dispatch_l0, NULL, NULL, NULL);
+
+#if SF_DISPATCH_STATS
+    SF_STATS_STORE(g_cache_hits, UINT64_C(0));
+    SF_STATS_STORE(g_cache_misses, UINT64_C(0));
+    SF_STATS_STORE(g_method_walks, UINT64_C(0));
+#endif
+}
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif

@@ -1,0 +1,7 @@
+/.cache
+/.xmake
+/build
+/compile_commands.json
+/gmon.out
+/perf.data
+/xmake-docs.txt

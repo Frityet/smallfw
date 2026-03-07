@@ -1,0 +1,8 @@
+{
+    "id": "java-17",
+    "version": "1.0.0",
+    "name": "Java 17 (Zulu)",
+    "installsAfter": [
+        "ghcr.io/devcontainers/features/common-utils:2"
+    ]
+}
