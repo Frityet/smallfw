@@ -12,6 +12,10 @@
 #define SF_RUNTIME_REFLECTION 1
 #endif
 
+#ifndef SF_RUNTIME_FORWARDING
+#define SF_RUNTIME_FORWARDING 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

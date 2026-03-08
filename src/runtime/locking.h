@@ -18,6 +18,10 @@
 #define SF_RUNTIME_REFLECTION 1
 #endif
 
+#ifndef SF_RUNTIME_FORWARDING
+#define SF_RUNTIME_FORWARDING 0
+#endif
+
 #ifndef SF_RUNTIME_SLIM_ALLOC
 #define SF_RUNTIME_SLIM_ALLOC 0
 #endif

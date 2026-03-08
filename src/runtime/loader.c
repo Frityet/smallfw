@@ -51,6 +51,7 @@ static Class g_object_class;
 static SEL g_dealloc_sel;
 static SEL g_alloc_sel;
 static SEL g_init_sel;
+static SEL g_forwarding_target_sel;
 
 typedef struct SFObjCAliasEntry {
     const char *alias_name;
@@ -415,13 +416,15 @@ static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntr
 }
 
 void sf_finalize_registered_classes(void) {
-    if (g_dealloc_sel == NULL || g_alloc_sel == NULL || g_init_sel == NULL) {
+    if (g_dealloc_sel == NULL || g_alloc_sel == NULL || g_init_sel == NULL || g_forwarding_target_sel == NULL) {
         static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
         static struct sf_objc_selector alloc_sel_data = {"allocWithAllocator:", "@24@0:8^v16"};
         static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
+        static struct sf_objc_selector forwarding_target_sel_data = {"forwardingTargetForSelector:", "@24@0:8:16"};
         g_dealloc_sel = sf_intern_selector(&dealloc_sel_data);
         g_alloc_sel = sf_intern_selector(&alloc_sel_data);
         g_init_sel = sf_intern_selector(&init_sel_data);
+        g_forwarding_target_sel = sf_intern_selector(&forwarding_target_sel_data);
     }
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
@@ -979,6 +982,10 @@ SEL sf_cached_selector_init(void) {
     return g_init_sel;
 }
 
+SEL sf_cached_selector_forwarding_target(void) {
+    return g_forwarding_target_sel;
+}
+
 IMP sf_class_cached_dealloc_imp(Class cls) {
     SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
     return meta != NULL ? meta->dealloc_imp : NULL;
@@ -998,10 +1005,12 @@ void sf_register_builtin_class_cache(void) {
     static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
     static struct sf_objc_selector alloc_sel_data = {"allocWithAllocator:", "@24@0:8^v16"};
     static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
+    static struct sf_objc_selector forwarding_target_sel_data = {"forwardingTargetForSelector:", "@24@0:8:16"};
 
     g_dealloc_sel = sf_intern_selector(&dealloc_sel_data);
     g_alloc_sel = sf_intern_selector(&alloc_sel_data);
     g_init_sel = sf_intern_selector(&init_sel_data);
+    g_forwarding_target_sel = sf_intern_selector(&forwarding_target_sel_data);
     g_object_class = (Class)sf_class_from_name("Object");
 }
 

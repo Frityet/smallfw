@@ -23,6 +23,14 @@
 
 int g_counter_deallocs = 0;
 
+typedef struct SFForwardSelector {
+    const char *name;
+    const char *types;
+} SFForwardSelector;
+
+static SFForwardSelector g_forwarded_value_sel = {"forwardedValue:", "i20@0:8i16"};
+static SFForwardSelector g_class_forwarded_value_sel = {"classForwardedValue:", "i20@0:8i16"};
+
 extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
 
 #if !defined(_WIN32)
@@ -88,6 +96,70 @@ static void sf_test_aligned_free(void *ptr, size_t align) {
 @implementation HotDispatch
 - (int)calc:(int)x {
     return x + 1;
+}
+@end
+
+@implementation StructDispatchProbe
+- (SFTestPair)pairWithLeft:(int)left right:(int)right {
+    SFTestPair pair = {.left = left, .right = right};
+    return pair;
+}
+
+- (long long)sumPair:(SFTestPair)pair {
+    return (long long)pair.left + (long long)pair.right;
+}
+
+- (long long)sumBigStruct:(SFTestBigStruct)big bias:(long long)bias {
+    return big.first + big.second + big.third + big.fourth + bias;
+}
+
+- (SFTestWidePair)widePairWithSeed:(long long)seed {
+    SFTestWidePair pair = {.left = seed, .right = seed + 1};
+    return pair;
+}
+
+- (SFTestBigStruct)bigStructWithSeed:(long long)seed {
+    SFTestBigStruct big = {
+        .first = seed,
+        .second = seed + 1,
+        .third = seed + 2,
+        .fourth = seed + 3,
+    };
+    return big;
+}
+@end
+
+static ForwardDispatchTarget *sf_test_forward_dispatch_target(void) {
+    static ForwardDispatchTarget *target = nil;
+    if (target == nil) {
+        target = SFW_NEW(ForwardDispatchTarget);
+    }
+    return target;
+}
+
+@implementation ForwardDispatchTarget
+- (int)forwardedValue:(int)x {
+    return x + 100;
+}
+
++ (int)classForwardedValue:(int)x {
+    return x + 200;
+}
+@end
+
+@implementation ForwardDispatchProxy
+- (id)forwardingTargetForSelector:(SEL)selector {
+    if (sf_selector_equal(selector, (SEL)&g_forwarded_value_sel)) {
+        return sf_test_forward_dispatch_target();
+    }
+    return nil;
+}
+
++ (id)forwardingTargetForSelector:(SEL)selector {
+    if (sf_selector_equal(selector, (SEL)&g_class_forwarded_value_sel)) {
+        return objc_getClass("ForwardDispatchTarget");
+    }
+    return nil;
 }
 @end
 

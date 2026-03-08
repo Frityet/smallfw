@@ -9,6 +9,7 @@
 
 #if defined(__clang__)
 #pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
 #pragma clang diagnostic ignored "-Wcast-function-type-strict"
 #pragma clang diagnostic ignored "-Wdeclaration-after-statement"
 #pragma clang diagnostic ignored "-Wpadded"
@@ -48,6 +49,8 @@ typedef union SFCWordStorage {
 #endif
 
 static __thread SFCSigCacheEntry_t g_sig_cache[SF_C_SIG_CACHE_SIZE];
+
+void objc_msgSend_stret(void *out, id receiver, SEL op, ...);
 
 static int is_digit_char(char c) {
     return c >= '0' && c <= '9';
@@ -410,8 +413,62 @@ uintptr_t sf_runtime_test_dispatch_read_word_arg(int code, ...) {
     return value;
 }
 
-id objc_msgSend(id receiver, SEL op, ...) {
+void objc_msgSend_stret(void *out, id receiver, SEL op, ...) {
+    id dispatch_receiver = receiver;
+    SEL dispatch_op = op;
+#if SF_RUNTIME_FORWARDING
+    IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#else
     IMP imp = sf_lookup_imp(receiver, op);
+#endif
+    char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
+    int unsupported_sig = 0;
+    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
+    if (out == NULL || unsupported_sig || imp == NULL || sf_dispatch_imp_is_nil(imp)) {
+        return;
+    }
+
+    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
+    va_list ap;
+    va_start(ap, op);
+    for (size_t i = 0; i < argc; ++i) {
+        args[i] = read_word_arg(&ap, arg_codes[i]);
+    }
+    va_end(ap);
+
+    switch (argc) {
+        case 0:
+            ((void (*)(void *, id, SEL))imp)(out, dispatch_receiver, dispatch_op);
+            return;
+        case 1:
+            ((void (*)(void *, id, SEL, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0]);
+            return;
+        case 2:
+            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0],
+                                                                    args[1]);
+            return;
+        case 3:
+            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op,
+                                                                               args[0], args[1], args[2]);
+            return;
+        case 4:
+            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver,
+                                                                                           dispatch_op, args[0],
+                                                                                           args[1], args[2], args[3]);
+            return;
+        default:
+            return;
+    }
+}
+
+id objc_msgSend(id receiver, SEL op, ...) {
+    id dispatch_receiver = receiver;
+    SEL dispatch_op = op;
+#if SF_RUNTIME_FORWARDING
+    IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#else
+    IMP imp = sf_lookup_imp(receiver, op);
+#endif
 #if SF_DISPATCH_C_USE_LIBFFI
     if (imp == NULL || sf_dispatch_imp_is_nil(imp)) {
         return (id)0;
@@ -419,11 +476,11 @@ id objc_msgSend(id receiver, SEL op, ...) {
 
     char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_codes_cached(op, arg_codes, &unsupported_sig);
+    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
     if (unsupported_sig) {
         return (id)0;
     }
-    char ret_code = return_type_code(op);
+    char ret_code = return_type_code(dispatch_op);
     ffi_type *ret_type = ffi_type_for_code(ret_code);
     if (ret_type == NULL) {
         return (id)0;
@@ -438,7 +495,7 @@ id objc_msgSend(id receiver, SEL op, ...) {
     va_end(ap);
 
     ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, NULL, NULL, NULL, NULL};
-    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&receiver, &op, NULL, NULL, NULL, NULL};
+    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, NULL, NULL, NULL, NULL};
     SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
     memset(arg_storage, 0, sizeof(arg_storage));
     for (size_t i = 0; i < argc; ++i) {
@@ -462,7 +519,7 @@ id objc_msgSend(id receiver, SEL op, ...) {
 #else
     char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_codes_cached(op, arg_codes, &unsupported_sig);
+    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
     if (unsupported_sig || imp == NULL) {
         return (id)0;
     }
@@ -477,16 +534,16 @@ id objc_msgSend(id receiver, SEL op, ...) {
 
     switch (argc) {
         case 0:
-            return ((id (*)(id, SEL))imp)(receiver, op);
+            return ((id (*)(id, SEL))imp)(dispatch_receiver, dispatch_op);
         case 1:
-            return ((id (*)(id, SEL, uintptr_t))imp)(receiver, op, args[0]);
+            return ((id (*)(id, SEL, uintptr_t))imp)(dispatch_receiver, dispatch_op, args[0]);
         case 2:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t))imp)(receiver, op, args[0], args[1]);
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op, args[0], args[1]);
         case 3:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(receiver, op,
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op,
                                                                               args[0], args[1], args[2]);
         case 4:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(receiver, op,
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op,
                                                                                         args[0], args[1],
                                                                                         args[2], args[3]);
         default:

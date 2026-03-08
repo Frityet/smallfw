@@ -19,6 +19,10 @@ __attribute__((objc_root_class))
 - (instancetype)autorelease;
 - (int)isEqual:(Object *_Nullable)other;
 - (unsigned long)hash;
+#if SF_RUNTIME_FORWARDING
++ (id _Nullable)forwardingTargetForSelector:(SEL _Nullable)selector;
+- (id _Nullable)forwardingTargetForSelector:(SEL _Nullable)selector;
+#endif
 @end
 
 @interface AllocationFailedException : Object

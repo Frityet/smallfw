@@ -5,6 +5,7 @@
 
 #if defined(__clang__)
 #pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #pragma clang diagnostic ignored "-Wpre-c11-compat"
 #endif
@@ -117,7 +118,7 @@ static SF_ALWAYS_INLINE void entry_store(SFDispatchEntry_t *entry, Class cls, SE
     entry->reserved = 0;
 }
 
-IMP sf_lookup_imp_in_class(Class cls, SEL op) {
+static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op) {
     SFObjCClass_t *c = NULL;
     SFObjCClass_t *next = NULL;
 
@@ -136,7 +137,7 @@ IMP sf_lookup_imp_in_class(Class cls, SEL op) {
                     (m->selector != NULL && op != NULL &&
                      m->selector->name == op->name && m->selector->types == op->types) ||
                     selector_equal_local(m->selector, op)) {
-                    return m->imp;
+                    return m;
                 }
             }
             list = list->next;
@@ -146,6 +147,15 @@ IMP sf_lookup_imp_in_class(Class cls, SEL op) {
     }
 
     return NULL;
+}
+
+SFObjCMethod_t *sf_lookup_method_in_class(Class cls, SEL op) {
+    return lookup_method_in_class_local(cls, op);
+}
+
+IMP sf_lookup_imp_in_class(Class cls, SEL op) {
+    SFObjCMethod_t *method = lookup_method_in_class_local(cls, op);
+    return method != NULL ? method->imp : NULL;
 }
 
 IMP sf_lookup_imp_miss(Class cls, SEL op) {
@@ -220,6 +230,103 @@ IMP sf_lookup_imp(id receiver, SEL op) {
     }
 
     return lookup_cached_inline(cls, op);
+}
+
+#if SF_RUNTIME_FORWARDING
+static int selector_types_missing(SEL sel) {
+    return sel == NULL || sel->types == NULL || sel->types[0] == '\0';
+}
+
+static SEL resolved_selector_for_method(const SFObjCMethod_t *method, SEL fallback) {
+    if (method == NULL) {
+        return fallback;
+    }
+    if (method->selector != NULL) {
+        return method->selector;
+    }
+    return fallback;
+}
+#endif
+
+IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
+    id current_receiver = NULL;
+    SEL current_sel = NULL;
+#if SF_RUNTIME_FORWARDING
+    SEL forwarding_sel = NULL;
+    int forward_hops_remaining = 0;
+#endif
+
+    if (receiver == NULL || op == NULL) {
+        return (IMP)nil_imp;
+    }
+
+    current_receiver = *receiver;
+    current_sel = *op;
+
+#if SF_RUNTIME_FORWARDING
+    forwarding_sel = sf_cached_selector_forwarding_target();
+    forward_hops_remaining = 8;
+#endif
+
+    for (;;) {
+        IMP imp = NULL;
+        Class cls = NULL;
+#if SF_RUNTIME_FORWARDING
+        SFObjCMethod_t *method = NULL;
+        SFObjCMethod_t *forward_method = NULL;
+        id target = NULL;
+#endif
+
+        if (current_receiver == NULL || current_sel == NULL) {
+            break;
+        }
+
+        cls = *(Class *)current_receiver;
+        if (cls == NULL) {
+            break;
+        }
+
+        imp = sf_lookup_imp(current_receiver, current_sel);
+        if (imp != NULL && !sf_dispatch_imp_is_nil(imp)) {
+#if SF_RUNTIME_FORWARDING
+            if (selector_types_missing(current_sel)) {
+                method = lookup_method_in_class_local(cls, current_sel);
+                current_sel = resolved_selector_for_method(method, current_sel);
+            }
+#endif
+            *receiver = current_receiver;
+            *op = current_sel;
+            return imp;
+        }
+
+#if SF_RUNTIME_FORWARDING
+        if (forward_hops_remaining <= 0 || forwarding_sel == NULL || sf_selector_equal(current_sel, forwarding_sel)) {
+            break;
+        }
+
+        forward_method = lookup_method_in_class_local(cls, forwarding_sel);
+        if (forward_method == NULL || forward_method->imp == NULL) {
+            break;
+        }
+
+        target = ((id (*)(id, SEL, SEL))forward_method->imp)(current_receiver, forwarding_sel, current_sel);
+        if (target == NULL || target == current_receiver) {
+            break;
+        }
+
+        current_receiver = target;
+        if (--forward_hops_remaining == 0) {
+            break;
+        }
+        continue;
+#else
+        break;
+#endif
+    }
+
+    *receiver = current_receiver;
+    *op = current_sel;
+    return (IMP)nil_imp;
 }
 
 IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op) {

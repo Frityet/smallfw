@@ -5,6 +5,7 @@
 
 #ifdef __clang__
 #pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
 #pragma clang diagnostic ignored "-Wcast-function-type-strict"
 #pragma clang diagnostic ignored "-Wpre-c23-compat"
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
@@ -505,6 +506,91 @@ static int case_dispatch_c_internal_helpers(void) {
 #endif
 }
 
+static int case_dispatch_struct_params(void) {
+    __unsafe_unretained StructDispatchProbe *obj = SFW_NEW(StructDispatchProbe);
+    SFTestPair pair = {0, 0};
+    SFTestBigStruct big = {0, 0, 0, 0};
+    int ok = 0;
+
+    if (obj == nil) {
+        return 0;
+    }
+
+    pair = [obj pairWithLeft:5 right:9];
+    big = (SFTestBigStruct){.first = 1, .second = 2, .third = 3, .fourth = 4};
+    ok = pair.left == 5 &&
+         pair.right == 9 &&
+         [obj sumPair:(SFTestPair){.left = 7, .right = 11}] == 18 &&
+         [obj sumBigStruct:big bias:10] == 20;
+    objc_release(obj);
+    return ok;
+}
+
+static int case_dispatch_struct_returns(void) {
+    __unsafe_unretained StructDispatchProbe *obj = SFW_NEW(StructDispatchProbe);
+    SFTestWidePair wide = {0, 0};
+    SFTestBigStruct big = {0, 0, 0, 0};
+    int ok = 0;
+
+    if (obj == nil) {
+        return 0;
+    }
+
+    wide = [obj widePairWithSeed:20];
+    big = [obj bigStructWithSeed:40];
+    ok = wide.left == 20 &&
+         wide.right == 21 &&
+         big.first == 40 &&
+         big.second == 41 &&
+         big.third == 42 &&
+         big.fourth == 43;
+    objc_release(obj);
+    return ok;
+}
+
+static int case_dispatch_runtime_selector_resolution(void) {
+#if SF_RUNTIME_FORWARDING
+    static SFTestSelector calc_sel_data = {"calc:", NULL};
+    SEL calc_sel = (SEL)&calc_sel_data;
+    __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
+    int result = 0;
+
+    if (obj == nil) {
+        return 0;
+    }
+
+    result = ((int (*)(id, SEL, int))objc_msgSend)(obj, calc_sel, 41);
+    objc_release(obj);
+    return result == 42;
+#else
+    return 1;
+#endif
+}
+
+static int case_dispatch_forwarding_targets(void) {
+#if SF_RUNTIME_FORWARDING
+    static SFTestSelector instance_sel_data = {"forwardedValue:", NULL};
+    static SFTestSelector class_sel_data = {"classForwardedValue:", NULL};
+    SEL instance_sel = (SEL)&instance_sel_data;
+    SEL class_sel = (SEL)&class_sel_data;
+    Class proxy_cls = (Class)objc_getClass("ForwardDispatchProxy");
+    __unsafe_unretained ForwardDispatchProxy *proxy = SFW_NEW(ForwardDispatchProxy);
+    int instance_result = 0;
+    int class_result = 0;
+
+    if (proxy == nil || proxy_cls == Nil) {
+        return 0;
+    }
+
+    instance_result = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 5);
+    class_result = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 7);
+    objc_release(proxy);
+    return instance_result == 105 && class_result == 207;
+#else
+    return 1;
+#endif
+}
+
 static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_cache_warm_hits", case_dispatch_cache_warm_hits},
     {"dispatch_super_lookup", case_dispatch_super_lookup},
@@ -519,6 +605,10 @@ static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_c_msgsend_unsupported_float", case_dispatch_c_msgsend_unsupported_float},
     {"dispatch_c_msgsend_parser_edges", case_dispatch_c_msgsend_parser_edges},
     {"dispatch_c_internal_helpers", case_dispatch_c_internal_helpers},
+    {"dispatch_struct_params", case_dispatch_struct_params},
+    {"dispatch_struct_returns", case_dispatch_struct_returns},
+    {"dispatch_runtime_selector_resolution", case_dispatch_runtime_selector_resolution},
+    {"dispatch_forwarding_targets", case_dispatch_forwarding_targets},
 };
 
 const SFTestCase *sf_runtime_dispatch_cases(size_t *count) {

@@ -53,8 +53,12 @@
 
 - (SFAllocator_t *)allocator
 {
-    SFObjHeader_t *hdr = sf_header_from_object(self);
-    SFAllocator_t *allocator = sf_header_allocator(hdr);
+    SFObjHeader_t *hdr = NULL;
+    SFAllocator_t *allocator = NULL;
+    if (!sf_object_is_heap(self))
+        return sf_default_allocator();
+    hdr = sf_header_from_object(self);
+    allocator = sf_header_allocator(hdr);
     if (allocator == NULL)
         return sf_default_allocator();
     return allocator;
@@ -75,9 +79,12 @@
 
 - (Object *)parent
 {
-    SFObjHeader_t *hdr = sf_header_from_object(self);
+    SFObjHeader_t *hdr = NULL;
     id parent = NULL;
     SFObjHeader_t *parent_hdr = NULL;
+    if (!sf_object_is_heap(self))
+        return NULL;
+    hdr = sf_header_from_object(self);
     if (hdr == NULL)
         return NULL;
     parent = sf_header_parent(hdr);
@@ -120,5 +127,19 @@
 {
     return (unsigned long)sf_hash_ptr(self);
 }
+
+#if SF_RUNTIME_FORWARDING
++ (id)forwardingTargetForSelector:(SEL)selector
+{
+    (void)selector;
+    return (id)0;
+}
+
+- (id)forwardingTargetForSelector:(SEL)selector
+{
+    (void)selector;
+    return (id)0;
+}
+#endif
 
 @end

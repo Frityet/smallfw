@@ -35,6 +35,23 @@ typedef struct SFTestAllocatorCtx {
     size_t last_align;
 } SFTestAllocatorCtx;
 
+typedef struct SFTestPair {
+    int left;
+    int right;
+} SFTestPair;
+
+typedef struct SFTestWidePair {
+    long long left;
+    long long right;
+} SFTestWidePair;
+
+typedef struct SFTestBigStruct {
+    long long first;
+    long long second;
+    long long third;
+    long long fourth;
+} SFTestBigStruct;
+
 typedef void (*SFTestChildFn)(void *ctx);
 
 extern int g_counter_deallocs;
@@ -54,6 +71,22 @@ extern int g_counter_deallocs;
 
 @interface HotDispatch : Object
 - (int)calc:(int)x;
+@end
+
+@interface StructDispatchProbe : Object
+- (SFTestPair)pairWithLeft:(int)left right:(int)right;
+- (long long)sumPair:(SFTestPair)pair;
+- (long long)sumBigStruct:(SFTestBigStruct)big bias:(long long)bias;
+- (SFTestWidePair)widePairWithSeed:(long long)seed;
+- (SFTestBigStruct)bigStructWithSeed:(long long)seed;
+@end
+
+@interface ForwardDispatchTarget : Object
+- (int)forwardedValue:(int)x;
++ (int)classForwardedValue:(int)x;
+@end
+
+@interface ForwardDispatchProxy : Object
 @end
 
 @interface ReflectionProbe : Object {

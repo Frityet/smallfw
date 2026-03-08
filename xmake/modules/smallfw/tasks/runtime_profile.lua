@@ -318,7 +318,7 @@ function main()
     if backend == "asm" and llvm_mca ~= nil and llvm_mca.program ~= nil then
         local asm_input = path.join(run_dir, "objc_msgSend.s")
         local mca_output = path.join(run_dir, "objc_msgSend.llvm-mca.txt")
-        local asm_source = path.join(task_helpers.projectdir(), "src", "runtime", "dispatch_x86_64.S")
+        local asm_source = path.join(task_helpers.projectdir(), "src", "runtime", "dispatch_x86_64.asm")
         if _extract_asm_symbol("objc_msgSend", asm_source, asm_input) then
             local ok = _write_optional_output(mca_output, llvm_mca.program, {
                 "-mtriple=x86_64-unknown-linux-gnu",

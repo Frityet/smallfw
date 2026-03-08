@@ -29,6 +29,7 @@ extern SFDispatchEntry_t g_dispatch_l0;
 #endif
 
 IMP sf_lookup_imp(id _Nullable receiver, SEL _Nullable op);
+SFObjCMethod_t *_Nullable sf_lookup_method_in_class(Class _Nullable cls, SEL _Nullable op);
 IMP sf_lookup_imp_in_class(Class _Nullable cls, SEL _Nullable op);
 IMP sf_lookup_imp_miss(Class _Nullable cls, SEL _Nullable op);
 int sf_selector_equal(SEL _Nullable a, SEL _Nullable b);
@@ -37,6 +38,8 @@ SEL _Nullable sf_intern_selector(SEL _Nullable sel);
 SEL _Nullable sf_cached_selector_dealloc(void);
 SEL _Nullable sf_cached_selector_alloc(void);
 SEL _Nullable sf_cached_selector_init(void);
+SEL _Nullable sf_cached_selector_forwarding_target(void);
+IMP _Nullable sf_resolve_message_dispatch(id _Nullable *_Nonnull receiver, SEL _Nullable *_Nonnull op);
 IMP _Nullable sf_class_cached_dealloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_alloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_init_imp(Class _Nullable cls);
