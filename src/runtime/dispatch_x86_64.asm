@@ -1,0 +1,291 @@
+.text
+.intel_syntax noprefix
+.p2align 4
+.globl objc_msgSend
+.type objc_msgSend,@function
+objc_msgSend:
+    TEST RDI, RDI
+    JE .LNIL_RETURN
+    TEST RSI, RSI
+    JE .LNIL_RETURN
+
+    TEST AL, AL
+    JNZ .LWITH_XMM
+
+.LWITHOUT_XMM:
+    MOV R10, QWORD PTR [RDI]
+    TEST R10, R10
+    JE .LNIL_RETURN
+
+#if SF_RUNTIME_THREADSAFE
+    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
+    JNE .LGLOBAL_CACHE
+    CMP RSI, QWORD PTR FS:g_dispatch_l0+8@tpoff
+    JNE .LGLOBAL_CACHE
+    MOV RAX, QWORD PTR FS:g_dispatch_l0+16@tpoff
+#else
+    CMP R10, QWORD PTR [RIP + g_dispatch_l0]
+    JNE .LGLOBAL_CACHE
+    CMP RSI, QWORD PTR [RIP + g_dispatch_l0 + 8]
+    JNE .LGLOBAL_CACHE
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 16]
+#endif
+    TEST RAX, RAX
+    JE .LMISS_WITHOUT_XMM
+    JMP RAX
+
+.LGLOBAL_CACHE:
+    MOV RAX, R10
+    SHR RAX, 4
+    MOV R11, RSI
+    SHR R11, 4
+    XOR RAX, R11
+    MOV R10, R11
+    SHR R10, 9
+    XOR RAX, R10
+    MOV R10, QWORD PTR [RDI]
+    SHR R10, 11
+    XOR RAX, R10
+    AND RAX, 4095
+    SHL RAX, 5
+    LEA R11, [RIP + g_dispatch_cache]
+    ADD R11, RAX
+
+    MOV R10, QWORD PTR [RDI]
+    CMP R10, QWORD PTR [R11]
+    JNE .LMISS_WITHOUT_XMM
+    CMP RSI, QWORD PTR [R11 + 8]
+    JNE .LMISS_WITHOUT_XMM
+    MOV RAX, QWORD PTR [R11 + 16]
+    TEST RAX, RAX
+    JE .LMISS_WITHOUT_XMM
+
+#if SF_RUNTIME_THREADSAFE
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
+    MOV QWORD PTR FS:g_dispatch_l0+8@tpoff, RSI
+    MOV QWORD PTR FS:g_dispatch_l0+16@tpoff, RAX
+    MOV QWORD PTR FS:g_dispatch_l0+24@tpoff, 0
+#else
+    MOV QWORD PTR [RIP + g_dispatch_l0], R10
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RSI
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+#endif
+    JMP RAX
+
+.LMISS_WITHOUT_XMM:
+    SUB RSP, 0x38
+
+    MOV QWORD PTR [RSP], RDI
+    MOV QWORD PTR [RSP + 8], RSI
+    MOV QWORD PTR [RSP + 16], RDX
+    MOV QWORD PTR [RSP + 24], RCX
+    MOV QWORD PTR [RSP + 32], R8
+    MOV QWORD PTR [RSP + 40], R9
+
+    LEA RDI, [RSP]
+    LEA RSI, [RSP + 8]
+    CALL sf_resolve_message_dispatch
+
+    MOV RDI, QWORD PTR [RSP]
+    MOV RSI, QWORD PTR [RSP + 8]
+    MOV RDX, QWORD PTR [RSP + 16]
+    MOV RCX, QWORD PTR [RSP + 24]
+    MOV R8, QWORD PTR [RSP + 32]
+    MOV R9, QWORD PTR [RSP + 40]
+
+    ADD RSP, 0x38
+    JMP RAX
+
+.LWITH_XMM:
+    SUB RSP, 0xB8
+
+    MOV QWORD PTR [RSP], RDI
+    MOV QWORD PTR [RSP + 8], RSI
+    MOV QWORD PTR [RSP + 16], RDX
+    MOV QWORD PTR [RSP + 24], RCX
+    MOV QWORD PTR [RSP + 32], R8
+    MOV QWORD PTR [RSP + 40], R9
+
+    MOVAPS XMMWORD PTR [RSP + 0x30], XMM0
+    MOVAPS XMMWORD PTR [RSP + 0x40], XMM1
+    MOVAPS XMMWORD PTR [RSP + 0x50], XMM2
+    MOVAPS XMMWORD PTR [RSP + 0x60], XMM3
+    MOVAPS XMMWORD PTR [RSP + 0x70], XMM4
+    MOVAPS XMMWORD PTR [RSP + 0x80], XMM5
+    MOVAPS XMMWORD PTR [RSP + 0x90], XMM6
+    MOVAPS XMMWORD PTR [RSP + 0xA0], XMM7
+
+    LEA RDI, [RSP]
+    LEA RSI, [RSP + 8]
+    CALL sf_resolve_message_dispatch
+
+    MOV RDI, QWORD PTR [RSP]
+    MOV RSI, QWORD PTR [RSP + 8]
+    MOV RDX, QWORD PTR [RSP + 16]
+    MOV RCX, QWORD PTR [RSP + 24]
+    MOV R8, QWORD PTR [RSP + 32]
+    MOV R9, QWORD PTR [RSP + 40]
+
+    MOVAPS XMM0, XMMWORD PTR [RSP + 0x30]
+    MOVAPS XMM1, XMMWORD PTR [RSP + 0x40]
+    MOVAPS XMM2, XMMWORD PTR [RSP + 0x50]
+    MOVAPS XMM3, XMMWORD PTR [RSP + 0x60]
+    MOVAPS XMM4, XMMWORD PTR [RSP + 0x70]
+    MOVAPS XMM5, XMMWORD PTR [RSP + 0x80]
+    MOVAPS XMM6, XMMWORD PTR [RSP + 0x90]
+    MOVAPS XMM7, XMMWORD PTR [RSP + 0xA0]
+
+    ADD RSP, 0xB8
+    JMP RAX
+
+.LNIL_RETURN:
+    XOR EAX, EAX
+    PXOR XMM0, XMM0
+    RET
+
+.size objc_msgSend, .-objc_msgSend
+
+.globl objc_msgSend_stret
+.type objc_msgSend_stret,@function
+objc_msgSend_stret:
+    TEST RSI, RSI
+    JE .LSTRET_RETURN
+    TEST RDX, RDX
+    JE .LSTRET_RETURN
+
+    TEST AL, AL
+    JNZ .LSTRET_WITH_XMM
+
+.LSTRET_WITHOUT_XMM:
+    MOV R10, QWORD PTR [RSI]
+    TEST R10, R10
+    JE .LSTRET_RETURN
+
+#if SF_RUNTIME_THREADSAFE
+    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
+    JNE .LSTRET_GLOBAL_CACHE
+    CMP RDX, QWORD PTR FS:g_dispatch_l0+8@tpoff
+    JNE .LSTRET_GLOBAL_CACHE
+    MOV RAX, QWORD PTR FS:g_dispatch_l0+16@tpoff
+#else
+    CMP R10, QWORD PTR [RIP + g_dispatch_l0]
+    JNE .LSTRET_GLOBAL_CACHE
+    CMP RDX, QWORD PTR [RIP + g_dispatch_l0 + 8]
+    JNE .LSTRET_GLOBAL_CACHE
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 16]
+#endif
+    TEST RAX, RAX
+    JE .LSTRET_MISS_WITHOUT_XMM
+    JMP RAX
+
+.LSTRET_GLOBAL_CACHE:
+    MOV RAX, R10
+    SHR RAX, 4
+    MOV R11, RDX
+    SHR R11, 4
+    XOR RAX, R11
+    MOV R10, R11
+    SHR R10, 9
+    XOR RAX, R10
+    MOV R10, QWORD PTR [RSI]
+    SHR R10, 11
+    XOR RAX, R10
+    AND RAX, 4095
+    SHL RAX, 5
+    LEA R11, [RIP + g_dispatch_cache]
+    ADD R11, RAX
+
+    MOV R10, QWORD PTR [RSI]
+    CMP R10, QWORD PTR [R11]
+    JNE .LSTRET_MISS_WITHOUT_XMM
+    CMP RDX, QWORD PTR [R11 + 8]
+    JNE .LSTRET_MISS_WITHOUT_XMM
+    MOV RAX, QWORD PTR [R11 + 16]
+    TEST RAX, RAX
+    JE .LSTRET_MISS_WITHOUT_XMM
+
+#if SF_RUNTIME_THREADSAFE
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
+    MOV QWORD PTR FS:g_dispatch_l0+8@tpoff, RDX
+    MOV QWORD PTR FS:g_dispatch_l0+16@tpoff, RAX
+    MOV QWORD PTR FS:g_dispatch_l0+24@tpoff, 0
+#else
+    MOV QWORD PTR [RIP + g_dispatch_l0], R10
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RDX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+#endif
+    JMP RAX
+
+.LSTRET_MISS_WITHOUT_XMM:
+    SUB RSP, 0x38
+
+    MOV QWORD PTR [RSP], RDI
+    MOV QWORD PTR [RSP + 8], RSI
+    MOV QWORD PTR [RSP + 16], RDX
+    MOV QWORD PTR [RSP + 24], RCX
+    MOV QWORD PTR [RSP + 32], R8
+    MOV QWORD PTR [RSP + 40], R9
+
+    LEA RDI, [RSP + 8]
+    LEA RSI, [RSP + 16]
+    CALL sf_resolve_message_dispatch
+
+    MOV RDI, QWORD PTR [RSP]
+    MOV RSI, QWORD PTR [RSP + 8]
+    MOV RDX, QWORD PTR [RSP + 16]
+    MOV RCX, QWORD PTR [RSP + 24]
+    MOV R8, QWORD PTR [RSP + 32]
+    MOV R9, QWORD PTR [RSP + 40]
+
+    ADD RSP, 0x38
+    JMP RAX
+
+.LSTRET_WITH_XMM:
+    SUB RSP, 0xB8
+
+    MOV QWORD PTR [RSP], RDI
+    MOV QWORD PTR [RSP + 8], RSI
+    MOV QWORD PTR [RSP + 16], RDX
+    MOV QWORD PTR [RSP + 24], RCX
+    MOV QWORD PTR [RSP + 32], R8
+    MOV QWORD PTR [RSP + 40], R9
+
+    MOVAPS XMMWORD PTR [RSP + 0x30], XMM0
+    MOVAPS XMMWORD PTR [RSP + 0x40], XMM1
+    MOVAPS XMMWORD PTR [RSP + 0x50], XMM2
+    MOVAPS XMMWORD PTR [RSP + 0x60], XMM3
+    MOVAPS XMMWORD PTR [RSP + 0x70], XMM4
+    MOVAPS XMMWORD PTR [RSP + 0x80], XMM5
+    MOVAPS XMMWORD PTR [RSP + 0x90], XMM6
+    MOVAPS XMMWORD PTR [RSP + 0xA0], XMM7
+
+    LEA RDI, [RSP + 8]
+    LEA RSI, [RSP + 16]
+    CALL sf_resolve_message_dispatch
+
+    MOV RDI, QWORD PTR [RSP]
+    MOV RSI, QWORD PTR [RSP + 8]
+    MOV RDX, QWORD PTR [RSP + 16]
+    MOV RCX, QWORD PTR [RSP + 24]
+    MOV R8, QWORD PTR [RSP + 32]
+    MOV R9, QWORD PTR [RSP + 40]
+
+    MOVAPS XMM0, XMMWORD PTR [RSP + 0x30]
+    MOVAPS XMM1, XMMWORD PTR [RSP + 0x40]
+    MOVAPS XMM2, XMMWORD PTR [RSP + 0x50]
+    MOVAPS XMM3, XMMWORD PTR [RSP + 0x60]
+    MOVAPS XMM4, XMMWORD PTR [RSP + 0x70]
+    MOVAPS XMM5, XMMWORD PTR [RSP + 0x80]
+    MOVAPS XMM6, XMMWORD PTR [RSP + 0x90]
+    MOVAPS XMM7, XMMWORD PTR [RSP + 0xA0]
+
+    ADD RSP, 0xB8
+    JMP RAX
+
+.LSTRET_RETURN:
+    RET
+
+.size objc_msgSend_stret, .-objc_msgSend_stret
+.att_syntax prefix

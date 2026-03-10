@@ -16,6 +16,14 @@
 #define SF_RUNTIME_FORWARDING 0
 #endif
 
+#ifndef SF_RUNTIME_ABI_GNUSTEP
+#define SF_RUNTIME_ABI_GNUSTEP 1
+#endif
+
+#ifndef SF_RUNTIME_ABI_OBJFW
+#define SF_RUNTIME_ABI_OBJFW 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,10 +36,17 @@ extern "C" {
 #pragma clang assume_nonnull begin
 
 #ifndef __OBJC__
+#if SF_RUNTIME_ABI_OBJFW
+typedef struct sf_objc_selector {
+    uintptr_t uid;
+    const char *_Nullable types;
+} *SEL;
+#else
 typedef struct sf_objc_selector {
     const char *_Nullable name;
     const char *_Nullable types;
 } *SEL;
+#endif
 
 typedef struct sf_objc_class *Class;
 typedef struct sf_objc_object *id;
@@ -49,10 +64,18 @@ struct sf_objc_super {
     Class super_class;
 };
 
+#if SF_RUNTIME_ABI_GNUSTEP
 void __objc_load(void *_Nullable init);
+#endif
+#if SF_RUNTIME_ABI_OBJFW
+void __objc_exec_class(void *_Nullable module);
+#endif
 
 id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...);
+IMP objc_msg_lookup(id _Nullable receiver, SEL _Nullable op);
+IMP objc_msg_lookup_stret(id _Nullable receiver, SEL _Nullable op);
 IMP objc_msg_lookup_super(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
+IMP objc_msg_lookup_super_stret(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
 
 id _Nullable objc_retain(id _Nullable obj);
 void objc_release(id _Nullable obj);
@@ -75,9 +98,14 @@ _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action ac
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *_Nullable exception_object,
                                                   struct _Unwind_Context *_Nullable context);
+_Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions,
+                                              uint64_t exception_class,
+                                              struct _Unwind_Exception *_Nullable exception_object,
+                                              struct _Unwind_Context *_Nullable context);
 
 size_t class_getInstanceSize(Class _Nullable cls);
-id _Nullable objc_lookup_class(const char *_Nullable name, ...);
+Class _Nullable objc_lookup_class(const char *_Nullable name);
+Class _Nullable objc_get_class(const char *_Nullable name);
 id _Nullable objc_getClass(const char *_Nullable name);
 
 #if SF_RUNTIME_REFLECTION
