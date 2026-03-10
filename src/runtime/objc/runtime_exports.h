@@ -16,14 +16,6 @@
 #define SF_RUNTIME_FORWARDING 0
 #endif
 
-#ifndef SF_RUNTIME_ABI_GNUSTEP
-#define SF_RUNTIME_ABI_GNUSTEP 1
-#endif
-
-#ifndef SF_RUNTIME_ABI_OBJFW
-#define SF_RUNTIME_ABI_OBJFW 0
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,21 +24,17 @@ extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnullability-extension"
 #pragma clang diagnostic ignored "-Wreserved-identifier"
+#define SF_NOT_TAIL_CALLED __attribute__((not_tail_called))
+#else
+#define SF_NOT_TAIL_CALLED
 #endif
 #pragma clang assume_nonnull begin
 
 #ifndef __OBJC__
-#if SF_RUNTIME_ABI_OBJFW
-typedef struct sf_objc_selector {
-    uintptr_t uid;
-    const char *_Nullable types;
-} *SEL;
-#else
 typedef struct sf_objc_selector {
     const char *_Nullable name;
     const char *_Nullable types;
 } *SEL;
-#endif
 
 typedef struct sf_objc_class *Class;
 typedef struct sf_objc_object *id;
@@ -64,14 +52,12 @@ struct sf_objc_super {
     Class super_class;
 };
 
-#if SF_RUNTIME_ABI_GNUSTEP
 void __objc_load(void *_Nullable init);
-#endif
-#if SF_RUNTIME_ABI_OBJFW
-void __objc_exec_class(void *_Nullable module);
-#endif
 
-id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...);
+id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...) SF_NOT_TAIL_CALLED;
+#ifndef __OBJC__
+void objc_msgSend_stret(void *_Nonnull out, id _Nullable receiver, SEL _Nullable op, ...);
+#endif
 IMP objc_msg_lookup(id _Nullable receiver, SEL _Nullable op);
 IMP objc_msg_lookup_stret(id _Nullable receiver, SEL _Nullable op);
 IMP objc_msg_lookup_super(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
@@ -139,6 +125,7 @@ void sf_dispatch_reset_stats(void);
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+#undef SF_NOT_TAIL_CALLED
 
 #ifdef __cplusplus
 }

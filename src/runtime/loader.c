@@ -462,8 +462,12 @@ void __objc_load(void *init_ptr) {
     sf_finalize_registered_classes();
 }
 
-id objc_lookup_class(const char *name, ...) {
-    return (id)sf_class_from_name(name);
+Class objc_lookup_class(const char *name) {
+    return (Class)sf_class_from_name(name);
+}
+
+Class objc_get_class(const char *name) {
+    return (Class)sf_class_from_name(name);
 }
 
 id objc_getClass(const char *name) {

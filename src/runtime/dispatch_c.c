@@ -32,6 +32,36 @@ typedef struct SFCSigCacheEntry {
     uint8_t unsupported;
 } SFCSigCacheEntry_t;
 
+typedef enum SFCCallArgKind {
+    SFC_CALL_ARG_KIND_CODE = 0,
+    SFC_CALL_ARG_KIND_AGGREGATE_WORD = 1,
+    SFC_CALL_ARG_KIND_AGGREGATE_POINTER = 2,
+    SFC_CALL_ARG_KIND_STRUCT_BYTES = 3,
+} SFCCallArgKind_t;
+
+typedef struct SFCCallArgInfo {
+    char code;
+    uint8_t kind;
+    uint16_t size;
+} SFCCallArgInfo_t;
+
+typedef struct SFCTypeLayout {
+    size_t size;
+    size_t align;
+    int contains_fp;
+    int unsupported;
+    const char *end;
+} SFCTypeLayout_t;
+
+#if defined(__x86_64__) && !defined(_WIN32)
+typedef struct SFCSysVVaList {
+    unsigned int gp_offset;
+    unsigned int fp_offset;
+    void *overflow_arg_area;
+    void *reg_save_area;
+} SFCSysVVaList_t;
+#endif
+
 #if SF_DISPATCH_C_USE_LIBFFI
 typedef union SFCWordStorage {
     int8_t s8;
@@ -46,11 +76,14 @@ typedef union SFCWordStorage {
     unsigned long long u64;
     void *ptr;
 } SFCWordStorage_t;
+
+typedef struct SFCStructFFIType {
+    ffi_type type;
+    ffi_type *elements[16];
+} SFCStructFFIType_t;
 #endif
 
 static __thread SFCSigCacheEntry_t g_sig_cache[SF_C_SIG_CACHE_SIZE];
-
-void objc_msgSend_stret(void *out, id receiver, SEL op, ...);
 
 static int is_digit_char(char c) {
     return c >= '0' && c <= '9';
@@ -58,6 +91,14 @@ static int is_digit_char(char c) {
 
 static int is_type_qualifier(char c) {
     return c == 'r' || c == 'n' || c == 'N' || c == 'o' || c == 'O' || c == 'R' || c == 'V';
+}
+
+static size_t align_up_size(size_t value, size_t align) {
+    if (align <= 1U) {
+        return value;
+    }
+    size_t mask = align - 1U;
+    return (value + mask) & ~mask;
 }
 
 static const char *skip_type_token(const char *p) {
@@ -132,15 +173,276 @@ static char primary_type_code(const char *p) {
     return *p;
 }
 
-#if SF_DISPATCH_C_USE_LIBFFI
-static char return_type_code(SEL op) {
+static SFCTypeLayout_t parse_type_layout(const char *p) {
+    SFCTypeLayout_t layout = {0U, 1U, 0, 0, p};
+    while (*layout.end && is_type_qualifier(*layout.end)) {
+        ++layout.end;
+    }
+
+    switch (*layout.end) {
+        case '\0':
+            return layout;
+        case 'v':
+            layout.end += 1;
+            return layout;
+        case 'c':
+        case 'C':
+        case 'B':
+            layout.size = 1U;
+            layout.align = 1U;
+            layout.end += 1;
+            return layout;
+        case 's':
+        case 'S':
+            layout.size = 2U;
+            layout.align = 2U;
+            layout.end += 1;
+            return layout;
+        case 'i':
+        case 'I':
+            layout.size = 4U;
+            layout.align = 4U;
+            layout.end += 1;
+            return layout;
+        case 'f':
+            layout.size = 4U;
+            layout.align = 4U;
+            layout.contains_fp = 1;
+            layout.end += 1;
+            return layout;
+        case 'l':
+        case 'L':
+            layout.size = sizeof(long);
+            layout.align = sizeof(long);
+            layout.end += 1;
+            return layout;
+        case 'q':
+        case 'Q':
+            layout.size = 8U;
+            layout.align = 8U;
+            layout.end += 1;
+            return layout;
+        case 'd':
+        case 'D':
+            layout.size = 8U;
+            layout.align = 8U;
+            layout.contains_fp = 1;
+            layout.end += 1;
+            return layout;
+        case '*':
+        case ':':
+        case '@':
+        case '#':
+            layout.size = sizeof(void *);
+            layout.align = sizeof(void *);
+            if (layout.end[0] == '@' && layout.end[1] == '?') {
+                layout.end += 2;
+            } else {
+                layout.end += 1;
+            }
+            return layout;
+        case '^':
+            layout.size = sizeof(void *);
+            layout.align = sizeof(void *);
+            layout.end += 1;
+            (void)parse_type_layout(layout.end);
+            layout.end = skip_type_token(layout.end);
+            return layout;
+        case '[': {
+            size_t count = 0U;
+            layout.end += 1;
+            while (is_digit_char(*layout.end)) {
+                count = (count * 10U) + (size_t)(*layout.end - '0');
+                ++layout.end;
+            }
+            SFCTypeLayout_t elem = parse_type_layout(layout.end);
+            layout.size = count * elem.size;
+            layout.align = elem.align;
+            layout.contains_fp = elem.contains_fp;
+            layout.unsupported = elem.unsupported;
+            layout.end = elem.end;
+            if (*layout.end == ']') {
+                ++layout.end;
+            } else {
+                layout.unsupported = 1;
+            }
+            return layout;
+        }
+        case '{': {
+            size_t size = 0U;
+            size_t align = 1U;
+            int contains_fp = 0;
+            int unsupported = 0;
+            layout.end += 1;
+            while (*layout.end && *layout.end != '=' && *layout.end != '}') {
+                ++layout.end;
+            }
+            if (*layout.end == '}') {
+                ++layout.end;
+                layout.unsupported = 1;
+                return layout;
+            }
+            if (*layout.end != '=') {
+                layout.unsupported = 1;
+                return layout;
+            }
+            ++layout.end;
+            while (*layout.end && *layout.end != '}') {
+                SFCTypeLayout_t field = parse_type_layout(layout.end);
+                size = align_up_size(size, field.align);
+                size += field.size;
+                if (field.align > align) {
+                    align = field.align;
+                }
+                contains_fp |= field.contains_fp;
+                unsupported |= field.unsupported;
+                layout.end = field.end;
+            }
+            if (*layout.end == '}') {
+                ++layout.end;
+            } else {
+                unsupported = 1;
+            }
+            layout.size = align_up_size(size, align);
+            layout.align = align;
+            layout.contains_fp = contains_fp;
+            layout.unsupported = unsupported;
+            return layout;
+        }
+        case '(': {
+            size_t size = 0U;
+            size_t align = 1U;
+            int contains_fp = 0;
+            int unsupported = 0;
+            layout.end += 1;
+            while (*layout.end && *layout.end != '=' && *layout.end != ')') {
+                ++layout.end;
+            }
+            if (*layout.end == ')') {
+                ++layout.end;
+                layout.unsupported = 1;
+                return layout;
+            }
+            if (*layout.end != '=') {
+                layout.unsupported = 1;
+                return layout;
+            }
+            ++layout.end;
+            while (*layout.end && *layout.end != ')') {
+                SFCTypeLayout_t field = parse_type_layout(layout.end);
+                if (field.size > size) {
+                    size = field.size;
+                }
+                if (field.align > align) {
+                    align = field.align;
+                }
+                contains_fp |= field.contains_fp;
+                unsupported |= field.unsupported;
+                layout.end = field.end;
+            }
+            if (*layout.end == ')') {
+                ++layout.end;
+            } else {
+                unsupported = 1;
+            }
+            layout.size = align_up_size(size, align);
+            layout.align = align;
+            layout.contains_fp = contains_fp;
+            layout.unsupported = unsupported;
+            return layout;
+        }
+        default:
+            layout.size = sizeof(void *);
+            layout.align = sizeof(void *);
+            layout.unsupported = 1;
+            layout.end = skip_type_token(layout.end);
+            return layout;
+    }
+}
+
+static int classify_aggregate_token(const char *token, SFCCallArgInfo_t *out_info) {
+    SFCTypeLayout_t layout = parse_type_layout(token);
+    char code = primary_type_code(token);
+    if (layout.unsupported || layout.contains_fp) {
+        return 0;
+    }
+    out_info->size = (uint16_t)layout.size;
+    if (layout.size <= sizeof(uint64_t)) {
+        out_info->code = 'Q';
+        out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_WORD;
+        return 1;
+    }
+    if (code == '{' && layout.size > (2U * sizeof(uint64_t))) {
+        out_info->code = '{';
+        out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES;
+        return 1;
+    }
+    out_info->code = '^';
+    out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_POINTER;
+    return 1;
+}
+
+static int classify_type_token(const char *token, SFCCallArgInfo_t *out_info) {
+    char code = primary_type_code(token);
+    out_info->code = code;
+    out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_CODE;
+    out_info->size = 0U;
+    if (code == '{' || code == '(' || code == '[') {
+        return classify_aggregate_token(token, out_info);
+    }
+    return !(code == 'f' || code == 'd' || code == 'D');
+}
+
+static int collect_return_info(SEL op, SFCCallArgInfo_t *out_info) {
     const char *types = op ? op->types : NULL;
     if (types == NULL || types[0] == '\0') {
-        return '@';
+        out_info->code = '@';
+        out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_CODE;
+        return 1;
     }
-    return primary_type_code(types);
+    return classify_type_token(types, out_info);
 }
-#endif
+
+static size_t collect_explicit_arg_infos(SEL op,
+                                         SFCCallArgInfo_t out_infos[SF_C_FALLBACK_MAX_ARGS],
+                                         int *unsupported_sig) {
+    if (unsupported_sig != NULL) {
+        *unsupported_sig = 0;
+    }
+    if (op == NULL || op->types == NULL || op->types[0] == '\0') {
+        return 0;
+    }
+
+    const char *p = op->types;
+    p = skip_type_token(p);
+    while (is_digit_char(*p)) {
+        ++p;
+    }
+
+    size_t explicit_count = 0U;
+    int arg_index = 0;
+    while (*p != '\0') {
+        const char *token = p;
+        p = skip_type_token(p);
+        while (*p == '-' || is_digit_char(*p)) {
+            ++p;
+        }
+
+        if (arg_index >= 2) {
+            if (explicit_count >= SF_C_FALLBACK_MAX_ARGS ||
+                !classify_type_token(token, &out_infos[explicit_count])) {
+                if (unsupported_sig != NULL) {
+                    *unsupported_sig = 1;
+                }
+                return explicit_count;
+            }
+            explicit_count += 1U;
+        }
+        arg_index += 1;
+    }
+
+    return explicit_count;
+}
 
 #if SF_DISPATCH_C_USE_LIBFFI
 static ffi_type *ffi_type_for_code(char code) {
@@ -378,6 +680,89 @@ static uintptr_t read_word_arg(va_list *ap, char code) {
     }
 }
 
+static uintptr_t read_struct_bytes_arg(va_list *ap, size_t size) {
+#if defined(__x86_64__) && !defined(_WIN32)
+    SFCSysVVaList_t *sysv = (SFCSysVVaList_t *)(void *)ap;
+    void *ptr = sysv->overflow_arg_area;
+    size_t rounded = align_up_size(size, sizeof(uint64_t));
+    sysv->overflow_arg_area = (void *)((char *)sysv->overflow_arg_area + rounded);
+    return (uintptr_t)ptr;
+#else
+    (void)size;
+    return (uintptr_t)va_arg(*ap, void *);
+#endif
+}
+
+static uintptr_t read_call_arg(va_list *ap, const SFCCallArgInfo_t *info) {
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_WORD) {
+        return (uintptr_t)va_arg(*ap, unsigned long long);
+    }
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+        return read_struct_bytes_arg(ap, info->size);
+    }
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_POINTER) {
+        return (uintptr_t)va_arg(*ap, void *);
+    }
+    return read_word_arg(ap, info->code);
+}
+
+#if SF_DISPATCH_C_USE_LIBFFI
+static int build_struct_ffi_type(const char *token, SFCStructFFIType_t *out_type) {
+    const char *p = token;
+    size_t count = 0U;
+
+    while (*p && is_type_qualifier(*p)) {
+        ++p;
+    }
+    if (*p != '{') {
+        return 0;
+    }
+    ++p;
+    while (*p && *p != '=' && *p != '}') {
+        ++p;
+    }
+    if (*p != '=') {
+        return 0;
+    }
+    ++p;
+
+    while (*p && *p != '}') {
+        ffi_type *field_type = ffi_type_for_code(primary_type_code(p));
+        if (field_type == NULL) {
+            return 0;
+        }
+        if (count + 1U >= sizeof(out_type->elements) / sizeof(out_type->elements[0])) {
+            return 0;
+        }
+        if (primary_type_code(p) == '{' || primary_type_code(p) == '(' || primary_type_code(p) == '[') {
+            return 0;
+        }
+        out_type->elements[count++] = field_type;
+        p = skip_type_token(p);
+    }
+    if (*p != '}') {
+        return 0;
+    }
+
+    out_type->elements[count] = NULL;
+    out_type->type.size = 0U;
+    out_type->type.alignment = 0U;
+    out_type->type.type = FFI_TYPE_STRUCT;
+    out_type->type.elements = out_type->elements;
+    return 1;
+}
+
+static ffi_type *ffi_type_for_call_info(const SFCCallArgInfo_t *info) {
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_WORD) {
+        return &ffi_type_uint64;
+    }
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_POINTER) {
+        return &ffi_type_pointer;
+    }
+    return ffi_type_for_code(info->code);
+}
+#endif
+
 int sf_runtime_test_dispatch_is_digit_char(char c) {
     return is_digit_char(c);
 }
@@ -421,9 +806,9 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...) {
 #else
     IMP imp = sf_lookup_imp(receiver, op);
 #endif
-    char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
+    SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
+    size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
     if (out == NULL || unsupported_sig || imp == NULL || sf_dispatch_imp_is_nil(imp)) {
         return;
     }
@@ -432,7 +817,7 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...) {
     va_list ap;
     va_start(ap, op);
     for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_word_arg(&ap, arg_codes[i]);
+        args[i] = read_call_arg(&ap, &arg_infos[i]);
     }
     va_end(ap);
 
@@ -474,14 +859,14 @@ id objc_msgSend(id receiver, SEL op, ...) {
         return (id)0;
     }
 
-    char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
+    SFCCallArgInfo_t ret_info = {0};
+    SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
-    if (unsupported_sig) {
+    size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
+    if (unsupported_sig || !collect_return_info(dispatch_op, &ret_info)) {
         return (id)0;
     }
-    char ret_code = return_type_code(dispatch_op);
-    ffi_type *ret_type = ffi_type_for_code(ret_code);
+    ffi_type *ret_type = ffi_type_for_call_info(&ret_info);
     if (ret_type == NULL) {
         return (id)0;
     }
@@ -490,20 +875,54 @@ id objc_msgSend(id receiver, SEL op, ...) {
     va_list ap;
     va_start(ap, op);
     for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_word_arg(&ap, arg_codes[i]);
+        args[i] = read_call_arg(&ap, &arg_infos[i]);
     }
     va_end(ap);
 
     ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, NULL, NULL, NULL, NULL};
     void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, NULL, NULL, NULL, NULL};
     SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
+    SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
     memset(arg_storage, 0, sizeof(arg_storage));
+    memset(struct_arg_types, 0, sizeof(struct_arg_types));
     for (size_t i = 0; i < argc; ++i) {
-        arg_types[i + 2] = ffi_type_for_code(arg_codes[i]);
+        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+            const char *types = dispatch_op != NULL ? dispatch_op->types : NULL;
+            const char *p = types;
+            int arg_index = 0;
+            if (p == NULL) {
+                return (id)0;
+            }
+            p = skip_type_token(p);
+            while (is_digit_char(*p)) {
+                ++p;
+            }
+            while (*p != '\0') {
+                const char *token = p;
+                p = skip_type_token(p);
+                while (*p == '-' || is_digit_char(*p)) {
+                    ++p;
+                }
+                if (arg_index >= 2 && (size_t)(arg_index - 2) == i) {
+                    if (!build_struct_ffi_type(token, &struct_arg_types[i])) {
+                        return (id)0;
+                    }
+                    arg_types[i + 2] = &struct_arg_types[i].type;
+                    arg_values[i + 2] = (void *)(uintptr_t)args[i];
+                    break;
+                }
+                arg_index += 1;
+            }
+            if (arg_types[i + 2] == NULL) {
+                return (id)0;
+            }
+            continue;
+        }
+        arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
         if (arg_types[i + 2] == NULL) {
             return (id)0;
         }
-        store_word_arg(&arg_storage[i], arg_codes[i], args[i]);
+        store_word_arg(&arg_storage[i], arg_infos[i].code, args[i]);
         arg_values[i + 2] = &arg_storage[i];
     }
 
@@ -515,7 +934,7 @@ id objc_msgSend(id receiver, SEL op, ...) {
     SFCWordStorage_t result;
     memset(&result, 0, sizeof(result));
     ffi_call(&cif, FFI_FN(imp), &result, arg_values);
-    return return_word_as_id(&result, ret_code);
+    return return_word_as_id(&result, ret_info.code);
 #else
     char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;

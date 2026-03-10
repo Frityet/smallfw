@@ -30,6 +30,32 @@ static __thread id g_last_header_obj;
 static __thread SFObjHeader_t *g_last_header_ptr;
 static __thread size_t g_pool_fallback_token;
 
+static inline int sf_pointer_uses_small_object_tag(id obj) {
+    return ((((uintptr_t)obj) & (uintptr_t)7U) != 0U);
+}
+
+static inline int sf_object_bypasses_heap_arc(id obj) {
+    static Class g_nsconstantstring_class;
+    static Class g_nxconstantstring_class;
+    Class cls = NULL;
+
+    if (obj == NULL) {
+        return 1;
+    }
+    if (sf_pointer_uses_small_object_tag(obj)) {
+        return 1;
+    }
+
+    cls = *(Class *)obj;
+    if (g_nsconstantstring_class == NULL) {
+        g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
+    }
+    if (g_nxconstantstring_class == NULL) {
+        g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
+    }
+    return cls != NULL && (cls == g_nsconstantstring_class || cls == g_nxconstantstring_class);
+}
+
 void sf_runtime_test_reset_autorelease_state(void) {
     free((void *)g_autorelease_state.objects);
     free(g_autorelease_state.markers);
@@ -46,6 +72,9 @@ static inline SFObjHeader_t *header_from_heap_candidate(id obj) {
     }
 
     if (obj == NULL) {
+        return NULL;
+    }
+    if (sf_object_bypasses_heap_arc(obj)) {
         return NULL;
     }
 

@@ -32,6 +32,9 @@ objc_msgSend:
 #endif
     TEST RAX, RAX
     JE .LMISS_WITHOUT_XMM
+    LEA R11, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R11
+    JE .LMISS_WITHOUT_XMM
     JMP RAX
 
 .LGLOBAL_CACHE:
@@ -58,6 +61,9 @@ objc_msgSend:
     JNE .LMISS_WITHOUT_XMM
     MOV RAX, QWORD PTR [R11 + 16]
     TEST RAX, RAX
+    JE .LMISS_WITHOUT_XMM
+    LEA R11, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R11
     JE .LMISS_WITHOUT_XMM
 
 #if SF_RUNTIME_THREADSAFE
@@ -94,8 +100,16 @@ objc_msgSend:
     MOV R8, QWORD PTR [RSP + 32]
     MOV R9, QWORD PTR [RSP + 40]
 
+    LEA R10, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R10
+    JE .LMISS_RETURN_NIL_WITHOUT_XMM
+
     ADD RSP, 0x38
     JMP RAX
+
+.LMISS_RETURN_NIL_WITHOUT_XMM:
+    ADD RSP, 0x38
+    JMP .LNIL_RETURN
 
 .LWITH_XMM:
     SUB RSP, 0xB8
@@ -136,8 +150,16 @@ objc_msgSend:
     MOVAPS XMM6, XMMWORD PTR [RSP + 0x90]
     MOVAPS XMM7, XMMWORD PTR [RSP + 0xA0]
 
+    LEA R10, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R10
+    JE .LMISS_RETURN_NIL_WITH_XMM
+
     ADD RSP, 0xB8
     JMP RAX
+
+.LMISS_RETURN_NIL_WITH_XMM:
+    ADD RSP, 0xB8
+    JMP .LNIL_RETURN
 
 .LNIL_RETURN:
     XOR EAX, EAX
@@ -177,6 +199,9 @@ objc_msgSend_stret:
 #endif
     TEST RAX, RAX
     JE .LSTRET_MISS_WITHOUT_XMM
+    LEA R11, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R11
+    JE .LSTRET_MISS_WITHOUT_XMM
     JMP RAX
 
 .LSTRET_GLOBAL_CACHE:
@@ -203,6 +228,9 @@ objc_msgSend_stret:
     JNE .LSTRET_MISS_WITHOUT_XMM
     MOV RAX, QWORD PTR [R11 + 16]
     TEST RAX, RAX
+    JE .LSTRET_MISS_WITHOUT_XMM
+    LEA R11, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R11
     JE .LSTRET_MISS_WITHOUT_XMM
 
 #if SF_RUNTIME_THREADSAFE
@@ -239,8 +267,16 @@ objc_msgSend_stret:
     MOV R8, QWORD PTR [RSP + 32]
     MOV R9, QWORD PTR [RSP + 40]
 
+    LEA R10, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R10
+    JE .LSTRET_RETURN_MISS_WITHOUT_XMM
+
     ADD RSP, 0x38
     JMP RAX
+
+.LSTRET_RETURN_MISS_WITHOUT_XMM:
+    ADD RSP, 0x38
+    JMP .LSTRET_RETURN
 
 .LSTRET_WITH_XMM:
     SUB RSP, 0xB8
@@ -281,8 +317,16 @@ objc_msgSend_stret:
     MOVAPS XMM6, XMMWORD PTR [RSP + 0x90]
     MOVAPS XMM7, XMMWORD PTR [RSP + 0xA0]
 
+    LEA R10, [RIP + sf_dispatch_nil_imp]
+    CMP RAX, R10
+    JE .LSTRET_RETURN_MISS_WITH_XMM
+
     ADD RSP, 0xB8
     JMP RAX
+
+.LSTRET_RETURN_MISS_WITH_XMM:
+    ADD RSP, 0xB8
+    JMP .LSTRET_RETURN
 
 .LSTRET_RETURN:
     RET

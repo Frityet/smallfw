@@ -47,7 +47,7 @@ static uint64_t g_method_walks;
 #define SF_STATS_INC(counter) ((void)0)
 #endif
 
-static id nil_imp(id self, SEL cmd, ...) {
+id sf_dispatch_nil_imp(id self, SEL cmd, ...) {
     (void)self;
     (void)cmd;
     return (id)0;
@@ -83,7 +83,7 @@ int sf_selector_equal(SEL a, SEL b) {
 }
 
 int sf_dispatch_imp_is_nil(IMP imp) {
-    return imp == (IMP)nil_imp;
+    return imp == (IMP)sf_dispatch_nil_imp;
 }
 
 static size_t cache_index_for(Class cls, SEL op) {
@@ -168,7 +168,7 @@ IMP sf_lookup_imp_miss(Class cls, SEL op) {
 
     imp = sf_lookup_imp_in_class(cls, op);
     if (imp == NULL) {
-        imp = (IMP)nil_imp;
+        imp = (IMP)sf_dispatch_nil_imp;
     }
 
     index = cache_index_for(cls, op);
@@ -221,12 +221,12 @@ IMP sf_lookup_imp(id receiver, SEL op) {
     Class cls = NULL;
 
     if (receiver == NULL || op == NULL) {
-        return (IMP)nil_imp;
+        return (IMP)sf_dispatch_nil_imp;
     }
 
     cls = *(Class *)receiver;
     if (cls == NULL) {
-        return (IMP)nil_imp;
+        return (IMP)sf_dispatch_nil_imp;
     }
 
     return lookup_cached_inline(cls, op);
@@ -257,7 +257,7 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
 #endif
 
     if (receiver == NULL || op == NULL) {
-        return (IMP)nil_imp;
+        return (IMP)sf_dispatch_nil_imp;
     }
 
     current_receiver = *receiver;
@@ -326,12 +326,12 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
 
     *receiver = current_receiver;
     *op = current_sel;
-    return (IMP)nil_imp;
+    return (IMP)sf_dispatch_nil_imp;
 }
 
 IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op) {
     if (super_info == NULL || super_info->super_class == NULL || op == NULL) {
-        return (IMP)nil_imp;
+        return (IMP)sf_dispatch_nil_imp;
     }
     return lookup_cached_inline(super_info->super_class, op);
 }

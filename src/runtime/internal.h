@@ -34,6 +34,7 @@ IMP sf_lookup_imp_in_class(Class _Nullable cls, SEL _Nullable op);
 IMP sf_lookup_imp_miss(Class _Nullable cls, SEL _Nullable op);
 int sf_selector_equal(SEL _Nullable a, SEL _Nullable b);
 int sf_dispatch_imp_is_nil(IMP _Nullable imp);
+id _Nullable sf_dispatch_nil_imp(id _Nullable self, SEL _Nullable cmd, ...);
 SEL _Nullable sf_intern_selector(SEL _Nullable sel);
 SEL _Nullable sf_cached_selector_dealloc(void);
 SEL _Nullable sf_cached_selector_alloc(void);

@@ -575,17 +575,24 @@ static int case_dispatch_forwarding_targets(void) {
     SEL class_sel = (SEL)&class_sel_data;
     Class proxy_cls = (Class)objc_getClass("ForwardDispatchProxy");
     __unsafe_unretained ForwardDispatchProxy *proxy = SFW_NEW(ForwardDispatchProxy);
-    int instance_result = 0;
-    int class_result = 0;
+    int instance_result0 = 0;
+    int instance_result1 = 0;
+    int class_result0 = 0;
+    int class_result1 = 0;
 
     if (proxy == nil || proxy_cls == Nil) {
         return 0;
     }
 
-    instance_result = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 5);
-    class_result = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 7);
+    instance_result0 = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 5);
+    instance_result1 = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 6);
+    class_result0 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 7);
+    class_result1 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 8);
     objc_release(proxy);
-    return instance_result == 105 && class_result == 207;
+    return instance_result0 == 105 &&
+           instance_result1 == 106 &&
+           class_result0 == 207 &&
+           class_result1 == 208;
 #else
     return 1;
 #endif

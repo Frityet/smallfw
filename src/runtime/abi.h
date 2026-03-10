@@ -18,109 +18,6 @@
 extern "C" {
 #endif
 
-#ifndef SF_RUNTIME_ABI_GNUSTEP
-#define SF_RUNTIME_ABI_GNUSTEP 1
-#endif
-
-#ifndef SF_RUNTIME_ABI_OBJFW
-#define SF_RUNTIME_ABI_OBJFW 0
-#endif
-
-#define SF_SELECTOR_UID_MAX UINTPTR_C(0x00FFFFFF)
-
-#if SF_RUNTIME_ABI_OBJFW
-typedef struct SFObjCSelectorRuntime {
-    uintptr_t uid;
-    const char *_Nullable types;
-    const char *_Nullable name;
-} SFObjCSelectorRuntime_t;
-
-typedef struct sf_objc_selector_ref {
-    uintptr_t uid;
-    const char *_Nullable types;
-} SFObjCSelectorRef_t;
-
-typedef struct sf_objc_method {
-    SFObjCSelectorRef_t selector;
-    IMP imp;
-} SFObjCMethod_t;
-
-typedef struct SFObjCMethodList {
-    struct SFObjCMethodList *_Nullable next;
-    unsigned int count;
-    SFObjCMethod_t methods[];
-} SFObjCMethodList_t;
-
-typedef struct sf_objc_class {
-    struct sf_objc_class *_Nullable isa;
-    struct sf_objc_class *_Nullable superclass;
-    const char *_Nullable name;
-    long version;
-    unsigned long info;
-    long instance_size;
-    void *_Nullable ivars;
-    SFObjCMethodList_t *_Nullable methods;
-    void *_Nullable dtable;
-    void *_Nullable subclass_list;
-    void *_Nullable sibling_class;
-    void *_Nullable protocols;
-    void *_Nullable gc_object_type;
-    unsigned long abi_version;
-    void *_Nullable ivar_offsets;
-    void *_Nullable properties;
-    unsigned long flags;
-    unsigned long reserved;
-} SFObjCClass_t;
-
-typedef struct sf_objc_ivar {
-    const char *_Nullable name;
-    const char *_Nullable type;
-    unsigned int offset;
-} SFObjCIvar_t;
-
-typedef struct SFObjCIvarList {
-    unsigned int count;
-    SFObjCIvar_t ivars[];
-} SFObjCIvarList_t;
-
-typedef struct SFObjCProtocolList {
-    struct SFObjCProtocolList *_Nullable next;
-    long count;
-    void *_Nullable list[];
-} SFObjCProtocolList_t;
-
-typedef struct SFObjCCategory {
-    const char *_Nullable category_name;
-    const char *_Nullable class_name;
-    SFObjCMethodList_t *_Nullable instance_methods;
-    SFObjCMethodList_t *_Nullable class_methods;
-    SFObjCProtocolList_t *_Nullable protocols;
-} SFObjCCategory_t;
-
-typedef struct SFObjCSymtab {
-    unsigned long unknown;
-    SFObjCSelectorRef_t *_Nullable selector_refs;
-    uint16_t class_defs_count;
-    uint16_t category_defs_count;
-    void *_Nullable defs[];
-} SFObjCSymtab_t;
-
-typedef struct SFObjCModule {
-    unsigned long version;
-    unsigned long size;
-    const char *_Nullable name;
-    SFObjCSymtab_t *_Nullable symtab;
-} SFObjCModule_t;
-
-typedef struct SFObjCDTableLevel2 {
-    IMP _Nullable buckets[256];
-} SFObjCDTableLevel2_t;
-
-typedef struct SFObjCDTable {
-    SFObjCDTableLevel2_t *_Nullable buckets[256];
-} SFObjCDTable_t;
-
-#else
 typedef struct sf_objc_method {
     IMP imp;
     SEL _Nullable selector;
@@ -189,32 +86,26 @@ typedef struct SFObjCInit {
     void *_Nullable const_strings_start;
     void *_Nullable const_strings_stop;
 } SFObjCInit_t;
-#endif
 
-const char *_Nullable sf_selector_name(SEL _Nullable sel);
-const char *_Nullable sf_selector_types(SEL _Nullable sel);
-uintptr_t sf_selector_uid(SEL _Nullable sel);
-void sf_selector_set_uid(SEL _Nullable sel, uintptr_t uid);
-void sf_selector_set_types(SEL _Nullable sel, const char *_Nullable types);
+typedef struct SFObjCSelectorFields {
+    const char *_Nullable name;
+    const char *_Nullable types;
+} SFObjCSelectorFields_t;
 
-#if SF_RUNTIME_ABI_OBJFW
-static inline SEL _Nullable sf_method_selector_ptr(SFObjCMethod_t *_Nullable method) {
-    if (method == NULL) {
-        return NULL;
-    }
-    return (SEL)(void *)&method->selector;
+static inline const SFObjCSelectorFields_t *_Nullable sf_selector_fields(SEL _Nullable sel) {
+    return (const SFObjCSelectorFields_t *)(const void *)sel;
 }
 
-static inline const char *_Nullable sf_method_types(SFObjCMethod_t *_Nullable method) {
-    return method != NULL ? method->selector.types : NULL;
+static inline const char *_Nullable sf_selector_name(SEL _Nullable sel) {
+    const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
+    return fields != NULL ? fields->name : NULL;
 }
 
-static inline void sf_method_assign_selector(SFObjCMethod_t *_Nonnull method, SEL _Nullable selector,
-                                             const char *_Nullable types) {
-    method->selector.uid = selector != NULL ? sf_selector_uid(selector) : (uintptr_t)0;
-    method->selector.types = (types != NULL) ? types : sf_selector_types(selector);
+static inline const char *_Nullable sf_selector_types(SEL _Nullable sel) {
+    const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
+    return fields != NULL ? fields->types : NULL;
 }
-#else
+
 static inline SEL _Nullable sf_method_selector_ptr(SFObjCMethod_t *_Nullable method) {
     return method != NULL ? method->selector : NULL;
 }
@@ -228,7 +119,6 @@ static inline void sf_method_assign_selector(SFObjCMethod_t *_Nonnull method, SE
     method->selector = selector;
     method->types = (types != NULL) ? types : sf_selector_types(selector);
 }
-#endif
 
 typedef uint32_t SFObjRefcount_t;
 

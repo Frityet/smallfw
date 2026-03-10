@@ -11,13 +11,6 @@ option("runtime_threadsafe")
     set_description("Enable synchronized runtime internals")
 option_end()
 
-option("runtime_abi")
-    set_default("gnustep-2.3")
-    set_showmenu(true)
-    set_values("gnustep-2.3", "objfw-1.5")
-    set_description("Select Objective-C runtime ABI")
-option_end()
-
 option("dispatch_backend")
     set_default("asm")
     set_showmenu(true)
@@ -67,6 +60,8 @@ option("runtime_sanitize")
     set_description("Enable AddressSanitizer and UndefinedBehaviorSanitizer for runtime analysis builds")
 option_end()
 
+local objc_runtime = "gnustep-2.3"
+
 local function add_objc_flags(...)
     add_cflags(..., {force = true})
     add_cxflags(..., {force = true})
@@ -113,8 +108,7 @@ local function add_common_runtime_flags()
     else
         add_objc_flags("-fno-omit-frame-pointer")
     end
-    local runtime_abi = get_config("runtime_abi") or "gnustep-2.3"
-    add_objc_flags("-fobjc-runtime=" .. runtime_abi, "-fobjc-arc")
+    add_objc_flags("-fobjc-runtime=" .. objc_runtime, "-fobjc-arc")
     add_objc_flags("-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable")
     add_objc_flags("-Wno-objc-root-class", "-Wno-objc-method-access", "-Winvalid-offsetof")
     if is_plat("mingw") then
@@ -123,13 +117,6 @@ local function add_common_runtime_flags()
 end
 
 local function add_runtime_mode_defines()
-    local runtime_abi = get_config("runtime_abi") or "gnustep-2.3"
-    if runtime_abi == "objfw-1.5" then
-        add_defines("SF_RUNTIME_ABI_GNUSTEP=0", "SF_RUNTIME_ABI_OBJFW=1")
-    else
-        add_defines("SF_RUNTIME_ABI_GNUSTEP=1", "SF_RUNTIME_ABI_OBJFW=0")
-    end
-
     if has_config("runtime_validation") then
         add_defines("SF_RUNTIME_VALIDATION=1")
     else
@@ -211,37 +198,27 @@ elseif is_plat("mingw") then
 end
 
 local dispatch_backend = get_config("dispatch_backend") or "asm"
-local runtime_abi = get_config("runtime_abi") or "gnustep-2.3"
-local runtime_is_objfw = runtime_abi == "objfw-1.5"
 
 target("smallfw_runtime")
     set_kind("static")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+    add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
     add_includedirs("src", {public = true})
     add_common_runtime_flags()
     add_runtime_mode_defines()
     add_analysis_symbol_settings()
     add_runtime_sanitizer_settings()
 
-    if runtime_is_objfw and not is_plat("mingw") then
-        add_links("ffi", {public = true})
-    end
-
     add_files(
         "src/runtime/allocator.c",
         "src/runtime/arc.c",
+        "src/runtime/dispatch.c",
         "src/runtime/exceptions.c",
-        "src/runtime/helpers.c"
+        "src/runtime/helpers.c",
+        "src/runtime/loader.c"
     )
-    if runtime_is_objfw then
-        add_files("src/runtime/dispatch_objfw.c", "src/runtime/loader_objfw.c")
-        add_files("src/runtime/dispatch_c.c")
-    else
-        add_files("src/runtime/dispatch.c", "src/runtime/loader.c")
-    end
     add_files("src/runtime/testhooks.c")
     if is_plat("mingw") and has_config("runtime_exceptions") then
         add_files("src/runtime/exceptions_mingw.mm", {mxflags = {"-fno-objc-arc"}})
@@ -250,28 +227,18 @@ target("smallfw_runtime")
     if dispatch_backend == "asm" then
         if is_arch("x86_64") then
             if is_plat("mingw") then
-                if not runtime_is_objfw then
-                    add_files("src/runtime/dispatch_c.c")
-                end
+                add_files("src/runtime/dispatch_c.c")
             else
-                if runtime_is_objfw then
-                    add_files("src/runtime/dispatch_objfw_x86_64.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
-                else
-                    add_files("src/runtime/dispatch_x86_64.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
-                end
+                add_files("src/runtime/dispatch_x86_64.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
             end
         else
-            if not runtime_is_objfw then
-                add_files("src/runtime/dispatch_c.c")
-            end
+            add_files("src/runtime/dispatch_c.c")
             if not is_plat("mingw") then
                 add_links("ffi", {public = true})
             end
         end
     else
-        if not runtime_is_objfw then
-            add_files("src/runtime/dispatch_c.c")
-        end
+        add_files("src/runtime/dispatch_c.c")
         if not is_plat("mingw") then
             add_links("ffi", {public = true})
         end
@@ -285,7 +252,7 @@ target("runtime_tests")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+    add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
     add_deps("smallfw_runtime")
     add_includedirs("src", "tests")
     add_common_runtime_flags()
@@ -306,7 +273,7 @@ target("runtime_bench")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+    add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
     add_deps("smallfw_runtime")
     add_includedirs("src", "tests")
     add_common_runtime_flags()
@@ -322,24 +289,25 @@ target("runtime_bench")
 
 target("example")
     set_kind("binary")
+    set_default(false)
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+    add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
     add_deps("smallfw_runtime")
-    add_includedirs("example")
+    add_includedirs("examples")
     add_common_runtime_flags()
     add_runtime_mode_defines()
     add_analysis_symbol_settings()
     add_runtime_sanitizer_settings()
-    add_files("example/main.m", "example/server.m")
+    add_files("examples/html_dsl_forwarding.m")
     add_links("pthread")
 
 if not is_plat("mingw") then
     target("runtime_fuzz_dispatch")
         set_kind("binary")
         set_default(false)
-        add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+        add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
         add_deps("smallfw_runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()
@@ -353,7 +321,7 @@ if not is_plat("mingw") then
     target("runtime_fuzz_loader")
         set_kind("binary")
         set_default(false)
-        add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+        add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
         add_deps("smallfw_runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()
@@ -367,7 +335,7 @@ if not is_plat("mingw") then
     target("runtime_fuzz_exceptions")
         set_kind("binary")
         set_default(false)
-        add_options("runtime_abi", "runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
+        add_options("runtime_threadsafe", "dispatch_backend", "dispatch_stats", "runtime_exceptions", "runtime_reflection", "runtime_forwarding", "runtime_validation", "analysis_symbols", "runtime_sanitize")
         add_deps("smallfw_runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()
