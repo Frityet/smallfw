@@ -31,6 +31,9 @@ __attribute__((objc_root_class))
 - (const void *_Nullable)exceptionBacktraceFrameAtIndex:(size_t)index;
 @end
 
+// Parent-allocated ValueObjects are embedded into the owning object's hidden inline storage.
+// Their lifetime is bound to that owner slot: clearing the slot or destroying the parent
+// invalidates the embedded ValueObject, and retain/release do not extend that lifetime.
 @interface ValueObject : Object
 
 @end

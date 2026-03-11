@@ -30,6 +30,9 @@ static __thread SFAutoreleaseState_t g_autorelease_state;
 static __thread id g_last_header_obj;
 static __thread SFObjHeader_t *g_last_header_ptr;
 static __thread size_t g_pool_fallback_token;
+static Class g_nsconstantstring_class;
+static Class g_nxconstantstring_class;
+static int g_constant_string_classes_initialized;
 
 static inline int sf_pointer_uses_small_object_tag(id obj)
 {
@@ -38,8 +41,6 @@ static inline int sf_pointer_uses_small_object_tag(id obj)
 
 static inline int sf_object_bypasses_heap_arc(id obj)
 {
-    static Class g_nsconstantstring_class;
-    static Class g_nxconstantstring_class;
     Class cls = NULL;
 
     if (obj == NULL) {
@@ -50,11 +51,10 @@ static inline int sf_object_bypasses_heap_arc(id obj)
     }
 
     cls = *(Class *)obj;
-    if (g_nsconstantstring_class == NULL) {
+    if (not g_constant_string_classes_initialized) {
         g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
-    }
-    if (g_nxconstantstring_class == NULL) {
         g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
+        g_constant_string_classes_initialized = 1;
     }
     return cls != NULL and (cls == g_nsconstantstring_class or cls == g_nxconstantstring_class);
 }
@@ -147,28 +147,26 @@ static void clear_embedded_owner_slot(SFObjHeader_t *hdr, id obj)
     }
 }
 
-static IMP lookup_named_imp(Class cls, const char *name)
+static inline int embedded_owner_slot_contains_object(SFObjHeader_t *hdr, id obj)
 {
-    SFObjCClass_t *cursor = (SFObjCClass_t *)cls;
-    while (cursor != NULL) {
-        for (SFObjCMethodList_t *list = cursor->methods; list != NULL; list = list->next) {
-            for (int32_t i = 0; i < list->count; ++i) {
-                SFObjCMethod_t *method = &list->methods[i];
-                const char *method_name = sf_selector_name(method->selector);
-                if (method_name != NULL and name != NULL and strcmp(method_name, name) == 0) {
-                    return method->imp;
-                }
-            }
-        }
-        cursor = (cursor->superclass != cursor) ? cursor->superclass : NULL;
+    if (hdr == NULL or obj == NULL or (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+        return 0;
     }
-    return NULL;
+
+    id parent = sf_header_parent(hdr);
+    if (parent == NULL) {
+        return 0;
+    }
+
+    unsigned char *parent_bytes = (unsigned char *)(void *)parent;
+    id *owner_slot = (id *)(void *)(parent_bytes + hdr->reserved);
+    return *owner_slot == obj;
 }
 
-static void clear_object_ivars(id obj)
+static void clear_object_ivars_slow(id obj, Class cls)
 {
     unsigned char *obj_bytes = (unsigned char *)(void *)obj;
-    SFObjCClass_t *cursor = (SFObjCClass_t *)sf_object_class(obj);
+    SFObjCClass_t *cursor = (SFObjCClass_t *)cls;
     while (cursor != NULL) {
         SFObjCIvarList_t *list = (SFObjCIvarList_t *)cursor->ivars;
         if (list != NULL and list->count > 0) {
@@ -204,6 +202,58 @@ static void clear_object_ivars(id obj)
             }
         }
         cursor = (cursor->superclass != cursor) ? cursor->superclass : NULL;
+    }
+}
+
+static void clear_object_ivars(id obj, Class cls)
+{
+    unsigned char *obj_bytes = (unsigned char *)(void *)obj;
+    size_t count = 0U;
+    const uint32_t *offsets = sf_class_cached_object_ivar_offsets(cls, &count);
+    if (count == 0U) {
+        return;
+    }
+    if (offsets == NULL) {
+        clear_object_ivars_slow(obj, cls);
+        return;
+    }
+
+    for (size_t i = 0U; i < count; ++i) {
+        id *slot = (id *)(void *)(obj_bytes + offsets[i]);
+        id old = *slot;
+        if (old != NULL) {
+            *slot = NULL;
+            SFObjHeader_t *old_hdr = header_from_heap_candidate(old);
+            if (old_hdr != NULL and (old_hdr->flags & SF_OBJ_FLAG_EMBEDDED) != 0U) {
+                Class old_cls = sf_object_class(old);
+                SEL dealloc_sel = sf_cached_selector_dealloc();
+                static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
+                static SEL cxx_destruct_sel;
+
+                if (sf_class_has_trivial_release(old_cls)) {
+                    sf_object_dispose(old);
+                    continue;
+                }
+
+                IMP imp = sf_class_cached_dealloc_imp(old_cls);
+                if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
+                    (void)imp(old, dealloc_sel);
+                }
+                clear_object_ivars(old, old_cls);
+                if (cxx_destruct_sel == NULL) {
+                    cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+                }
+                if (cxx_destruct_sel != NULL) {
+                    IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(old_cls);
+                    if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
+                        (void)cxx_destruct_imp(old, cxx_destruct_sel);
+                    }
+                }
+                sf_object_dispose(old);
+                continue;
+            }
+            objc_release(old);
+        }
     }
 }
 
@@ -297,6 +347,7 @@ void sf_object_dispose(id obj)
 static void release_object_now(id obj)
 {
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
+    Class cls = NULL;
     if (hdr == NULL) {
         return;
     }
@@ -304,6 +355,9 @@ static void release_object_now(id obj)
         return;
     }
     if (hdr->state != SF_OBJ_STATE_LIVE) {
+        return;
+    }
+    if (embedded_owner_slot_contains_object(hdr, obj)) {
         return;
     }
 
@@ -333,27 +387,22 @@ static void release_object_now(id obj)
     static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
     static SEL cxx_destruct_sel;
 
-    if (obj == g_last_header_obj) {
-        g_last_header_obj = NULL;
-        g_last_header_ptr = NULL;
+    cls = sf_object_class(obj);
+    if (sf_class_has_trivial_release(cls)) {
+        sf_object_dispose(obj);
+        return;
     }
 
-    IMP imp = sf_class_cached_dealloc_imp(sf_object_class(obj));
-    if (imp == NULL and dealloc_sel != NULL) {
-        imp = sf_lookup_imp_in_class(sf_object_class(obj), dealloc_sel);
-    }
+    IMP imp = sf_class_cached_dealloc_imp(cls);
     if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
         (void)imp(obj, dealloc_sel);
     }
-    clear_object_ivars(obj);
+    clear_object_ivars(obj, cls);
     if (cxx_destruct_sel == NULL) {
         cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
     }
     if (cxx_destruct_sel != NULL) {
-        IMP cxx_destruct_imp = sf_lookup_imp_in_class(sf_object_class(obj), cxx_destruct_sel);
-        if (cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
-            cxx_destruct_imp = lookup_named_imp(sf_object_class(obj), ".cxx_destruct");
-        }
+        IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(cls);
         if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
             (void)cxx_destruct_imp(obj, cxx_destruct_sel);
         }
@@ -369,6 +418,9 @@ id objc_retain(id obj)
             return obj;
         }
         if (hdr->state != SF_OBJ_STATE_LIVE) {
+            return obj;
+        }
+        if (embedded_owner_slot_contains_object(hdr, obj)) {
             return obj;
         }
 #if SF_RUNTIME_THREADSAFE

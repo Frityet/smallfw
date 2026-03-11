@@ -44,6 +44,9 @@ IMP _Nullable sf_resolve_message_dispatch(id _Nullable *_Nonnull receiver, SEL _
 IMP _Nullable sf_class_cached_dealloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_alloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_init_imp(Class _Nullable cls);
+IMP _Nullable sf_class_cached_cxx_destruct_imp(Class _Nullable cls);
+const uint32_t *_Nullable sf_class_cached_object_ivar_offsets(Class _Nullable cls, size_t *_Nullable count_out);
+int sf_class_has_trivial_release(Class _Nullable cls);
 size_t sf_class_instance_size_fast(Class _Nullable cls);
 
 const char *_Nonnull sf_class_name_of_object(id _Nullable obj);

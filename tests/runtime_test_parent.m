@@ -104,12 +104,11 @@ static int case_value_parent_alloc_embeds_in_parent(void)
              holder->_value == (InlineValue *)child and
              child.parent == holder and
              [child allocator] == &allocator and
-             sf_header_group_root(child_hdr) == holder_hdr and
-             sf_header_group_live_count(holder_hdr) == 2U and
+             sf_header_group_root(child_hdr) == child_hdr and
+             sf_header_group_live_count(holder_hdr) == 1U and
              child_begin >= holder_begin and
              child_end <= holder_end;
 
-    objc_release(child);
     objc_storeStrong((id *)&holder->_value, nil);
     objc_release(holder);
     return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
@@ -149,7 +148,7 @@ static int case_value_parent_duplicate_slots_reuse(void)
     return ok;
 }
 
-static int case_value_parent_child_outlives_parent(void)
+static int case_value_parent_child_expires_with_parent(void)
 {
     sf_test_reset_common_state();
 
@@ -163,13 +162,11 @@ static int case_value_parent_child_outlives_parent(void)
     }
 
     objc_release(holder);
-    int ok = ctx.alloc_calls == 1 and
-             ctx.free_calls == 0 and
-             [child allocator] == &allocator and
-             child.parent == nil;
-
-    objc_release(child);
-    return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
+    int ok = ctx.alloc_calls == 1 and ctx.free_calls == 1 and ctx.active_blocks == 0;
+#if SF_RUNTIME_VALIDATION
+    ok = ok and sf_header_from_object(child) == NULL and not sf_object_is_heap(child);
+#endif
+    return ok;
 }
 
 static int case_value_parent_standalone_heap_alloc(void)
@@ -524,7 +521,7 @@ static const SFTestCase g_parent_cases[] = {
     {"value_parent_layout_hidden_storage", case_value_parent_layout_hidden_storage},
     {"value_parent_alloc_embeds_in_parent", case_value_parent_alloc_embeds_in_parent},
     {"value_parent_duplicate_slots_reuse", case_value_parent_duplicate_slots_reuse},
-    {"value_parent_child_outlives_parent", case_value_parent_child_outlives_parent},
+    {"value_parent_child_expires_with_parent", case_value_parent_child_expires_with_parent},
     {"value_parent_standalone_heap_alloc", case_value_parent_standalone_heap_alloc},
     {"value_parent_slot_exhaustion", case_value_parent_slot_exhaustion},
     {"value_parent_oversized_subclass_rejected", case_value_parent_oversized_subclass_rejected},
