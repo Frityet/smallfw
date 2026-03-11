@@ -4,15 +4,6 @@
 
 #include "runtime_test_support.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#pragma clang diagnostic ignored "-Wdirect-ivar-access"
-#endif
-
 typedef struct ParentThreadCtx {
     Object *parent;
     int loops;
@@ -543,7 +534,3 @@ const SFTestCase *sf_runtime_parent_cases(size_t *count)
     }
     return g_parent_cases;
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

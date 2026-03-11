@@ -12,11 +12,8 @@
 
 #if defined(__clang__)
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
-#pragma clang diagnostic ignored "-Wpadded"
 #pragma clang diagnostic ignored "-Wunused-macros"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #endif
 
 #if SF_RUNTIME_EXCEPTIONS

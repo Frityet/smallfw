@@ -43,6 +43,7 @@ local function _configure_runtime_args(args)
         "runtime-reflection",
         "runtime-forwarding",
         "runtime-validation",
+        "runtime-tagged-pointers",
         "runtime-sanitize",
         "runtime-slim-alloc",
     }) do
@@ -211,6 +212,7 @@ local function _write_metadata(filename, run_dir, builddir, binary, case_name, i
             ["runtime-reflection"] = _string_option("runtime-reflection", nil),
             ["runtime-forwarding"] = _string_option("runtime-forwarding", nil),
             ["runtime-validation"] = _string_option("runtime-validation", nil),
+            ["runtime-tagged-pointers"] = _string_option("runtime-tagged-pointers", nil),
             ["runtime-slim-alloc"] = _string_option("runtime-slim-alloc", nil),
             ["runtime-sanitize"] = _string_option("runtime-sanitize", nil),
         },

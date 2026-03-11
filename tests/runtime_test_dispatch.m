@@ -3,16 +3,6 @@
 
 #include "runtime_test_support.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
-#pragma clang diagnostic ignored "-Wcast-function-type-strict"
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#endif
-
 typedef struct DispatchThreadCtx {
     HotDispatch *obj;
     int loops;
@@ -657,7 +647,3 @@ const SFTestCase *sf_runtime_dispatch_cases(size_t *count)
     }
     return g_dispatch_cases;
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

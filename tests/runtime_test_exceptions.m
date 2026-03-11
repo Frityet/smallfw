@@ -5,14 +5,6 @@
 
 #include "runtime_test_support.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#endif
-
 #if SF_RUNTIME_EXCEPTIONS
 #define TEST_SF_EXCEPTION_CLASS UINT64_C(0x5346574f424a4300)
 #define TEST_DW_EH_PE_PTR UINT8_C(0x00)
@@ -645,7 +637,3 @@ const SFTestCase *sf_runtime_exception_cases(size_t *count)
     }
     return g_exception_cases;
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

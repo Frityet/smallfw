@@ -7,15 +7,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
-#pragma clang diagnostic ignored "-Wcast-function-type-strict"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-
 #define SF_C_FALLBACK_MAX_ARGS 4U
 #define SF_C_SIG_CACHE_SIZE 32U
 
@@ -159,6 +150,20 @@ static const char *skip_type_token(const char *p)
 
     if (*p == '@' and p[1] == '?') {
         return p + 2;
+    }
+
+    if (*p == '@') {
+        ++p;
+        if (*p == '"') {
+            ++p;
+            while (*p and *p != '"') {
+                ++p;
+            }
+            if (*p == '"') {
+                ++p;
+            }
+        }
+        return p;
     }
 
     if (*p != '\0') {
@@ -567,6 +572,42 @@ static id return_word_as_id(const SFCWordStorage_t *storage, char code)
 }
 #endif
 
+static int direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
+                                      const SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS], size_t argc)
+{
+    if (ret_info == NULL or argc > SF_C_FALLBACK_MAX_ARGS) {
+        return 0;
+    }
+    if (ret_info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+        return 0;
+    }
+    for (size_t i = 0; i < argc; ++i) {
+        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static id call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_FALLBACK_MAX_ARGS], size_t argc)
+{
+    switch (argc) {
+        case 0:
+            return ((id (*)(id, SEL))imp)(receiver, op);
+        case 1:
+            return ((id (*)(id, SEL, uintptr_t))imp)(receiver, op, args[0]);
+        case 2:
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t))imp)(receiver, op, args[0], args[1]);
+        case 3:
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(receiver, op, args[0], args[1], args[2]);
+        case 4:
+            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(receiver, op, args[0], args[1],
+                                                                                        args[2], args[3]);
+        default:
+            return (id)0;
+    }
+}
+
 static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MAX_ARGS], int *unsupported_sig)
 {
     if (unsupported_sig != NULL) {
@@ -830,11 +871,7 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-#if SF_RUNTIME_FORWARDING
     IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
-#else
-    IMP imp = sf_lookup_imp(receiver, op);
-#endif
     SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
     size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
@@ -879,11 +916,7 @@ id objc_msgSend(id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-#if SF_RUNTIME_FORWARDING
     IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
-#else
-    IMP imp = sf_lookup_imp(receiver, op);
-#endif
 #if SF_DISPATCH_C_USE_LIBFFI
     if (imp == NULL or sf_dispatch_imp_is_nil(imp)) {
         return (id)0;
@@ -908,6 +941,10 @@ id objc_msgSend(id receiver, SEL op, ...)
         args[i] = read_call_arg(&ap, &arg_infos[i]);
     }
     va_end(ap);
+
+    if (direct_word_call_supported(&ret_info, arg_infos, argc)) {
+        return call_word_imp(imp, dispatch_receiver, dispatch_op, args, argc);
+    }
 
     ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, NULL, NULL, NULL, NULL};
     void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, NULL, NULL, NULL, NULL};
@@ -983,24 +1020,13 @@ id objc_msgSend(id receiver, SEL op, ...)
 
     switch (argc) {
         case 0:
-            return ((id (*)(id, SEL))imp)(dispatch_receiver, dispatch_op);
         case 1:
-            return ((id (*)(id, SEL, uintptr_t))imp)(dispatch_receiver, dispatch_op, args[0]);
         case 2:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op, args[0], args[1]);
         case 3:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op,
-                                                                           args[0], args[1], args[2]);
         case 4:
-            return ((id (*)(id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(dispatch_receiver, dispatch_op,
-                                                                                      args[0], args[1],
-                                                                                      args[2], args[3]);
+            return call_word_imp(imp, dispatch_receiver, dispatch_op, args, argc);
         default:
             return (id)0;
     }
 #endif
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

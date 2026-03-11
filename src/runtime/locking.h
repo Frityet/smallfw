@@ -30,6 +30,14 @@
 #define SF_RUNTIME_VALIDATION 1
 #endif
 
+#ifndef SF_RUNTIME_TAGGED_POINTERS
+#define SF_RUNTIME_TAGGED_POINTERS 0
+#endif
+
+#if SF_RUNTIME_TAGGED_POINTERS and UINTPTR_MAX != UINT64_MAX
+#error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
+#endif
+
 #if SF_RUNTIME_THREADSAFE
 #include <pthread.h>
 typedef pthread_rwlock_t SFRuntimeRwlock_t;

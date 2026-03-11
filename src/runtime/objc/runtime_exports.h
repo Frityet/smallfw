@@ -16,14 +16,19 @@
 #define SF_RUNTIME_FORWARDING 0
 #endif
 
+#ifndef SF_RUNTIME_TAGGED_POINTERS
+#define SF_RUNTIME_TAGGED_POINTERS 0
+#endif
+
+#if SF_RUNTIME_TAGGED_POINTERS and UINTPTR_MAX != UINT64_MAX
+#error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnullability-extension"
-#pragma clang diagnostic ignored "-Wreserved-identifier"
 #define SF_NOT_TAIL_CALLED __attribute__((not_tail_called))
 #else
 #define SF_NOT_TAIL_CALLED
@@ -122,9 +127,6 @@ uint64_t sf_dispatch_method_walks(void);
 void sf_dispatch_reset_stats(void);
 
 #pragma clang assume_nonnull end
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 #undef SF_NOT_TAIL_CALLED
 
 #ifdef __cplusplus

@@ -8,11 +8,6 @@
 #include "runtime/objc/runtime_exports.h"
 #include "runtime/sf_allocator.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnullability-extension"
-#pragma clang diagnostic ignored "-Wpadded"
-#endif
 #pragma clang assume_nonnull begin
 
 #ifdef __cplusplus
@@ -184,6 +179,3 @@ uint64_t sf_hash_ptr(const void *_Nullable p);
 #endif
 
 #pragma clang assume_nonnull end
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

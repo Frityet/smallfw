@@ -15,10 +15,6 @@
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
 #endif
 
 int g_counter_deallocs = 0;
@@ -205,6 +201,102 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
     return 2;
 }
 @end
+
+#if SF_RUNTIME_TAGGED_POINTERS
+static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
+{
+    uintptr_t payload = 0U;
+    if (bytes == NULL or length > 6U) {
+        return UINTPTR_MAX;
+    }
+
+    payload = (uintptr_t)length;
+    for (size_t i = 0; i < length; ++i) {
+        payload |= ((uintptr_t)(uint8_t)bytes[i]) << (3U + (i * 8U));
+    }
+    return payload;
+}
+
+@implementation TaggedNumberProbe
++ (uintptr_t)taggedPointerSlot
+{
+    return 1U;
+}
+
++ (instancetype)numberWithValue:(uintptr_t)value
+{
+    return [self taggedPointerWithPayload:value];
+}
+
+- (uintptr_t)value
+{
+    return [self taggedPointerPayload];
+}
+
+- (TaggedNumberProbe *)plus:(uintptr_t)delta
+{
+    return (TaggedNumberProbe *)sf_make_tagged_pointer(sf_object_class(self), [self taggedPointerPayload] + delta);
+}
+@end
+
+@implementation TaggedStringProbe
++ (uintptr_t)taggedPointerSlot
+{
+    return 2U;
+}
+
++ (instancetype)stringWithBytes:(const char *)bytes length:(size_t)length
+{
+    uintptr_t payload = sf_test_pack_short_string(bytes, length);
+    if (payload == UINTPTR_MAX) {
+        return nil;
+    }
+    return [self taggedPointerWithPayload:payload];
+}
+
+- (unsigned long)length
+{
+    return (unsigned long)([self taggedPointerPayload] & (uintptr_t)7U);
+}
+
+- (unsigned int)characterAtIndex:(unsigned long)index
+{
+    uintptr_t payload = [self taggedPointerPayload];
+    if (index >= [self length]) {
+        return 0U;
+    }
+    return (unsigned int)((payload >> (3U + ((uintptr_t)index * 8U))) & (uintptr_t)0xffU);
+}
+@end
+
+@implementation TaggedDuplicateA
++ (uintptr_t)taggedPointerSlot
+{
+    return 3U;
+}
+@end
+
+@implementation TaggedDuplicateB
++ (uintptr_t)taggedPointerSlot
+{
+    return 3U;
+}
+@end
+
+@implementation TaggedInvalidSlotProbe
++ (uintptr_t)taggedPointerSlot
+{
+    return 8U;
+}
+@end
+
+@implementation TaggedValueProbe
++ (uintptr_t)taggedPointerSlot
+{
+    return 4U;
+}
+@end
+#endif
 
 #if SF_RUNTIME_EXCEPTIONS
 @implementation ExceptionBase

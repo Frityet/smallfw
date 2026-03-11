@@ -4,13 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wnullable-to-nonnull-conversion"
-#endif
-
 typedef struct SFClassEntry {
     const char *name;
     SFObjCClass_t *cls;
@@ -76,12 +69,25 @@ static SEL g_alloc_sel;
 static SEL g_init_sel;
 static SEL g_forwarding_target_sel;
 static SEL g_cxx_destruct_sel;
+#if SF_RUNTIME_TAGGED_POINTERS
+static SEL g_tagged_pointer_slot_sel;
+Class _Nullable g_tagged_pointer_slot_classes[8];
+static uint8_t g_tagged_pointer_slot_conflicts[8];
+#endif
 static IMP g_object_dealloc_imp;
 
 enum {
     SF_CLASS_META_FLAG_HAS_OBJECT_IVARS = 1U << 0U,
     SF_CLASS_META_FLAG_TRIVIAL_RELEASE = 1U << 1U,
 };
+
+#if SF_RUNTIME_TAGGED_POINTERS
+enum {
+    SF_TAGGED_POINTER_SLOT_BITS = 3U,
+    SF_TAGGED_POINTER_SLOT_MASK = (1U << SF_TAGGED_POINTER_SLOT_BITS) - 1U,
+    SF_TAGGED_POINTER_SLOT_COUNT = 1U << SF_TAGGED_POINTER_SLOT_BITS,
+};
+#endif
 
 typedef struct SFObjCAliasEntry {
     const char *alias_name;
@@ -499,6 +505,84 @@ static int sf_class_is_value_object_unlocked(Class cls)
     return sf_class_is_subclass_of_unlocked(cls, g_value_object_class);
 }
 
+#if SF_RUNTIME_TAGGED_POINTERS
+static IMP sf_lookup_method_imp_local(Class cls, SEL sel)
+{
+    SFObjCClass_t *c = (SFObjCClass_t *)cls;
+    if (c == NULL or sel == NULL) {
+        return NULL;
+    }
+
+    for (SFObjCMethodList_t *list = c->methods; list != NULL; list = list->next) {
+        for (int32_t i = 0; i < list->count; ++i) {
+            SFObjCMethod_t *method = &list->methods[i];
+            if (method->selector == sel or sf_selector_equal(method->selector, sel)) {
+                return method->imp;
+            }
+        }
+    }
+    return NULL;
+}
+
+static void sf_reset_tagged_pointer_classes_unlocked(void)
+{
+    memset(g_tagged_pointer_slot_classes, 0, sizeof(g_tagged_pointer_slot_classes));
+    memset(g_tagged_pointer_slot_conflicts, 0, sizeof(g_tagged_pointer_slot_conflicts));
+}
+
+static void sf_register_tagged_pointer_class_unlocked(SFObjCClass_t *cls, const char *entry_name)
+{
+    if (cls == NULL or cls->isa == NULL or entry_name == NULL or cls->name == NULL) {
+        return;
+    }
+    if (strcmp(entry_name, cls->name) != 0) {
+        return;
+    }
+    if (g_object_class == NULL or not sf_class_is_subclass_of_unlocked((Class)cls, g_object_class) or
+        sf_class_is_value_object_unlocked((Class)cls)) {
+        return;
+    }
+
+    IMP slot_imp = sf_lookup_method_imp_local((Class)cls->isa, g_tagged_pointer_slot_sel);
+    if (slot_imp == NULL) {
+        return;
+    }
+
+    uintptr_t slot = 0U;
+    slot = ((uintptr_t (*)(id, SEL))slot_imp)((id)cls, g_tagged_pointer_slot_sel);
+    if (slot == 0U or slot >= SF_TAGGED_POINTER_SLOT_COUNT) {
+        return;
+    }
+    if (g_tagged_pointer_slot_conflicts[slot] != 0U) {
+        return;
+    }
+    if (g_tagged_pointer_slot_classes[slot] == NULL) {
+        g_tagged_pointer_slot_classes[slot] = (Class)cls;
+        return;
+    }
+    if (g_tagged_pointer_slot_classes[slot] != (Class)cls) {
+        g_tagged_pointer_slot_classes[slot] = NULL;
+        g_tagged_pointer_slot_conflicts[slot] = 1U;
+    }
+}
+
+static void sf_rebuild_tagged_pointer_class_map_unlocked(void)
+{
+    sf_reset_tagged_pointer_classes_unlocked();
+    if (g_tagged_pointer_slot_sel == NULL) {
+        return;
+    }
+
+    for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
+        SFClassEntry_t *slot = &g_class_map[i];
+        if (slot->name == NULL or slot->cls == NULL) {
+            continue;
+        }
+        sf_register_tagged_pointer_class_unlocked(slot->cls, slot->name);
+    }
+}
+#endif
+
 static IMP sf_object_dealloc_imp_unlocked(void)
 {
     if (g_object_class == NULL) {
@@ -772,17 +856,27 @@ static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntr
 void sf_finalize_registered_classes(void)
 {
     if (g_dealloc_sel == NULL or g_alloc_sel == NULL or g_init_sel == NULL or g_forwarding_target_sel == NULL or
-        g_cxx_destruct_sel == NULL) {
+        g_cxx_destruct_sel == NULL
+#if SF_RUNTIME_TAGGED_POINTERS
+        or g_tagged_pointer_slot_sel == NULL
+#endif
+    ) {
         static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
         static struct sf_objc_selector alloc_sel_data = {"allocWithAllocator:", "@24@0:8^v16"};
         static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
         static struct sf_objc_selector forwarding_target_sel_data = {"forwardingTargetForSelector:", "@24@0:8:16"};
         static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
+#if SF_RUNTIME_TAGGED_POINTERS
+        static struct sf_objc_selector tagged_pointer_slot_sel_data = {"taggedPointerSlot", NULL};
+#endif
         g_dealloc_sel = sf_intern_selector(&dealloc_sel_data);
         g_alloc_sel = sf_intern_selector(&alloc_sel_data);
         g_init_sel = sf_intern_selector(&init_sel_data);
         g_forwarding_target_sel = sf_intern_selector(&forwarding_target_sel_data);
         g_cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+#if SF_RUNTIME_TAGGED_POINTERS
+        g_tagged_pointer_slot_sel = sf_intern_selector(&tagged_pointer_slot_sel_data);
+#endif
     }
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
@@ -806,6 +900,9 @@ void sf_finalize_registered_classes(void)
         sf_cache_class_meta((Class)cls);
         sf_cache_class_meta((Class)cls->isa);
     }
+#if SF_RUNTIME_TAGGED_POINTERS
+    sf_rebuild_tagged_pointer_class_map_unlocked();
+#endif
     sf_runtime_rwlock_unlock(&g_class_map_lock);
 
     sf_register_builtin_class_cache();
@@ -903,6 +1000,11 @@ int sf_object_is_heap(id obj)
     if (obj == NULL) {
         return 0;
     }
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (sf_is_tagged_pointer(obj)) {
+        return 0;
+    }
+#endif
 #if SF_RUNTIME_VALIDATION
     return sf_header_from_object(obj) != NULL;
 #else
@@ -916,6 +1018,11 @@ Class sf_object_class(id obj)
     if (obj == NULL) {
         return NULL;
     }
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (sf_is_tagged_pointer(obj)) {
+        return sf_tagged_pointer_class(obj);
+    }
+#endif
     return *(Class *)obj;
 }
 
@@ -967,6 +1074,11 @@ SFObjHeader_t *sf_header_from_object(id obj)
     if (obj == NULL) {
         return NULL;
     }
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (sf_is_tagged_pointer(obj)) {
+        return NULL;
+    }
+#endif
 #if SF_RUNTIME_VALIDATION
     size_t bucket = live_object_bucket_index(obj);
 
@@ -1579,6 +1691,80 @@ const char *sf_class_name_of_object(id obj)
     return c->name;
 }
 
+int sf_is_tagged_pointer(id obj)
+{
+#if SF_RUNTIME_TAGGED_POINTERS
+    return obj != NULL and ((((uintptr_t)obj) & (uintptr_t)SF_TAGGED_POINTER_SLOT_MASK) != 0U);
+#else
+    (void)obj;
+    return 0;
+#endif
+}
+
+uintptr_t sf_tagged_pointer_slot(id obj)
+{
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (not sf_is_tagged_pointer(obj)) {
+        return 0U;
+    }
+    return ((uintptr_t)obj) & (uintptr_t)SF_TAGGED_POINTER_SLOT_MASK;
+#else
+    (void)obj;
+    return 0U;
+#endif
+}
+
+uintptr_t sf_tagged_pointer_payload(id obj)
+{
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (not sf_is_tagged_pointer(obj)) {
+        return 0U;
+    }
+    return ((uintptr_t)obj) >> SF_TAGGED_POINTER_SLOT_BITS;
+#else
+    (void)obj;
+    return 0U;
+#endif
+}
+
+Class sf_tagged_class_for_slot(uintptr_t slot)
+{
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (slot == 0U or slot >= SF_TAGGED_POINTER_SLOT_COUNT) {
+        return NULL;
+    }
+    return g_tagged_pointer_slot_classes[slot];
+#else
+    (void)slot;
+    return NULL;
+#endif
+}
+
+Class sf_tagged_pointer_class(id obj)
+{
+    return sf_tagged_class_for_slot(sf_tagged_pointer_slot(obj));
+}
+
+id sf_make_tagged_pointer(Class cls, uintptr_t payload)
+{
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (cls == NULL or payload > (UINTPTR_MAX >> SF_TAGGED_POINTER_SLOT_BITS)) {
+        return NULL;
+    }
+
+    for (uintptr_t slot = 1U; slot < SF_TAGGED_POINTER_SLOT_COUNT; ++slot) {
+        if (g_tagged_pointer_slot_classes[slot] == cls) {
+            return (id)(void *)((payload << SF_TAGGED_POINTER_SLOT_BITS) | slot);
+        }
+    }
+    return NULL;
+#else
+    (void)cls;
+    (void)payload;
+    return NULL;
+#endif
+}
+
 #if SF_RUNTIME_REFLECTION
 
 static Method class_get_method_impl(Class cls, SEL sel, int include_super)
@@ -1876,8 +2062,4 @@ int sel_isEqual(SEL lhs, SEL rhs)
     return sf_selector_equal(lhs, rhs);
 }
 
-#endif
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
 #endif

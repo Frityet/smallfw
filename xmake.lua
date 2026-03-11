@@ -48,6 +48,12 @@ option("runtime-validation")
     set_description("Enable defensive runtime object validation (recommended for debug/tests, disable for fastest release)")
 option_end()
 
+option("runtime-tagged-pointers")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable tagged pointer runtime support for user-defined classes")
+option_end()
+
 option("analysis-symbols")
     set_default(false)
     set_showmenu(true)
@@ -63,10 +69,12 @@ option_end()
 local objc_runtime = "gnustep-2.3"
 
 local function add_objc_flags(...)
-    add_cflags(..., {force = true})
-    add_cxflags(..., {force = true})
-    add_mflags(..., {force = true})
-    add_mxflags(..., {force = true})
+    local flags = {...}
+    table.insert(flags, {force = true})
+    add_cflags(table.unpack(flags))
+    add_cxflags(table.unpack(flags))
+    add_mflags(table.unpack(flags))
+    add_mxflags(table.unpack(flags))
 end
 
 local function add_common_runtime_flags()
@@ -100,6 +108,9 @@ local function add_common_runtime_flags()
         "-Wno-padded",
         "-Wno-reserved-identifier",
         "-Wno-reserved-macro-identifier",
+        "-Wno-cast-function-type-mismatch",
+        "-Wno-cast-function-type-strict",
+        "-Wno-direct-ivar-access",
         "-Wno-objc-interface-ivars",
         "-Wno-unsafe-buffer-usage",
         "-Wno-c++-keyword"
@@ -165,6 +176,12 @@ local function add_runtime_mode_defines()
         add_defines("SF_RUNTIME_REFLECTION=0", {public = true})
     end
 
+    if has_config("runtime-tagged-pointers") then
+        add_defines("SF_RUNTIME_TAGGED_POINTERS=1", {public = true})
+    else
+        add_defines("SF_RUNTIME_TAGGED_POINTERS=0", {public = true})
+    end
+
         add_defines("SF_RUNTIME_SLIM_ALLOC=0")
 
 end
@@ -225,7 +242,7 @@ target("smallfw-runtime")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
     add_includedirs("src", {public = true})
     add_common_runtime_flags()
     add_runtime_mode_defines()
@@ -273,7 +290,7 @@ target("runtime-tests")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
     add_deps("smallfw-runtime")
     add_includedirs("src", "tests")
     add_common_runtime_flags()
@@ -295,7 +312,7 @@ target("runtime-bench")
     if is_mode("release") then
         set_optimize("fastest")
     end
-    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
     add_deps("smallfw-runtime")
     add_includedirs("src", "tests")
     add_common_runtime_flags()
@@ -310,11 +327,32 @@ target("runtime-bench")
         add_links("dl", "pthread")
     end
 
+target("value-object-demo")
+    set_kind("binary")
+    set_default(false)
+    if is_mode("release") then
+        set_optimize("fastest")
+    end
+    add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
+    add_deps("smallfw-runtime")
+    add_includedirs("src")
+    add_common_runtime_flags()
+    add_runtime_mode_defines()
+    add_analysis_symbol_settings()
+    add_runtime_sanitizer_settings()
+    add_release_clang_tidy_hook()
+    add_files("test.m")
+    if is_plat("mingw") then
+        add_links("pthread")
+    else
+        add_links("dl", "pthread")
+    end
+
 if not is_plat("mingw") then
     target("runtime-fuzz-dispatch")
         set_kind("binary")
         set_default(false)
-        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
         add_deps("smallfw-runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()
@@ -329,7 +367,7 @@ if not is_plat("mingw") then
     target("runtime-fuzz-loader")
         set_kind("binary")
         set_default(false)
-        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
         add_deps("smallfw-runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()
@@ -344,7 +382,7 @@ if not is_plat("mingw") then
     target("runtime-fuzz-exceptions")
         set_kind("binary")
         set_default(false)
-        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "analysis-symbols", "runtime-sanitize")
+        add_options("runtime-threadsafe", "dispatch-backend", "dispatch-stats", "runtime-exceptions", "runtime-reflection", "runtime-forwarding", "runtime-validation", "runtime-tagged-pointers", "analysis-symbols", "runtime-sanitize")
         add_deps("smallfw-runtime")
         add_includedirs("src", "tests")
         add_common_runtime_flags()

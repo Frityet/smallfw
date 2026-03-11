@@ -5,11 +5,6 @@
 
 #include "runtime/internal.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -42,7 +37,3 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     free(types);
     return 0;
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

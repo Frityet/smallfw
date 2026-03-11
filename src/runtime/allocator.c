@@ -7,11 +7,6 @@
 #endif
 #include <stdlib.h>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-
 typedef struct SFFreeNode {
     struct SFFreeNode *next;
 } SFFreeNode_t;
@@ -106,7 +101,3 @@ SFAllocator_t *sf_default_allocator(void)
     };
     return &allocator;
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

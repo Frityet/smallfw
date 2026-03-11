@@ -9,13 +9,6 @@
 #include "smallfw/Object.h"
 #include "runtime/internal.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#endif
-
 #define SFW_NEW(T) [[T allocWithAllocator:sf_default_allocator()] init]
 #define SFW_RELEASE(obj)         \
     do {                         \
@@ -328,7 +321,3 @@ int main(int argc, char **argv)
     fprintf(stderr, "unknown case: %s\n", case_name);
     return 3;
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

@@ -134,6 +134,28 @@
     return (unsigned long)sf_hash_ptr(self);
 }
 
+#if SF_RUNTIME_TAGGED_POINTERS
++ (uintptr_t)taggedPointerSlot
+{
+    return 0U;
+}
+
++ (instancetype)taggedPointerWithPayload:(uintptr_t)payload
+{
+    return (id)sf_make_tagged_pointer((Class)self, payload);
+}
+
+- (uintptr_t)taggedPointerPayload
+{
+    return sf_tagged_pointer_payload(self);
+}
+
+- (int)isTaggedPointer
+{
+    return sf_is_tagged_pointer(self);
+}
+#endif
+
 #if SF_RUNTIME_FORWARDING
 + (id)forwardingTargetForSelector:(SEL)selector
 {

@@ -4,11 +4,6 @@
 
 #include "runtime/internal.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-
 static uintptr_t fuzz_word_prefix(const uint8_t *data, size_t size, uintptr_t fallback)
 {
     uintptr_t value = fallback;
@@ -44,7 +39,3 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     (void)sf_runtime_test_exception_parse_lsda(data, func_start, ip, NULL, &info);
     return 0;
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

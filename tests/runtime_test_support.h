@@ -6,11 +6,6 @@
 #include "smallfw/Object.h"
 #include "runtime/internal.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wobjc-interface-ivars"
-#endif
-
 #ifndef nil
 #define nil ((id)0)
 #endif
@@ -20,10 +15,10 @@
 
 #define SFW_NEW(T) ((T *)[[T allocWithAllocator:sf_default_allocator()] init])
 
-typedef int (*SFTestFn)(void);
+typedef int (*_Nonnull SFTestFn)(void);
 
 typedef struct SFTestCase {
-    const char *name;
+    const char *_Nonnull name;
     SFTestFn fn;
 } SFTestCase;
 
@@ -52,7 +47,7 @@ typedef struct SFTestBigStruct {
     long long fourth;
 } SFTestBigStruct;
 
-typedef void (*SFTestChildFn)(void *ctx);
+typedef void (*_Nonnull SFTestChildFn)(void *_Nullable ctx);
 
 extern int g_counter_deallocs;
 
@@ -126,6 +121,32 @@ extern int g_counter_deallocs;
 - (int)instancePing;
 @end
 
+#if SF_RUNTIME_TAGGED_POINTERS
+@interface TaggedNumberProbe : Object
++ (instancetype _Nullable)numberWithValue:(uintptr_t)value;
+- (uintptr_t)value;
+- (TaggedNumberProbe *_Nullable)plus:(uintptr_t)delta;
+@end
+
+@interface TaggedStringProbe : Object
++ (instancetype _Nullable)stringWithBytes:(const char *_Nullable)bytes length:(size_t)length;
+- (unsigned long)length;
+- (unsigned int)characterAtIndex:(unsigned long)index;
+@end
+
+@interface TaggedDuplicateA : Object
+@end
+
+@interface TaggedDuplicateB : Object
+@end
+
+@interface TaggedInvalidSlotProbe : Object
+@end
+
+@interface TaggedValueProbe : ValueObject
+@end
+#endif
+
 #if SF_RUNTIME_EXCEPTIONS
 @interface ExceptionBase : AllocationFailedException
 @end
@@ -135,21 +156,18 @@ extern int g_counter_deallocs;
 #endif
 
 void sf_test_reset_common_state(void);
-CounterObject *sf_test_factory_object(void);
+CounterObject *_Nullable sf_test_factory_object(void);
 
-void *sf_test_counting_alloc(void *ctx, size_t size, size_t align);
-void sf_test_counting_free(void *ctx, void *ptr, size_t size, size_t align);
-SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *ctx);
+void *_Nullable sf_test_counting_alloc(void *_Nullable ctx, size_t size, size_t align);
+void sf_test_counting_free(void *_Nullable ctx, void *_Nullable ptr, size_t size, size_t align);
+SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *_Nonnull ctx);
 
-int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal);
-int sf_test_expect_signal_case(const char *case_name, int expected_signal);
+int sf_test_expect_signal(SFTestChildFn fn, void *_Nullable ctx, int expected_signal);
+int sf_test_expect_signal_case(const char *_Nonnull case_name, int expected_signal);
 
-const SFTestCase *sf_runtime_arc_cases(size_t *count);
-const SFTestCase *sf_runtime_parent_cases(size_t *count);
-const SFTestCase *sf_runtime_dispatch_cases(size_t *count);
-const SFTestCase *sf_runtime_loader_cases(size_t *count);
-const SFTestCase *sf_runtime_exception_cases(size_t *count);
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
+const SFTestCase *_Nullable sf_runtime_arc_cases(size_t *_Nullable count);
+const SFTestCase *_Nullable sf_runtime_parent_cases(size_t *_Nullable count);
+const SFTestCase *_Nullable sf_runtime_dispatch_cases(size_t *_Nullable count);
+const SFTestCase *_Nullable sf_runtime_loader_cases(size_t *_Nullable count);
+const SFTestCase *_Nullable sf_runtime_tagged_cases(size_t *_Nullable count);
+const SFTestCase *_Nullable sf_runtime_exception_cases(size_t *_Nullable count);

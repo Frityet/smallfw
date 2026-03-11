@@ -11,14 +11,6 @@
 
 #include "runtime_test_support.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#endif
-
 typedef struct SFTestAliasEntry {
     const char *alias_name;
     Class *class_ref;
@@ -850,7 +842,3 @@ const SFTestCase *sf_runtime_loader_cases(size_t *count)
     }
     return g_loader_cases;
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

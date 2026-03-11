@@ -4,13 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wnullability-extension"
-#endif
-
 #if defined(__clang__) or defined(__GNUC__)
 #define SF_LIKELY(x) __builtin_expect(!!(x), 1)
 #else
@@ -34,11 +27,6 @@ static Class g_nsconstantstring_class;
 static Class g_nxconstantstring_class;
 static int g_constant_string_classes_initialized;
 
-static inline int sf_pointer_uses_small_object_tag(id obj)
-{
-    return ((((uintptr_t)obj) & (uintptr_t)7U) != 0U);
-}
-
 static inline int sf_object_bypasses_heap_arc(id obj)
 {
     Class cls = NULL;
@@ -46,11 +34,11 @@ static inline int sf_object_bypasses_heap_arc(id obj)
     if (obj == NULL) {
         return 1;
     }
-    if (sf_pointer_uses_small_object_tag(obj)) {
+    if (sf_is_tagged_pointer(obj)) {
         return 1;
     }
 
-    cls = *(Class *)obj;
+    cls = sf_object_class(obj);
     if (not g_constant_string_classes_initialized) {
         g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
         g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
@@ -530,7 +518,3 @@ void objc_storeStrong(id *dst, id value)
         objc_release(old);
     }
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

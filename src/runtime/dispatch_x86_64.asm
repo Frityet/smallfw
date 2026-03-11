@@ -13,9 +13,24 @@ objc_msgSend:
     JNZ .LWITH_XMM
 
 .LWITHOUT_XMM:
+#if SF_RUNTIME_TAGGED_POINTERS
+    MOV R10, RDI
+    AND R10, 7
+    JZ .LHEAP_RECEIVER
+    LEA R11, [RIP + g_tagged_pointer_slot_classes]
+    MOV R10, QWORD PTR [R11 + R10*8]
+    TEST R10, R10
+    JE .LNIL_RETURN
+    JMP .LCLASS_READY
+
+.LHEAP_RECEIVER:
+#endif
     MOV R10, QWORD PTR [RDI]
     TEST R10, R10
     JE .LNIL_RETURN
+#if SF_RUNTIME_TAGGED_POINTERS
+.LCLASS_READY:
+#endif
 
 #if SF_RUNTIME_THREADSAFE
     CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
@@ -43,18 +58,17 @@ objc_msgSend:
     MOV R11, RSI
     SHR R11, 4
     XOR RAX, R11
-    MOV R10, R11
-    SHR R10, 9
-    XOR RAX, R10
-    MOV R10, QWORD PTR [RDI]
-    SHR R10, 11
-    XOR RAX, R10
+    MOV R11, RSI
+    SHR R11, 13
+    XOR RAX, R11
+    MOV R11, R10
+    SHR R11, 11
+    XOR RAX, R11
     AND RAX, 4095
     SHL RAX, 5
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
 
-    MOV R10, QWORD PTR [RDI]
     CMP R10, QWORD PTR [R11]
     JNE .LMISS_WITHOUT_XMM
     CMP RSI, QWORD PTR [R11 + 8]
@@ -180,9 +194,24 @@ objc_msgSend_stret:
     JNZ .LSTRET_WITH_XMM
 
 .LSTRET_WITHOUT_XMM:
+#if SF_RUNTIME_TAGGED_POINTERS
+    MOV R10, RSI
+    AND R10, 7
+    JZ .LSTRET_HEAP_RECEIVER
+    LEA R11, [RIP + g_tagged_pointer_slot_classes]
+    MOV R10, QWORD PTR [R11 + R10*8]
+    TEST R10, R10
+    JE .LSTRET_RETURN
+    JMP .LSTRET_CLASS_READY
+
+.LSTRET_HEAP_RECEIVER:
+#endif
     MOV R10, QWORD PTR [RSI]
     TEST R10, R10
     JE .LSTRET_RETURN
+#if SF_RUNTIME_TAGGED_POINTERS
+.LSTRET_CLASS_READY:
+#endif
 
 #if SF_RUNTIME_THREADSAFE
     CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
@@ -210,18 +239,17 @@ objc_msgSend_stret:
     MOV R11, RDX
     SHR R11, 4
     XOR RAX, R11
-    MOV R10, R11
-    SHR R10, 9
-    XOR RAX, R10
-    MOV R10, QWORD PTR [RSI]
-    SHR R10, 11
-    XOR RAX, R10
+    MOV R11, RDX
+    SHR R11, 13
+    XOR RAX, R11
+    MOV R11, R10
+    SHR R11, 11
+    XOR RAX, R11
     AND RAX, 4095
     SHL RAX, 5
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
 
-    MOV R10, QWORD PTR [RSI]
     CMP R10, QWORD PTR [R11]
     JNE .LSTRET_MISS_WITHOUT_XMM
     CMP RDX, QWORD PTR [R11 + 8]

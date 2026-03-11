@@ -3,10 +3,6 @@
 #include <stddef.h>
 
 #pragma clang assume_nonnull begin
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnullability-extension"
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +20,4 @@ SFAllocator_t *sf_default_allocator(void);
 }
 #endif
 
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 #pragma clang assume_nonnull end

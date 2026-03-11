@@ -13,6 +13,7 @@ function smallfw_runtime_config_menu_options(extra_options, defaults)
         {nil, "runtime-reflection", "kv", nil, "Override runtime-reflection.", " - y", " - n"},
         {nil, "runtime-forwarding", "kv", nil, "Override runtime-forwarding.", " - y", " - n"},
         {nil, "runtime-validation", "kv", nil, "Override runtime-validation.", " - y", " - n"},
+        {nil, "runtime-tagged-pointers", "kv", nil, "Override runtime-tagged-pointers.", " - y", " - n"},
         {nil, "runtime-sanitize", "kv", nil, "Override runtime-sanitize.", " - y", " - n"},
         {nil, "runtime-slim-alloc", "kv", nil, "Override runtime-slim-alloc.", " - y", " - n"},
     }

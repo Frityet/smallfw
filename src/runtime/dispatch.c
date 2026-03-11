@@ -5,8 +5,6 @@
 
 #if defined(__clang__)
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type-strict"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #pragma clang diagnostic ignored "-Wpre-c11-compat"
 #endif
 
@@ -73,11 +71,7 @@ static int selector_equal_local(SEL lhs, SEL rhs)
     if (strcmp(lhs->name, rhs->name) != 0) {
         return 0;
     }
-
-    if (lhs->types == NULL or rhs->types == NULL) {
-        return 1;
-    }
-    return strcmp(lhs->types, rhs->types) == 0;
+    return 1;
 }
 
 int sf_selector_equal(SEL a, SEL b)
@@ -238,7 +232,7 @@ IMP sf_lookup_imp(id receiver, SEL op)
         return (IMP)sf_dispatch_nil_imp;
     }
 
-    cls = *(Class *)receiver;
+    cls = sf_object_class(receiver);
     if (cls == NULL) {
         return (IMP)sf_dispatch_nil_imp;
     }
@@ -246,7 +240,6 @@ IMP sf_lookup_imp(id receiver, SEL op)
     return lookup_cached_inline(cls, op);
 }
 
-#if SF_RUNTIME_FORWARDING
 static int selector_types_missing(SEL sel)
 {
     return sel == NULL or sel->types == NULL or sel->types[0] == '\0';
@@ -262,7 +255,6 @@ static SEL resolved_selector_for_method(const SFObjCMethod_t *method, SEL fallba
     }
     return fallback;
 }
-#endif
 
 IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
 {
@@ -288,8 +280,8 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
     for (;;) {
         IMP imp = NULL;
         Class cls = NULL;
-#if SF_RUNTIME_FORWARDING
         SFObjCMethod_t *method = NULL;
+#if SF_RUNTIME_FORWARDING
         SFObjCMethod_t *forward_method = NULL;
         id target = NULL;
 #endif
@@ -298,19 +290,17 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
             break;
         }
 
-        cls = *(Class *)current_receiver;
+        cls = sf_object_class(current_receiver);
         if (cls == NULL) {
             break;
         }
 
         imp = sf_lookup_imp(current_receiver, current_sel);
         if (imp != NULL and not sf_dispatch_imp_is_nil(imp)) {
-#if SF_RUNTIME_FORWARDING
-            if (selector_types_missing(current_sel)) {
-                method = lookup_method_in_class_local(cls, current_sel);
+            method = lookup_method_in_class_local(cls, current_sel);
+            if (method != NULL and (selector_types_missing(current_sel) or method->selector != current_sel)) {
                 current_sel = resolved_selector_for_method(method, current_sel);
             }
-#endif
             *receiver = current_receiver;
             *op = current_sel;
             return imp;

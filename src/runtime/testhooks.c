@@ -2,11 +2,6 @@
 
 #include <stdlib.h>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#endif
-
 static size_t g_test_alloc_fail_after = SIZE_MAX;
 
 int sf_runtime_test_consume_allocation(void)
@@ -55,7 +50,3 @@ void *sf_runtime_test_realloc(void *ptr, size_t size)
     }
     return realloc(ptr, size);
 }
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

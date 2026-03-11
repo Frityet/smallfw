@@ -1,6 +1,16 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "runtime/sf_allocator.h"
+
+#ifndef SF_RUNTIME_TAGGED_POINTERS
+#define SF_RUNTIME_TAGGED_POINTERS 0
+#endif
+
+#if SF_RUNTIME_TAGGED_POINTERS and UINTPTR_MAX != UINT64_MAX
+#error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
+#endif
 
 #pragma clang assume_nonnull begin
 
@@ -22,6 +32,12 @@ __attribute__((objc_root_class))
 #if SF_RUNTIME_FORWARDING
 + (id _Nullable)forwardingTargetForSelector:(SEL _Nullable)selector;
 - (id _Nullable)forwardingTargetForSelector:(SEL _Nullable)selector;
+#endif
+#if SF_RUNTIME_TAGGED_POINTERS
++ (uintptr_t)taggedPointerSlot;
++ (instancetype _Nullable)taggedPointerWithPayload:(uintptr_t)payload;
+- (uintptr_t)taggedPointerPayload;
+- (int)isTaggedPointer;
 #endif
 @end
 

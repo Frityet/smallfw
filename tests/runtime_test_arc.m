@@ -4,15 +4,6 @@
 
 #include "runtime_test_support.h"
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type-strict"
-#pragma clang diagnostic ignored "-Wpre-c23-compat"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#pragma clang diagnostic ignored "-Wdeclaration-after-statement"
-#pragma clang diagnostic ignored "-Wpadded"
-#endif
-
 typedef struct SFTestOneMethodList {
     SFObjCMethodList_t *next;
     int32_t count;
@@ -703,7 +694,3 @@ const SFTestCase *sf_runtime_arc_cases(size_t *count)
     }
     return g_arc_cases;
 }
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

@@ -2,10 +2,6 @@
 
 #include "runtime/abi.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wnullability-extension"
-#endif
 #pragma clang assume_nonnull begin
 
 #ifdef __cplusplus
@@ -48,6 +44,15 @@ IMP _Nullable sf_class_cached_cxx_destruct_imp(Class _Nullable cls);
 const uint32_t *_Nullable sf_class_cached_object_ivar_offsets(Class _Nullable cls, size_t *_Nullable count_out);
 int sf_class_has_trivial_release(Class _Nullable cls);
 size_t sf_class_instance_size_fast(Class _Nullable cls);
+#if SF_RUNTIME_TAGGED_POINTERS
+extern Class _Nullable g_tagged_pointer_slot_classes[8];
+#endif
+int sf_is_tagged_pointer(id _Nullable obj);
+uintptr_t sf_tagged_pointer_slot(id _Nullable obj);
+uintptr_t sf_tagged_pointer_payload(id _Nullable obj);
+Class _Nullable sf_tagged_pointer_class(id _Nullable obj);
+Class _Nullable sf_tagged_class_for_slot(uintptr_t slot);
+id _Nullable sf_make_tagged_pointer(Class _Nullable cls, uintptr_t payload);
 
 const char *_Nonnull sf_class_name_of_object(id _Nullable obj);
 
@@ -126,6 +131,3 @@ void sf_dispatch_reset_stats(void);
 #endif
 
 #pragma clang assume_nonnull end
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

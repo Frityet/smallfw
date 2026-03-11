@@ -6,7 +6,6 @@
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #endif
 
 typedef const SFTestCase *(*SFTestSuiteFn)(size_t *count);
@@ -17,6 +16,7 @@ static const SFTestSuiteFn g_suites[] = {
     sf_runtime_parent_cases,
     sf_runtime_dispatch_cases,
     sf_runtime_loader_cases,
+    sf_runtime_tagged_cases,
     sf_runtime_exception_cases,
 };
 
