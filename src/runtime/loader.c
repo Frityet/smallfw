@@ -60,11 +60,13 @@ typedef struct SFObjCAliasEntry {
 
 static void sf_cache_class_meta(Class cls);
 
-static uint64_t hash_cstr(const char *s) {
+static uint64_t hash_cstr(const char *s)
+{
     return sf_hash_bytes(s, sf_cstr_len(s));
 }
 
-static uint64_t hash_ptr_local(const void *p) {
+static uint64_t hash_ptr_local(const void *p)
+{
     uintptr_t v = (uintptr_t)p;
     v ^= (v >> 33);
     v *= UINT64_C(0xff51afd7ed558ccd);
@@ -75,13 +77,15 @@ static uint64_t hash_ptr_local(const void *p) {
 }
 
 #if SF_RUNTIME_VALIDATION
-static size_t live_object_bucket_index(id obj) {
+static size_t live_object_bucket_index(id obj)
+{
     uint64_t hash = hash_ptr_local(obj);
     return (size_t)(hash & (SF_LIVE_OBJECT_BUCKETS - 1U));
 }
 #endif
 
-static size_t selector_bucket_for_name_types(const char *name, const char *types) {
+static size_t selector_bucket_for_name_types(const char *name, const char *types)
+{
     uint64_t hash = hash_cstr(name);
     if (types != NULL) {
         hash ^= (hash_cstr(types) << 1U);
@@ -89,17 +93,19 @@ static size_t selector_bucket_for_name_types(const char *name, const char *types
     return (size_t)(hash & (SF_SELECTOR_BUCKETS - 1U));
 }
 
-static int cstr_equal_nullable(const char *lhs, const char *rhs) {
+static int cstr_equal_nullable(const char *lhs, const char *rhs)
+{
     if (lhs == rhs) {
         return 1;
     }
-    if (lhs == NULL || rhs == NULL) {
+    if (lhs == NULL or rhs == NULL) {
         return 0;
     }
     return strcmp(lhs, rhs) == 0;
 }
 
-static char *copy_cstr_nullable(const char *value) {
+static char *copy_cstr_nullable(const char *value)
+{
     if (value == NULL) {
         return NULL;
     }
@@ -114,8 +120,9 @@ static char *copy_cstr_nullable(const char *value) {
     return copy;
 }
 
-static SEL intern_selector_name_types(const char *name, const char *types) {
-    if (name == NULL || name[0] == '\0') {
+static SEL intern_selector_name_types(const char *name, const char *types)
+{
+    if (name == NULL or name[0] == '\0') {
         return NULL;
     }
 
@@ -123,7 +130,7 @@ static SEL intern_selector_name_types(const char *name, const char *types) {
 
     sf_runtime_rwlock_rdlock(&g_selector_lock);
     for (SFSelectorEntry_t *it = g_selector_table[bucket]; it != NULL; it = it->next) {
-        if (cstr_equal_nullable(it->sel.name, name) && cstr_equal_nullable(it->sel.types, types)) {
+        if (cstr_equal_nullable(it->sel.name, name) and cstr_equal_nullable(it->sel.types, types)) {
             SEL found = &it->sel;
             sf_runtime_rwlock_unlock(&g_selector_lock);
             return found;
@@ -133,7 +140,7 @@ static SEL intern_selector_name_types(const char *name, const char *types) {
 
     sf_runtime_rwlock_wrlock(&g_selector_lock);
     for (SFSelectorEntry_t *it = g_selector_table[bucket]; it != NULL; it = it->next) {
-        if (cstr_equal_nullable(it->sel.name, name) && cstr_equal_nullable(it->sel.types, types)) {
+        if (cstr_equal_nullable(it->sel.name, name) and cstr_equal_nullable(it->sel.types, types)) {
             SEL found = &it->sel;
             sf_runtime_rwlock_unlock(&g_selector_lock);
             return found;
@@ -156,7 +163,7 @@ static SEL intern_selector_name_types(const char *name, const char *types) {
     }
 
     owned_types = copy_cstr_nullable(types);
-    if (types != NULL && owned_types == NULL) {
+    if (types != NULL and owned_types == NULL) {
         free(owned_name);
         free(entry);
         sf_runtime_rwlock_unlock(&g_selector_lock);
@@ -171,7 +178,8 @@ static SEL intern_selector_name_types(const char *name, const char *types) {
     return &entry->sel;
 }
 
-SEL sf_intern_selector(SEL sel) {
+SEL sf_intern_selector(SEL sel)
+{
     if (sel == NULL) {
         return NULL;
     }
@@ -186,8 +194,9 @@ SEL sf_intern_selector(SEL sel) {
     return interned;
 }
 
-static void register_selector_region(void *start, void *stop) {
-    if (start == NULL || stop == NULL || stop <= start) {
+static void register_selector_region(void *start, void *stop)
+{
+    if (start == NULL or stop == NULL or stop <= start) {
         return;
     }
 
@@ -199,7 +208,8 @@ static void register_selector_region(void *start, void *stop) {
     }
 }
 
-static SFClassMetaEntry_t *class_meta_slot_for(Class cls) {
+static SFClassMetaEntry_t *class_meta_slot_for(Class cls)
+{
     if (cls == NULL) {
         return NULL;
     }
@@ -208,14 +218,15 @@ static SFClassMetaEntry_t *class_meta_slot_for(Class cls) {
     for (size_t i = 0; i < SF_CLASS_META_CAPACITY; ++i) {
         size_t idx = (size_t)((hash + i) & (SF_CLASS_META_CAPACITY - 1U));
         SFClassMetaEntry_t *slot = &g_class_meta[idx];
-        if (slot->cls == cls || slot->cls == NULL) {
+        if (slot->cls == cls or slot->cls == NULL) {
             return slot;
         }
     }
     return NULL;
 }
 
-static int layout_fixed_contains(SFObjCClass_t *cls) {
+static int layout_fixed_contains(SFObjCClass_t *cls)
+{
     uint64_t h = hash_ptr_local(cls);
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         size_t idx = (size_t)((h + i) % SF_CLASS_MAP_CAPACITY);
@@ -230,19 +241,22 @@ static int layout_fixed_contains(SFObjCClass_t *cls) {
     return 0;
 }
 
-static SFObjCClass_t *sf_next_superclass(SFObjCClass_t *cls) {
-    if (cls == NULL || cls->superclass == cls) {
+static SFObjCClass_t *sf_next_superclass(SFObjCClass_t *cls)
+{
+    if (cls == NULL or cls->superclass == cls) {
         return NULL;
     }
     return cls->superclass;
 }
 
-static void layout_fixed_insert(SFObjCClass_t *cls) {
+static void layout_fixed_insert(SFObjCClass_t *cls)
+{
     uint64_t h = hash_ptr_local(cls);
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         size_t idx = (size_t)((h + i) % SF_CLASS_MAP_CAPACITY);
         SFObjCClass_t **slot = &g_layout_fixed_map[idx];
-        if (*slot == cls) return;
+        if (*slot == cls)
+            return;
         if (*slot == NULL) {
             *slot = cls;
             return;
@@ -250,14 +264,18 @@ static void layout_fixed_insert(SFObjCClass_t *cls) {
     }
 }
 
-static size_t align_up(size_t value, size_t align) {
-    if (align <= 1U) return value;
+static size_t align_up(size_t value, size_t align)
+{
+    if (align <= 1U)
+        return value;
     size_t mask = align - 1U;
     return (value + mask) & ~mask;
 }
 
-static size_t sf_fix_class_layout(SFObjCClass_t *cls) {
-    if (cls == NULL) return sizeof(void *);
+static size_t sf_fix_class_layout(SFObjCClass_t *cls)
+{
+    if (cls == NULL)
+        return sizeof(void *);
     if (layout_fixed_contains(cls)) {
         if (cls->instance_size > 0) {
             return (size_t)cls->instance_size;
@@ -266,14 +284,15 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls) {
     }
 
     size_t super_size = sizeof(void *);
-    if (cls->superclass != NULL && cls->superclass != cls) {
+    if (cls->superclass != NULL and cls->superclass != cls) {
         super_size = sf_fix_class_layout(cls->superclass);
     }
-    if (super_size < sizeof(void *)) super_size = sizeof(void *);
+    if (super_size < sizeof(void *))
+        super_size = sizeof(void *);
 
     size_t max_end = super_size;
     SFObjCIvarList_t *list = (SFObjCIvarList_t *)cls->ivars;
-    if (list != NULL && list->count > 0) {
+    if (list != NULL and list->count > 0) {
         size_t stride = (size_t)list->item_size;
         if (stride < sizeof(SFObjCIvar_t)) {
             stride = sizeof(SFObjCIvar_t);
@@ -298,7 +317,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls) {
                 }
             }
             size_t ivar_size = ivar->size ? (size_t)ivar->size : sizeof(void *);
-            if (!skip_size) {
+            if (not skip_size) {
                 size_t end = (size_t)adjusted_offset + ivar_size;
                 if (end > max_end) {
                     max_end = end;
@@ -314,13 +333,15 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls) {
         max_end = (size_t)LONG_MAX;
     }
 #endif
-    if (max_end < sizeof(void *)) max_end = sizeof(void *);
+    if (max_end < sizeof(void *))
+        max_end = sizeof(void *);
     cls->instance_size = (long)max_end;
     layout_fixed_insert(cls);
     return max_end;
 }
 
-static void sf_canonicalize_method_selectors(SFObjCClass_t *cls) {
+static void sf_canonicalize_method_selectors(SFObjCClass_t *cls)
+{
     if (cls == NULL) {
         return;
     }
@@ -343,12 +364,13 @@ static void sf_canonicalize_method_selectors(SFObjCClass_t *cls) {
     }
 }
 
-static void class_map_insert_unlocked(const char *name, SFObjCClass_t *cls) {
+static void class_map_insert_unlocked(const char *name, SFObjCClass_t *cls)
+{
     uint64_t h = hash_cstr(name);
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         size_t idx = (size_t)((h + i) % SF_CLASS_MAP_CAPACITY);
         SFClassEntry_t *slot = &g_class_map[idx];
-        if (slot->name == NULL || strcmp(slot->name, name) == 0) {
+        if (slot->name == NULL or strcmp(slot->name, name) == 0) {
             slot->name = name;
             slot->cls = cls;
             return;
@@ -356,7 +378,8 @@ static void class_map_insert_unlocked(const char *name, SFObjCClass_t *cls) {
     }
 }
 
-static SFObjCClass_t *class_map_lookup_unlocked(const char *name) {
+static SFObjCClass_t *class_map_lookup_unlocked(const char *name)
+{
     uint64_t h = hash_cstr(name);
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         size_t idx = (size_t)((h + i) % SF_CLASS_MAP_CAPACITY);
@@ -371,7 +394,8 @@ static SFObjCClass_t *class_map_lookup_unlocked(const char *name) {
     return NULL;
 }
 
-SFObjCClass_t *sf_class_from_name(const char *name) {
+SFObjCClass_t *sf_class_from_name(const char *name)
+{
     if (name == NULL) {
         return NULL;
     }
@@ -382,15 +406,16 @@ SFObjCClass_t *sf_class_from_name(const char *name) {
     return result;
 }
 
-void sf_register_classes(SFObjCClass_t **start, SFObjCClass_t **stop) {
-    if (start == NULL || stop == NULL || stop <= start) {
+void sf_register_classes(SFObjCClass_t **start, SFObjCClass_t **stop)
+{
+    if (start == NULL or stop == NULL or stop <= start) {
         return;
     }
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
     for (SFObjCClass_t **it = start; it < stop; ++it) {
         SFObjCClass_t *cls = *it;
-        if (cls == NULL || cls->name == NULL || cls->name[0] == '\0') {
+        if (cls == NULL or cls->name == NULL or cls->name[0] == '\0') {
             continue;
         }
         class_map_insert_unlocked(cls->name, cls);
@@ -398,12 +423,14 @@ void sf_register_classes(SFObjCClass_t **start, SFObjCClass_t **stop) {
     sf_runtime_rwlock_unlock(&g_class_map_lock);
 }
 
-static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntry_t *stop) {
-    if (start == NULL || stop == NULL || stop <= start) return;
+static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntry_t *stop)
+{
+    if (start == NULL or stop == NULL or stop <= start)
+        return;
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
     for (SFObjCAliasEntry_t *it = start; it < stop; ++it) {
-        if (it->alias_name == NULL || it->class_ref == NULL) {
+        if (it->alias_name == NULL or it->class_ref == NULL) {
             continue;
         }
         Class cls = *(it->class_ref);
@@ -415,8 +442,9 @@ static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntr
     sf_runtime_rwlock_unlock(&g_class_map_lock);
 }
 
-void sf_finalize_registered_classes(void) {
-    if (g_dealloc_sel == NULL || g_alloc_sel == NULL || g_init_sel == NULL || g_forwarding_target_sel == NULL) {
+void sf_finalize_registered_classes(void)
+{
+    if (g_dealloc_sel == NULL or g_alloc_sel == NULL or g_init_sel == NULL or g_forwarding_target_sel == NULL) {
         static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
         static struct sf_objc_selector alloc_sel_data = {"allocWithAllocator:", "@24@0:8^v16"};
         static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
@@ -431,13 +459,13 @@ void sf_finalize_registered_classes(void) {
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         SFClassEntry_t *slot = &g_class_map[i];
         SFObjCClass_t *cls = slot->cls;
-        if (slot->name == NULL || cls == NULL || cls->isa == NULL) {
+        if (slot->name == NULL or cls == NULL or cls->isa == NULL) {
             continue;
         }
         sf_fix_class_layout(cls);
         sf_canonicalize_method_selectors(cls);
         sf_canonicalize_method_selectors(cls->isa);
-        if (cls->superclass != NULL && cls->superclass->isa != NULL) {
+        if (cls->superclass != NULL and cls->superclass->isa != NULL) {
             cls->isa->superclass = cls->superclass->isa;
         } else {
             cls->isa->superclass = cls;
@@ -450,7 +478,8 @@ void sf_finalize_registered_classes(void) {
     sf_register_builtin_class_cache();
 }
 
-void __objc_load(void *init_ptr) {
+void __objc_load(void *init_ptr)
+{
     SFObjCInit_t *init = (SFObjCInit_t *)init_ptr;
     if (init == NULL) {
         return;
@@ -462,19 +491,23 @@ void __objc_load(void *init_ptr) {
     sf_finalize_registered_classes();
 }
 
-Class objc_lookup_class(const char *name) {
+Class objc_lookup_class(const char *name)
+{
     return (Class)sf_class_from_name(name);
 }
 
-Class objc_get_class(const char *name) {
+Class objc_get_class(const char *name)
+{
     return (Class)sf_class_from_name(name);
 }
 
-id objc_getClass(const char *name) {
+id objc_getClass(const char *name)
+{
     return (id)sf_class_from_name(name);
 }
 
-size_t class_getInstanceSize(Class cls) {
+size_t class_getInstanceSize(Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     if (c == NULL) {
         return sizeof(void *);
@@ -514,11 +547,13 @@ size_t class_getInstanceSize(Class cls) {
     }
 #endif
 
-    if (size < sizeof(void *)) return sizeof(void *);
+    if (size < sizeof(void *))
+        return sizeof(void *);
     return size;
 }
 
-size_t sf_class_instance_size_fast(Class cls) {
+size_t sf_class_instance_size_fast(Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     size_t size = sizeof(void *);
     if (c != NULL) {
@@ -530,7 +565,8 @@ size_t sf_class_instance_size_fast(Class cls) {
     return size;
 }
 
-int sf_object_is_heap(id obj) {
+int sf_object_is_heap(id obj)
+{
     if (obj == NULL) {
         return 0;
     }
@@ -538,18 +574,20 @@ int sf_object_is_heap(id obj) {
     return sf_header_from_object(obj) != NULL;
 #else
     SFObjHeader_t *hdr = ((SFObjHeader_t *)obj) - 1;
-    return hdr->state == SF_OBJ_STATE_LIVE || (hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U;
+    return hdr->state == SF_OBJ_STATE_LIVE or (hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U;
 #endif
 }
 
-Class sf_object_class(id obj) {
+Class sf_object_class(id obj)
+{
     if (obj == NULL) {
         return NULL;
     }
     return *(Class *)obj;
 }
 
-void sf_register_live_object_header(SFObjHeader_t *hdr) {
+void sf_register_live_object_header(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return;
     }
@@ -566,7 +604,8 @@ void sf_register_live_object_header(SFObjHeader_t *hdr) {
 #endif
 }
 
-void sf_unregister_live_object_header(SFObjHeader_t *hdr) {
+void sf_unregister_live_object_header(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return;
     }
@@ -590,7 +629,8 @@ void sf_unregister_live_object_header(SFObjHeader_t *hdr) {
 #endif
 }
 
-SFObjHeader_t *sf_header_from_object(id obj) {
+SFObjHeader_t *sf_header_from_object(id obj)
+{
     if (obj == NULL) {
         return NULL;
     }
@@ -613,7 +653,8 @@ SFObjHeader_t *sf_header_from_object(id obj) {
 #endif
 }
 
-static SFGroupState_t *sf_create_group_state(SFObjHeader_t *root) {
+static SFGroupState_t *sf_create_group_state(SFObjHeader_t *root)
+{
     SFGroupState_t *group = (SFGroupState_t *)sf_runtime_test_calloc(1, sizeof(*group));
     if (group == NULL) {
         return NULL;
@@ -626,14 +667,16 @@ static SFGroupState_t *sf_create_group_state(SFObjHeader_t *root) {
     return group;
 }
 
-SFAllocator_t *sf_header_allocator(SFObjHeader_t *hdr) {
+SFAllocator_t *sf_header_allocator(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return NULL;
     }
     return hdr->allocator;
 }
 
-int sf_header_set_allocator(SFObjHeader_t *hdr, SFAllocator_t *allocator) {
+int sf_header_set_allocator(SFObjHeader_t *hdr, SFAllocator_t *allocator)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -641,14 +684,16 @@ int sf_header_set_allocator(SFObjHeader_t *hdr, SFAllocator_t *allocator) {
     return 1;
 }
 
-id sf_header_parent(SFObjHeader_t *hdr) {
+id sf_header_parent(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return NULL;
     }
     return hdr->parent;
 }
 
-int sf_header_set_parent(SFObjHeader_t *hdr, id parent) {
+int sf_header_set_parent(SFObjHeader_t *hdr, id parent)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -656,17 +701,19 @@ int sf_header_set_parent(SFObjHeader_t *hdr, id parent) {
     return 1;
 }
 
-SFObjHeader_t *sf_header_group_root(SFObjHeader_t *hdr) {
+SFObjHeader_t *sf_header_group_root(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return NULL;
     }
-    if (hdr->group != NULL && hdr->group->root != NULL) {
+    if (hdr->group != NULL and hdr->group->root != NULL) {
         return hdr->group->root;
     }
     return hdr;
 }
 
-int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root) {
+int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -674,21 +721,23 @@ int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root) {
         hdr->group = NULL;
         return 1;
     }
-    if (!sf_header_init_group_root(group_root)) {
+    if (not sf_header_init_group_root(group_root)) {
         return 0;
     }
     hdr->group = group_root->group;
     return hdr->group != NULL;
 }
 
-SFObjHeader_t *sf_header_group_next(SFObjHeader_t *hdr) {
+SFObjHeader_t *sf_header_group_next(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return NULL;
     }
     return hdr->group_next;
 }
 
-int sf_header_set_group_next(SFObjHeader_t *hdr, SFObjHeader_t *group_next) {
+int sf_header_set_group_next(SFObjHeader_t *hdr, SFObjHeader_t *group_next)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -696,32 +745,35 @@ int sf_header_set_group_next(SFObjHeader_t *hdr, SFObjHeader_t *group_next) {
     return 1;
 }
 
-SFObjHeader_t *sf_header_group_head(SFObjHeader_t *hdr) {
+SFObjHeader_t *sf_header_group_head(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return NULL;
     }
-    if (hdr->group != NULL && hdr->group->head != NULL) {
+    if (hdr->group != NULL and hdr->group->head != NULL) {
         return hdr->group->head;
     }
     return hdr;
 }
 
-int sf_header_set_group_head(SFObjHeader_t *hdr, SFObjHeader_t *group_head) {
+int sf_header_set_group_head(SFObjHeader_t *hdr, SFObjHeader_t *group_head)
+{
     SFObjHeader_t *root = sf_header_group_root(hdr);
     if (root == NULL) {
         return 0;
     }
-    if (group_head == NULL && root->group == NULL) {
+    if (group_head == NULL and root->group == NULL) {
         return 1;
     }
-    if (!sf_header_init_group_root(root)) {
+    if (not sf_header_init_group_root(root)) {
         return 0;
     }
     root->group->head = group_head;
     return 1;
 }
 
-size_t sf_header_group_live_count(SFObjHeader_t *hdr) {
+size_t sf_header_group_live_count(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -731,15 +783,16 @@ size_t sf_header_group_live_count(SFObjHeader_t *hdr) {
     return (hdr->state == SF_OBJ_STATE_LIVE) ? (size_t)1 : (size_t)0;
 }
 
-int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count) {
+int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
+{
     SFObjHeader_t *root = sf_header_group_root(hdr);
     if (root == NULL) {
         return 0;
     }
-    if (count <= (size_t)1 && root->group == NULL) {
+    if (count <= (size_t)1 and root->group == NULL) {
         return 1;
     }
-    if (!sf_header_init_group_root(root)) {
+    if (not sf_header_init_group_root(root)) {
         return 0;
     }
     root->group->group_live_count = count;
@@ -747,14 +800,16 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count) {
     return 1;
 }
 
-int sf_header_grouped(SFObjHeader_t *hdr) {
+int sf_header_grouped(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return 0;
     }
     return hdr->group != NULL;
 }
 
-int sf_header_init_group_root(SFObjHeader_t *hdr) {
+int sf_header_init_group_root(SFObjHeader_t *hdr)
+{
     if (hdr == NULL) {
         return 0;
     }
@@ -769,15 +824,17 @@ int sf_header_init_group_root(SFObjHeader_t *hdr) {
     return 1;
 }
 
-SFRuntimeMutex_t *sf_header_group_lock(SFObjHeader_t *hdr) {
+SFRuntimeMutex_t *sf_header_group_lock(SFObjHeader_t *hdr)
+{
     SFObjHeader_t *root = sf_header_group_root(hdr);
-    if (root == NULL || root->group == NULL) {
+    if (root == NULL or root->group == NULL) {
         return NULL;
     }
     return &root->group->group_lock;
 }
 
-void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock) {
+void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock)
+{
     if (hdr == NULL) {
         return;
     }
@@ -785,21 +842,23 @@ void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock) {
     hdr->group = NULL;
     hdr->parent = NULL;
     hdr->group_next = NULL;
-    if (destroy_group_lock && group != NULL && group->root == hdr) {
+    if (destroy_group_lock and group != NULL and group->root == hdr) {
         sf_runtime_mutex_destroy(&group->group_lock);
         free(group);
     }
 }
 
-size_t sf_object_allocation_size_for_object(id obj) {
+size_t sf_object_allocation_size_for_object(id obj)
+{
     SFObjHeader_t *hdr = sf_header_from_object(obj);
-    if (hdr != NULL && hdr->alloc_size != 0U) {
+    if (hdr != NULL and hdr->alloc_size != 0U) {
         return (size_t)hdr->alloc_size;
     }
     return sizeof(SFObjHeader_t) + sf_class_instance_size_fast(sf_object_class(obj));
 }
 
-static size_t sf_object_total_size(Class cls, size_t *align_out) {
+static size_t sf_object_total_size(Class cls, size_t *align_out)
+{
     size_t instance_size = sf_class_instance_size_fast(cls);
     size_t align = sizeof(void *);
     if (align_out != NULL) {
@@ -808,7 +867,8 @@ static size_t sf_object_total_size(Class cls, size_t *align_out) {
     return sizeof(SFObjHeader_t) + instance_size;
 }
 
-static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFAllocator_t *allocator) {
+static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFAllocator_t *allocator)
+{
     memset(raw, 0, total_size);
 
     SFObjHeader_t *hdr = (SFObjHeader_t *)raw;
@@ -824,13 +884,15 @@ static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFA
     return hdr;
 }
 
-static id sf_finish_object_alloc(Class cls, SFObjHeader_t *hdr) {
+static id sf_finish_object_alloc(Class cls, SFObjHeader_t *hdr)
+{
     id obj = (id)(hdr + 1);
     *(Class *)obj = cls;
     return obj;
 }
 
-id sf_alloc_object(Class cls, SFAllocator_t *allocator) {
+id sf_alloc_object(Class cls, SFAllocator_t *allocator)
+{
     size_t align = 0;
     size_t total_size = sf_object_total_size(cls, &align);
 
@@ -845,7 +907,8 @@ id sf_alloc_object(Class cls, SFAllocator_t *allocator) {
     return sf_finish_object_alloc(cls, hdr);
 }
 
-id sf_alloc_object_with_parent(Class cls, id parent) {
+id sf_alloc_object_with_parent(Class cls, id parent)
+{
     if (parent == NULL) {
         return sf_alloc_object(cls, NULL);
     }
@@ -860,7 +923,7 @@ id sf_alloc_object_with_parent(Class cls, id parent) {
     size_t total_size = sf_object_total_size(cls, &align);
     void *raw = NULL;
 
-    if (!sf_header_init_group_root(root)) {
+    if (not sf_header_init_group_root(root)) {
         return NULL;
     }
     if (root->group == NULL) {
@@ -871,7 +934,7 @@ id sf_alloc_object_with_parent(Class cls, id parent) {
     SFRuntimeMutex_t *group_lock = &root->group->group_lock;
 
     sf_runtime_mutex_lock(group_lock);
-    if (parent_hdr->state != SF_OBJ_STATE_LIVE || root->group->dead != 0U || root->group->group_live_count == 0U) {
+    if (parent_hdr->state != SF_OBJ_STATE_LIVE or root->group->dead != 0U or root->group->group_live_count == 0U) {
         sf_runtime_mutex_unlock(group_lock);
         return NULL;
     }
@@ -893,7 +956,8 @@ id sf_alloc_object_with_parent(Class cls, id parent) {
     return sf_finish_object_alloc(cls, hdr);
 }
 
-size_t sf_cstr_len(const char *s) {
+size_t sf_cstr_len(const char *s)
+{
     if (s == NULL) {
         return 0;
     }
@@ -904,7 +968,8 @@ size_t sf_cstr_len(const char *s) {
     return n;
 }
 
-uint64_t sf_hash_bytes(const void *data, size_t size) {
+uint64_t sf_hash_bytes(const void *data, size_t size)
+{
     const unsigned char *p = (const unsigned char *)data;
     uint64_t h = UINT64_C(1469598103934665603);
     for (size_t i = 0; i < size; ++i) {
@@ -914,7 +979,8 @@ uint64_t sf_hash_bytes(const void *data, size_t size) {
     return h;
 }
 
-uint64_t sf_hash_ptr(const void *p) {
+uint64_t sf_hash_ptr(const void *p)
+{
     uintptr_t v = (uintptr_t)p;
     v ^= (v >> 33);
     v *= UINT64_C(0xff51afd7ed558ccd);
@@ -924,13 +990,14 @@ uint64_t sf_hash_ptr(const void *p) {
     return (uint64_t)v;
 }
 
-static IMP sf_lookup_method_imp_exact(Class cls, SEL sel) {
+static IMP sf_lookup_method_imp_exact(Class cls, SEL sel)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     while (c != NULL) {
         for (SFObjCMethodList_t *list = c->methods; list != NULL; list = list->next) {
             for (int32_t i = 0; i < list->count; ++i) {
                 SFObjCMethod_t *method = &list->methods[i];
-                if (method->selector == sel || sf_selector_equal(method->selector, sel)) {
+                if (method->selector == sel or sf_selector_equal(method->selector, sel)) {
                     return method->imp;
                 }
             }
@@ -940,18 +1007,20 @@ static IMP sf_lookup_method_imp_exact(Class cls, SEL sel) {
     return NULL;
 }
 
-static int sf_class_meta_entry_stale(const SFClassMetaEntry_t *entry, Class cls) {
+static int sf_class_meta_entry_stale(const SFClassMetaEntry_t *entry, Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
-    if (entry == NULL || entry->cls != cls || c == NULL) {
+    if (entry == NULL or entry->cls != cls or c == NULL) {
         return 1;
     }
-    return entry->name != c->name || entry->methods != c->methods || entry->superclass != c->superclass;
+    return entry->name != c->name or entry->methods != c->methods or entry->superclass != c->superclass;
 }
 
-static void sf_cache_class_meta(Class cls) {
+static void sf_cache_class_meta(Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     SFClassMetaEntry_t *slot = class_meta_slot_for(cls);
-    if (slot == NULL || c == NULL) {
+    if (slot == NULL or c == NULL) {
         return;
     }
     slot->cls = cls;
@@ -963,49 +1032,58 @@ static void sf_cache_class_meta(Class cls) {
     slot->init_imp = (g_init_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_init_sel) : NULL;
 }
 
-static SFClassMetaEntry_t *sf_class_meta_for(Class cls) {
+static SFClassMetaEntry_t *sf_class_meta_for(Class cls)
+{
     SFClassMetaEntry_t *slot = class_meta_slot_for(cls);
     if (slot == NULL) {
         return NULL;
     }
-    if (slot->cls == NULL || sf_class_meta_entry_stale(slot, cls)) {
+    if (slot->cls == NULL or sf_class_meta_entry_stale(slot, cls)) {
         sf_cache_class_meta(cls);
     }
     return (slot->cls == cls) ? slot : NULL;
 }
 
-SEL sf_cached_selector_dealloc(void) {
+SEL sf_cached_selector_dealloc(void)
+{
     return g_dealloc_sel;
 }
 
-SEL sf_cached_selector_alloc(void) {
+SEL sf_cached_selector_alloc(void)
+{
     return g_alloc_sel;
 }
 
-SEL sf_cached_selector_init(void) {
+SEL sf_cached_selector_init(void)
+{
     return g_init_sel;
 }
 
-SEL sf_cached_selector_forwarding_target(void) {
+SEL sf_cached_selector_forwarding_target(void)
+{
     return g_forwarding_target_sel;
 }
 
-IMP sf_class_cached_dealloc_imp(Class cls) {
+IMP sf_class_cached_dealloc_imp(Class cls)
+{
     SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
     return meta != NULL ? meta->dealloc_imp : NULL;
 }
 
-IMP sf_class_cached_alloc_imp(Class cls) {
+IMP sf_class_cached_alloc_imp(Class cls)
+{
     SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
     return meta != NULL ? meta->alloc_imp : NULL;
 }
 
-IMP sf_class_cached_init_imp(Class cls) {
+IMP sf_class_cached_init_imp(Class cls)
+{
     SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
     return meta != NULL ? meta->init_imp : NULL;
 }
 
-void sf_register_builtin_class_cache(void) {
+void sf_register_builtin_class_cache(void)
+{
     static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
     static struct sf_objc_selector alloc_sel_data = {"allocWithAllocator:", "@24@0:8^v16"};
     static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
@@ -1018,14 +1096,16 @@ void sf_register_builtin_class_cache(void) {
     g_object_class = (Class)sf_class_from_name("Object");
 }
 
-Class sf_cached_class_object(void) {
+Class sf_cached_class_object(void)
+{
     return g_object_class;
 }
 
-const char *sf_class_name_of_object(id obj) {
+const char *sf_class_name_of_object(id obj)
+{
     Class cls = sf_object_class(obj);
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
-    if (c == NULL || c->name == NULL) {
+    if (c == NULL or c->name == NULL) {
         return "(null)";
     }
     return c->name;
@@ -1033,13 +1113,14 @@ const char *sf_class_name_of_object(id obj) {
 
 #if SF_RUNTIME_REFLECTION
 
-static Method class_get_method_impl(Class cls, SEL sel, int include_super) {
+static Method class_get_method_impl(Class cls, SEL sel, int include_super)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     while (c != NULL) {
         for (SFObjCMethodList_t *list = c->methods; list != NULL; list = list->next) {
             for (int32_t i = 0; i < list->count; ++i) {
                 SFObjCMethod_t *m = &list->methods[i];
-                if (m->selector == sel || sf_selector_equal(m->selector, sel)) {
+                if (m->selector == sel or sf_selector_equal(m->selector, sel)) {
                     return (Method)(void *)m;
                 }
             }
@@ -1049,7 +1130,8 @@ static Method class_get_method_impl(Class cls, SEL sel, int include_super) {
     return NULL;
 }
 
-const char *class_getName(Class cls) {
+const char *class_getName(Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     if (c == NULL) {
         return NULL;
@@ -1057,7 +1139,8 @@ const char *class_getName(Class cls) {
     return c->name;
 }
 
-Class class_getSuperclass(Class cls) {
+Class class_getSuperclass(Class cls)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     if (c == NULL) {
         return NULL;
@@ -1065,11 +1148,13 @@ Class class_getSuperclass(Class cls) {
     return (Class)c->superclass;
 }
 
-Class object_getClass(id obj) {
+Class object_getClass(id obj)
+{
     return sf_object_class(obj);
 }
 
-Class objc_getMetaClass(const char *name) {
+Class objc_getMetaClass(const char *name)
+{
     SFObjCClass_t *cls = sf_class_from_name(name);
     if (cls == NULL) {
         return NULL;
@@ -1077,7 +1162,8 @@ Class objc_getMetaClass(const char *name) {
     return (Class)cls->isa;
 }
 
-Class *objc_copyClassList(unsigned int *outCount) {
+Class *objc_copyClassList(unsigned int *outCount)
+{
     if (outCount != NULL) {
         *outCount = 0;
     }
@@ -1094,7 +1180,7 @@ Class *objc_copyClassList(unsigned int *outCount) {
 
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         SFClassEntry_t *slot = &g_class_map[i];
-        if (slot->name == NULL || slot->cls == NULL) {
+        if (slot->name == NULL or slot->cls == NULL) {
             continue;
         }
 
@@ -1129,25 +1215,31 @@ Class *objc_copyClassList(unsigned int *outCount) {
     if (outCount != NULL) {
         *outCount = (unsigned int)count;
     }
-    if (count == 0) { free((void *)list); return NULL; }
+    if (count == 0) {
+        free((void *)list);
+        return NULL;
+    }
 
     Class *exact = (Class *)sf_runtime_test_realloc((void *)list, count * sizeof(Class));
     return exact ? exact : list;
 }
 
-Method class_getInstanceMethod(Class cls, SEL sel) {
+Method class_getInstanceMethod(Class cls, SEL sel)
+{
     return class_get_method_impl(cls, sel, 1);
 }
 
-Method class_getClassMethod(Class cls, SEL sel) {
+Method class_getClassMethod(Class cls, SEL sel)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
-    if (c == NULL || c->isa == NULL) {
+    if (c == NULL or c->isa == NULL) {
         return NULL;
     }
     return class_get_method_impl((Class)c->isa, sel, 1);
 }
 
-Method *class_copyMethodList(Class cls, unsigned int *outCount) {
+Method *class_copyMethodList(Class cls, unsigned int *outCount)
+{
     if (outCount != NULL) {
         *outCount = 0;
     }
@@ -1185,7 +1277,8 @@ Method *class_copyMethodList(Class cls, unsigned int *outCount) {
     return arr;
 }
 
-SEL method_getName(Method method) {
+SEL method_getName(Method method)
+{
     SFObjCMethod_t *m = (SFObjCMethod_t *)(void *)method;
     if (m == NULL) {
         return NULL;
@@ -1193,7 +1286,8 @@ SEL method_getName(Method method) {
     return m->selector;
 }
 
-IMP method_getImplementation(Method method) {
+IMP method_getImplementation(Method method)
+{
     SFObjCMethod_t *m = (SFObjCMethod_t *)(void *)method;
     if (m == NULL) {
         return NULL;
@@ -1201,7 +1295,8 @@ IMP method_getImplementation(Method method) {
     return m->imp;
 }
 
-const char *method_getTypeEncoding(Method method) {
+const char *method_getTypeEncoding(Method method)
+{
     SFObjCMethod_t *m = (SFObjCMethod_t *)(void *)method;
     if (m == NULL) {
         return NULL;
@@ -1209,17 +1304,19 @@ const char *method_getTypeEncoding(Method method) {
     return m->types;
 }
 
-Ivar class_getInstanceVariable(Class cls, const char *name) {
+Ivar class_getInstanceVariable(Class cls, const char *name)
+{
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     while (c != NULL) {
         SFObjCIvarList_t *list = (SFObjCIvarList_t *)c->ivars;
-        if (list != NULL && list->count > 0) {
+        if (list != NULL and list->count > 0) {
             size_t stride = (size_t)list->item_size;
-            if (stride < sizeof(SFObjCIvar_t)) stride = sizeof(SFObjCIvar_t);
+            if (stride < sizeof(SFObjCIvar_t))
+                stride = sizeof(SFObjCIvar_t);
             unsigned char *cursor = (unsigned char *)list->ivars;
             for (uintptr_t i = 0; i < list->count; ++i, cursor += stride) {
                 SFObjCIvar_t *ivar = (SFObjCIvar_t *)(void *)cursor;
-                if (ivar->name != NULL && name != NULL && strcmp(ivar->name, name) == 0) {
+                if (ivar->name != NULL and name != NULL and strcmp(ivar->name, name) == 0) {
                     return (Ivar)(void *)ivar;
                 }
             }
@@ -1229,7 +1326,8 @@ Ivar class_getInstanceVariable(Class cls, const char *name) {
     return NULL;
 }
 
-Ivar *class_copyIvarList(Class cls, unsigned int *outCount) {
+Ivar *class_copyIvarList(Class cls, unsigned int *outCount)
+{
     if (outCount != NULL) {
         *outCount = 0;
     }
@@ -1240,7 +1338,8 @@ Ivar *class_copyIvarList(Class cls, unsigned int *outCount) {
     }
 
     SFObjCIvarList_t *list = (SFObjCIvarList_t *)c->ivars;
-    if (list == NULL || list->count == 0) return NULL;
+    if (list == NULL or list->count == 0)
+        return NULL;
 
     size_t count = (size_t)list->count;
     Ivar *arr = (Ivar *)sf_runtime_test_malloc(count * sizeof(Ivar));
@@ -1249,7 +1348,8 @@ Ivar *class_copyIvarList(Class cls, unsigned int *outCount) {
     }
 
     size_t stride = (size_t)list->item_size;
-    if (stride < sizeof(SFObjCIvar_t)) stride = sizeof(SFObjCIvar_t);
+    if (stride < sizeof(SFObjCIvar_t))
+        stride = sizeof(SFObjCIvar_t);
 
     unsigned char *cursor = (unsigned char *)list->ivars;
     for (uintptr_t i = 0; i < list->count; ++i) {
@@ -1263,7 +1363,8 @@ Ivar *class_copyIvarList(Class cls, unsigned int *outCount) {
     return arr;
 }
 
-const char *ivar_getName(Ivar ivar) {
+const char *ivar_getName(Ivar ivar)
+{
     SFObjCIvar_t *v = (SFObjCIvar_t *)(void *)ivar;
     if (v == NULL) {
         return NULL;
@@ -1271,7 +1372,8 @@ const char *ivar_getName(Ivar ivar) {
     return v->name;
 }
 
-const char *ivar_getTypeEncoding(Ivar ivar) {
+const char *ivar_getTypeEncoding(Ivar ivar)
+{
     SFObjCIvar_t *v = (SFObjCIvar_t *)(void *)ivar;
     if (v == NULL) {
         return NULL;
@@ -1279,26 +1381,30 @@ const char *ivar_getTypeEncoding(Ivar ivar) {
     return v->type;
 }
 
-ptrdiff_t ivar_getOffset(Ivar ivar) {
+ptrdiff_t ivar_getOffset(Ivar ivar)
+{
     SFObjCIvar_t *v = (SFObjCIvar_t *)(void *)ivar;
-    if (v == NULL || v->offset == NULL) {
+    if (v == NULL or v->offset == NULL) {
         return (ptrdiff_t)0;
     }
     return (ptrdiff_t)(*v->offset);
 }
 
-const char *sel_getName(SEL sel) {
+const char *sel_getName(SEL sel)
+{
     if (sel == NULL) {
         return NULL;
     }
     return sel->name;
 }
 
-SEL sel_registerName(const char *name) {
+SEL sel_registerName(const char *name)
+{
     return intern_selector_name_types(name, NULL);
 }
 
-int sel_isEqual(SEL lhs, SEL rhs) {
+int sel_isEqual(SEL lhs, SEL rhs)
+{
     return sf_selector_equal(lhs, rhs);
 }
 

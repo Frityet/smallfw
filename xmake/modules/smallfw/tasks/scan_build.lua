@@ -24,6 +24,6 @@ function main()
     if option.get("verbose") then
         table.insert(args, "-v")
     end
-    table.insert(args, "__scan_build_targets")
+    table.insert(args, "__scan-build-targets")
     os.execv(analyzer.program, args)
 end

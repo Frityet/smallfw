@@ -12,7 +12,8 @@
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
     char *types = NULL;
     char codes[32];
     int unsupported = 0;

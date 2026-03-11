@@ -9,7 +9,8 @@
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #endif
 
-static uintptr_t fuzz_word_prefix(const uint8_t *data, size_t size, uintptr_t fallback) {
+static uintptr_t fuzz_word_prefix(const uint8_t *data, size_t size, uintptr_t fallback)
+{
     uintptr_t value = fallback;
     size_t limit = size < sizeof(uintptr_t) ? size : sizeof(uintptr_t);
 
@@ -21,7 +22,8 @@ static uintptr_t fuzz_word_prefix(const uint8_t *data, size_t size, uintptr_t fa
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
     const uint8_t *cursor = data;
     SFRuntimeTestLandingInfo_t info;
     uintptr_t func_start = fuzz_word_prefix(data, size, (uintptr_t)128U);

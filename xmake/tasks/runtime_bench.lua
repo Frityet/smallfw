@@ -1,8 +1,8 @@
-task("run_runtime_bench")
+task("run-runtime-bench")
     set_category("tool")
     set_menu {
-        usage = "xmake run_runtime_bench [options]",
-        description = "Build runtime_bench, run repeated benchmark samples, and record structured results.",
+        usage = "xmake run-runtime-bench [options]",
+        description = "Build runtime-bench, run repeated benchmark samples, and record structured results.",
         options = smallfw_runtime_config_menu_options({
             {},
             {nil, "case", "kv", "all", "Benchmark case to run (or all)."},

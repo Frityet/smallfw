@@ -36,18 +36,21 @@ static SFTestSelector g_alloc_sel = {"allocWithAllocator:", "@24@0:8^v16"};
 static SFTestSelector g_init_sel = {"init", "@16@0:8"};
 static id g_last_synthetic_object = nil;
 
-static id synthetic_alloc_imp(id self, SEL cmd, SFAllocator_t *allocator) {
+static id synthetic_alloc_imp(id self, SEL cmd, SFAllocator_t *allocator)
+{
     (void)cmd;
     g_last_synthetic_object = sf_alloc_object((Class)self, allocator);
     return g_last_synthetic_object;
 }
 
-static id synthetic_init_imp(id self, SEL cmd) {
+static id synthetic_init_imp(id self, SEL cmd)
+{
     (void)cmd;
     return self;
 }
 
-static void init_synthetic_class(SFTestSyntheticClass *bundle, const char *name, int with_alloc, int with_init) {
+static void init_synthetic_class(SFTestSyntheticClass *bundle, const char *name, int with_alloc, int with_init)
+{
     memset(bundle, 0, sizeof(*bundle));
     bundle->cls.isa = &bundle->meta;
     bundle->cls.name = name;
@@ -71,7 +74,8 @@ static void init_synthetic_class(SFTestSyntheticClass *bundle, const char *name,
     }
 }
 
-static int case_arc_nil_operations(void) {
+static int case_arc_nil_operations(void)
+{
     id slot = nil;
 
     if (objc_retain(nil) != nil) {
@@ -88,7 +92,8 @@ static int case_arc_nil_operations(void) {
     return slot == nil;
 }
 
-static int case_arc_strong_store(void) {
+static int case_arc_strong_store(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *first = SFW_NEW(CounterObject);
@@ -96,7 +101,7 @@ static int case_arc_strong_store(void) {
     id slot = (id)first;
 
     objc_storeStrong(&slot, second);
-    if (slot != second || g_counter_deallocs != 1) {
+    if (slot != second or g_counter_deallocs != 1) {
         objc_release(second);
         return 0;
     }
@@ -106,7 +111,8 @@ static int case_arc_strong_store(void) {
     return g_counter_deallocs == 2;
 }
 
-static int case_arc_strong_store_self(void) {
+static int case_arc_strong_store_self(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
@@ -129,7 +135,8 @@ static int case_arc_strong_store_self(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_autorelease_pool(void) {
+static int case_arc_autorelease_pool(void)
+{
     sf_test_reset_common_state();
 
     void *pool = objc_autoreleasePoolPush();
@@ -145,7 +152,8 @@ static int case_arc_autorelease_pool(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_autorelease_no_pool(void) {
+static int case_arc_autorelease_no_pool(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
@@ -161,7 +169,8 @@ static int case_arc_autorelease_no_pool(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_nested_autorelease_pools(void) {
+static int case_arc_nested_autorelease_pools(void)
+{
     sf_test_reset_common_state();
 
     void *outer = objc_autoreleasePoolPush();
@@ -182,7 +191,8 @@ static int case_arc_nested_autorelease_pools(void) {
     return g_counter_deallocs == 2;
 }
 
-static int case_arc_marker_capacity_failure(void) {
+static int case_arc_marker_capacity_failure(void)
+{
     sf_test_reset_common_state();
     sf_runtime_test_reset_autorelease_state();
     sf_runtime_test_fail_allocation_after(0);
@@ -194,7 +204,8 @@ static int case_arc_marker_capacity_failure(void) {
     return 1;
 }
 
-static int case_arc_autorelease_pool_fallback_token(void) {
+static int case_arc_autorelease_pool_fallback_token(void)
+{
     sf_test_reset_common_state();
     sf_runtime_test_reset_autorelease_state();
 
@@ -211,7 +222,8 @@ static int case_arc_autorelease_pool_fallback_token(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_autorelease_capacity_failure(void) {
+static int case_arc_autorelease_capacity_failure(void)
+{
     sf_test_reset_common_state();
     sf_runtime_test_reset_autorelease_state();
 
@@ -230,14 +242,16 @@ static int case_arc_autorelease_capacity_failure(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_factory_return(void) {
+static int case_arc_factory_return(void)
+{
     CounterObject *obj = sf_test_factory_object();
     int ok = (obj != nil);
     obj = nil;
     return ok;
 }
 
-static int case_arc_retain_release_balance(void) {
+static int case_arc_retain_release_balance(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
@@ -261,7 +275,8 @@ static int case_arc_retain_release_balance(void) {
     return g_counter_deallocs == 1;
 }
 
-static int case_arc_dead_object_noop_release(void) {
+static int case_arc_dead_object_noop_release(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *parent = SFW_NEW(CounterObject);
@@ -288,7 +303,8 @@ static int case_arc_dead_object_noop_release(void) {
     return g_counter_deallocs == 2;
 }
 
-static int case_arc_return_value_helpers(void) {
+static int case_arc_return_value_helpers(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *first = SFW_NEW(CounterObject);
@@ -310,7 +326,8 @@ static int case_arc_return_value_helpers(void) {
     return g_counter_deallocs == 2;
 }
 
-static int case_arc_object_method_wrappers(void) {
+static int case_arc_object_method_wrappers(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -318,20 +335,20 @@ static int case_arc_object_method_wrappers(void) {
 
     __unsafe_unretained Object *root = [[Object allocWithAllocator:&allocator] init];
     __unsafe_unretained Object *child = [[Object allocWithParent:root] init];
-    if (root == nil || child == nil) {
+    if (root == nil or child == nil) {
         return 0;
     }
-    if ([root allocator] != &allocator || [child allocator] != &allocator) {
+    if ([root allocator] != &allocator or [child allocator] != &allocator) {
         [child release];
         [root release];
         return 0;
     }
-    if (child.parent != root || root.parent != nil) {
+    if (child.parent != root or root.parent != nil) {
         [child release];
         [root release];
         return 0;
     }
-    if (![root isEqual:root] || [root isEqual:child]) {
+    if (![root isEqual:root] or [root isEqual:child]) {
         [child release];
         [root release];
         return 0;
@@ -341,7 +358,7 @@ static int case_arc_object_method_wrappers(void) {
         [root release];
         return 0;
     }
-    if (sf_exception_backtrace_count(root) != 0 || sf_exception_backtrace_frame(root, 0) != NULL) {
+    if (sf_exception_backtrace_count(root) != 0 or sf_exception_backtrace_frame(root, 0) != NULL) {
         [child release];
         [root release];
         return 0;
@@ -363,10 +380,11 @@ static int case_arc_object_method_wrappers(void) {
     objc_autoreleasePoolPop(pool);
     (void)objc_msgSend(child, @selector(release));
     (void)objc_msgSend(root, @selector(release));
-    return ctx.alloc_calls == 2 && ctx.free_calls == 2 && ctx.active_blocks == 0;
+    return ctx.alloc_calls == 2 and ctx.free_calls == 2 and ctx.active_blocks == 0;
 }
 
-static int case_arc_object_nonheap_fallbacks(void) {
+static int case_arc_object_nonheap_fallbacks(void)
+{
     sf_test_reset_common_state();
 
     SFObjCClass_t *object_class = (SFObjCClass_t *)objc_getClass("Object");
@@ -375,9 +393,9 @@ static int case_arc_object_nonheap_fallbacks(void) {
     } fake = {.isa = object_class};
     __unsafe_unretained Object *fake_obj = (Object *)&fake;
 
-    if ([fake_obj allocator] != sf_default_allocator() ||
-        fake_obj.parent != nil ||
-        sf_exception_backtrace_count(fake_obj) != 0 ||
+    if ([fake_obj allocator] != sf_default_allocator() or
+        fake_obj.parent != nil or
+        sf_exception_backtrace_count(fake_obj) != 0 or
         sf_exception_backtrace_frame(fake_obj, 0) != NULL) {
         return 0;
     }
@@ -396,11 +414,11 @@ static int case_arc_object_nonheap_fallbacks(void) {
     SFAllocator_t *saved_allocator = sf_header_allocator(hdr);
     id saved_parent = sf_header_parent(hdr);
 
-    if (!sf_header_set_allocator(hdr, NULL) || !sf_header_set_parent(hdr, fake_obj)) {
+    if (not sf_header_set_allocator(hdr, NULL) or not sf_header_set_parent(hdr, fake_obj)) {
         objc_release(obj);
         return 0;
     }
-    int ok = [obj allocator] == sf_default_allocator() && obj.parent == nil;
+    int ok = [obj allocator] == sf_default_allocator() and obj.parent == nil;
 
     (void)sf_header_set_parent(hdr, saved_parent);
     (void)sf_header_set_allocator(hdr, saved_allocator);
@@ -408,7 +426,8 @@ static int case_arc_object_nonheap_fallbacks(void) {
     return ok;
 }
 
-static int case_arc_object_alloc_in_place(void) {
+static int case_arc_object_alloc_in_place(void)
+{
     sf_test_reset_common_state();
 
     struct {
@@ -420,15 +439,16 @@ static int case_arc_object_alloc_in_place(void) {
     if (obj == nil) {
         return 0;
     }
-    if ([obj allocator] != sf_default_allocator() || obj.parent != nil || sf_object_class(obj) != (Class)objc_getClass("CounterObject")) {
+    if ([obj allocator] != sf_default_allocator() or obj.parent != nil or sf_object_class(obj) != (Class)objc_getClass("CounterObject")) {
         return 0;
     }
 
     objc_release(obj);
-    return objc_retain(obj) == obj && g_counter_deallocs == 0 && [CounterObject allocInPlace:NULL size:sizeof(storage)] == nil;
+    return objc_retain(obj) == obj and g_counter_deallocs == 0 and [CounterObject allocInPlace:NULL size:sizeof(storage)] == nil;
 }
 
-static int case_arc_objc_alloc_init_success(void) {
+static int case_arc_objc_alloc_init_success(void)
+{
     sf_test_reset_common_state();
 
     SFTestSyntheticClass bundle;
@@ -444,7 +464,8 @@ static int case_arc_objc_alloc_init_success(void) {
     return 1;
 }
 
-static int case_arc_large_autorelease_growth(void) {
+static int case_arc_large_autorelease_growth(void)
+{
     sf_test_reset_common_state();
     sf_runtime_test_reset_autorelease_state();
 
@@ -457,7 +478,8 @@ static int case_arc_large_autorelease_growth(void) {
     return g_counter_deallocs == 129;
 }
 
-static int case_arc_large_marker_growth(void) {
+static int case_arc_large_marker_growth(void)
+{
     sf_test_reset_common_state();
     sf_runtime_test_reset_autorelease_state();
 
@@ -477,7 +499,8 @@ static int case_arc_large_marker_growth(void) {
     return 1;
 }
 
-static int case_arc_pool_pop_marker_clamp(void) {
+static int case_arc_pool_pop_marker_clamp(void)
+{
     sf_runtime_test_reset_autorelease_state();
 
     size_t *bogus = (size_t *)malloc(sizeof(size_t));
@@ -489,7 +512,8 @@ static int case_arc_pool_pop_marker_clamp(void) {
     return 1;
 }
 
-static int case_arc_dispose_edge_paths(void) {
+static int case_arc_dispose_edge_paths(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained Object *obj = [[Object allocWithAllocator:sf_default_allocator()] init];
@@ -529,10 +553,11 @@ static int case_arc_dispose_edge_paths(void) {
     return 1;
 }
 
-static int case_arc_runtime_test_alloc_wrappers(void) {
+static int case_arc_runtime_test_alloc_wrappers(void)
+{
     void *p = sf_runtime_test_malloc(8);
     void *q = sf_runtime_test_calloc(2, 8);
-    if (p == NULL || q == NULL) {
+    if (p == NULL or q == NULL) {
         free(p);
         free(q);
         return 0;
@@ -572,18 +597,21 @@ static int case_arc_runtime_test_alloc_wrappers(void) {
     return 1;
 }
 
-static int case_arc_objc_alloc_null(void) {
-    return objc_alloc(NULL) == nil && objc_alloc_init(NULL) == nil;
+static int case_arc_objc_alloc_null(void)
+{
+    return objc_alloc(NULL) == nil and objc_alloc_init(NULL) == nil;
 }
 
-static int case_arc_objc_alloc_missing_alloc(void) {
+static int case_arc_objc_alloc_missing_alloc(void)
+{
     SFTestSyntheticClass bundle;
 
     init_synthetic_class(&bundle, "SyntheticMissingAlloc", 0, 0);
     return objc_alloc((Class)&bundle.cls) == nil;
 }
 
-static int case_arc_objc_alloc_init_missing_init(void) {
+static int case_arc_objc_alloc_init_missing_init(void)
+{
     SFTestSyntheticClass bundle;
 
     g_last_synthetic_object = nil;
@@ -598,7 +626,8 @@ static int case_arc_objc_alloc_init_missing_init(void) {
     return 1;
 }
 
-static int case_allocator_custom_alloc_free(void) {
+static int case_allocator_custom_alloc_free(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -610,10 +639,11 @@ static int case_allocator_custom_alloc_free(void) {
     }
 
     sf_object_dispose(obj);
-    return ctx.alloc_calls == 1 && ctx.free_calls == 1 && ctx.active_blocks == 0;
+    return ctx.alloc_calls == 1 and ctx.free_calls == 1 and ctx.active_blocks == 0;
 }
 
-static int case_allocator_default_alignment(void) {
+static int case_allocator_default_alignment(void)
+{
     SFAllocator_t *allocator = sf_default_allocator();
     void *ptr = allocator->alloc(allocator->ctx, 128, 64);
     if (ptr == NULL) {
@@ -624,7 +654,8 @@ static int case_allocator_default_alignment(void) {
     return ok;
 }
 
-static int case_allocator_default_invalid_alignment(void) {
+static int case_allocator_default_invalid_alignment(void)
+{
     SFAllocator_t *allocator = sf_default_allocator();
     void *ptr = allocator->alloc(allocator->ctx, 16, 24);
     if (ptr != NULL) {
@@ -665,7 +696,8 @@ static const SFTestCase g_arc_cases[] = {
     {"allocator_default_invalid_alignment", case_allocator_default_invalid_alignment},
 };
 
-const SFTestCase *sf_runtime_arc_cases(size_t *count) {
+const SFTestCase *sf_runtime_arc_cases(size_t *count)
+{
     if (count != NULL) {
         *count = sizeof(g_arc_cases) / sizeof(g_arc_cases[0]);
     }

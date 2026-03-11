@@ -10,7 +10,7 @@
 #pragma clang diagnostic ignored "-Wnullability-extension"
 #endif
 
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(__clang__) or defined(__GNUC__)
 #define SF_LIKELY(x) __builtin_expect(!!(x), 1)
 #else
 #define SF_LIKELY(x) (x)
@@ -30,11 +30,13 @@ static __thread id g_last_header_obj;
 static __thread SFObjHeader_t *g_last_header_ptr;
 static __thread size_t g_pool_fallback_token;
 
-static inline int sf_pointer_uses_small_object_tag(id obj) {
+static inline int sf_pointer_uses_small_object_tag(id obj)
+{
     return ((((uintptr_t)obj) & (uintptr_t)7U) != 0U);
 }
 
-static inline int sf_object_bypasses_heap_arc(id obj) {
+static inline int sf_object_bypasses_heap_arc(id obj)
+{
     static Class g_nsconstantstring_class;
     static Class g_nxconstantstring_class;
     Class cls = NULL;
@@ -53,10 +55,11 @@ static inline int sf_object_bypasses_heap_arc(id obj) {
     if (g_nxconstantstring_class == NULL) {
         g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
     }
-    return cls != NULL && (cls == g_nsconstantstring_class || cls == g_nxconstantstring_class);
+    return cls != NULL and (cls == g_nsconstantstring_class or cls == g_nxconstantstring_class);
 }
 
-void sf_runtime_test_reset_autorelease_state(void) {
+void sf_runtime_test_reset_autorelease_state(void)
+{
     free((void *)g_autorelease_state.objects);
     free(g_autorelease_state.markers);
     memset(&g_autorelease_state, 0, sizeof(g_autorelease_state));
@@ -65,7 +68,8 @@ void sf_runtime_test_reset_autorelease_state(void) {
     g_pool_fallback_token = 0;
 }
 
-static inline SFObjHeader_t *header_from_heap_candidate(id obj) {
+static inline SFObjHeader_t *header_from_heap_candidate(id obj)
+{
     SFObjHeader_t *hdr = NULL;
     if (obj == g_last_header_obj) {
         return g_last_header_ptr;
@@ -88,12 +92,14 @@ static inline SFObjHeader_t *header_from_heap_candidate(id obj) {
     return hdr;
 }
 
-static int ensure_object_capacity(size_t wanted) {
+static int ensure_object_capacity(size_t wanted)
+{
     if (g_autorelease_state.capacity >= wanted) {
         return 1;
     }
     size_t new_cap = g_autorelease_state.capacity ? g_autorelease_state.capacity * 2 : 64;
-    while (new_cap < wanted) new_cap *= 2;
+    while (new_cap < wanted)
+        new_cap *= 2;
     id *next = (id *)sf_runtime_test_realloc((void *)g_autorelease_state.objects,
                                              new_cap * sizeof(id));
     if (next == NULL) {
@@ -104,12 +110,14 @@ static int ensure_object_capacity(size_t wanted) {
     return 1;
 }
 
-static int ensure_marker_capacity(size_t wanted) {
+static int ensure_marker_capacity(size_t wanted)
+{
     if (g_autorelease_state.marker_capacity >= wanted) {
         return 1;
     }
     size_t new_cap = g_autorelease_state.marker_capacity ? g_autorelease_state.marker_capacity * 2 : 8;
-    while (new_cap < wanted) new_cap *= 2;
+    while (new_cap < wanted)
+        new_cap *= 2;
     size_t *next = (size_t *)sf_runtime_test_realloc(g_autorelease_state.markers,
                                                      new_cap * sizeof(size_t));
     if (next == NULL) {
@@ -120,7 +128,8 @@ static int ensure_marker_capacity(size_t wanted) {
     return 1;
 }
 
-static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator) {
+static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator)
+{
     SFObjHeader_t *member = head;
     SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
     while (member != NULL) {
@@ -132,7 +141,8 @@ static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator) {
     }
 }
 
-void sf_object_dispose(id obj) {
+void sf_object_dispose(id obj)
+{
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     if (hdr == NULL) {
         return;
@@ -151,7 +161,7 @@ void sf_object_dispose(id obj) {
     SFAllocator_t *group_allocator = NULL;
     SFRuntimeMutex_t *group_lock = sf_header_group_lock(hdr);
 
-    if (!sf_header_grouped(hdr) || group_lock == NULL) {
+    if (not sf_header_grouped(hdr) or group_lock == NULL) {
         SFAllocator_t *allocator = sf_header_allocator(hdr);
         size_t total_size = (size_t)hdr->alloc_size;
         if (hdr->state != SF_OBJ_STATE_LIVE) {
@@ -197,7 +207,8 @@ void sf_object_dispose(id obj) {
     }
 }
 
-static void release_object_now(id obj) {
+static void release_object_now(id obj)
+{
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     if (hdr == NULL) {
         return;
@@ -239,16 +250,17 @@ static void release_object_now(id obj) {
     }
 
     IMP imp = sf_class_cached_dealloc_imp(sf_object_class(obj));
-    if (imp == NULL && dealloc_sel != NULL) {
+    if (imp == NULL and dealloc_sel != NULL) {
         imp = sf_lookup_imp_in_class(sf_object_class(obj), dealloc_sel);
     }
-    if (imp != NULL && !sf_dispatch_imp_is_nil(imp) && dealloc_sel != NULL) {
+    if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
         (void)imp(obj, dealloc_sel);
     }
     sf_object_dispose(obj);
 }
 
-id objc_retain(id obj) {
+id objc_retain(id obj)
+{
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     if (hdr != NULL) {
         if ((hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U) {
@@ -266,25 +278,28 @@ id objc_retain(id obj) {
     return obj;
 }
 
-void objc_release(id obj) {
+void objc_release(id obj)
+{
     release_object_now(obj);
 }
 
-id sf_autorelease(id obj) {
+id sf_autorelease(id obj)
+{
     if (header_from_heap_candidate(obj) == NULL) {
         return obj;
     }
     if (g_autorelease_state.marker_count == 0) {
         return obj;
     }
-    if (!ensure_object_capacity(g_autorelease_state.count + 1)) {
+    if (not ensure_object_capacity(g_autorelease_state.count + 1)) {
         return obj;
     }
     g_autorelease_state.objects[g_autorelease_state.count++] = obj;
     return obj;
 }
 
-void *objc_autoreleasePoolPush(void) {
+void *objc_autoreleasePoolPush(void)
+{
     size_t marker = g_autorelease_state.count;
     size_t *token = NULL;
 
@@ -302,7 +317,8 @@ void *objc_autoreleasePoolPush(void) {
     return (void *)&g_pool_fallback_token;
 }
 
-void objc_autoreleasePoolPop(void *pool) {
+void objc_autoreleasePoolPop(void *pool)
+{
     size_t marker = g_autorelease_state.count;
     if (pool == (void *)&g_pool_fallback_token) {
         marker = g_pool_fallback_token;
@@ -326,23 +342,28 @@ void objc_autoreleasePoolPop(void *pool) {
     }
 }
 
-id objc_retainAutorelease(id obj) {
+id objc_retainAutorelease(id obj)
+{
     return sf_autorelease(objc_retain(obj));
 }
 
-id objc_retainAutoreleasedReturnValue(id obj) {
+id objc_retainAutoreleasedReturnValue(id obj)
+{
     return objc_retain(obj);
 }
 
-id objc_autoreleaseReturnValue(id obj) {
+id objc_autoreleaseReturnValue(id obj)
+{
     return sf_autorelease(obj);
 }
 
-id objc_retainAutoreleaseReturnValue(id obj) {
+id objc_retainAutoreleaseReturnValue(id obj)
+{
     return sf_autorelease(objc_retain(obj));
 }
 
-void objc_storeStrong(id *dst, id value) {
+void objc_storeStrong(id *dst, id value)
+{
     id old = *dst;
     if (old == value) {
         return;

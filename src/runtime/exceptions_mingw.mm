@@ -22,14 +22,16 @@
 
 namespace {
 
-static id sf_dereference_thrown_object(void **thrown_object) {
+static id sf_dereference_thrown_object(void **thrown_object)
+{
     if (thrown_object == nullptr) {
         return (id)0;
     }
     return *(id *)thrown_object;
 }
 
-static int sf_class_is_kind_of(const SFObjCClass_t *actual, const SFObjCClass_t *wanted) {
+static int sf_class_is_kind_of(const SFObjCClass_t *actual, const SFObjCClass_t *wanted)
+{
     while (actual != nullptr) {
         if (actual == wanted) {
             return 1;
@@ -39,7 +41,8 @@ static int sf_class_is_kind_of(const SFObjCClass_t *actual, const SFObjCClass_t 
     return 0;
 }
 
-static void sf_objc_exception_cleanup(void *exception_object) {
+static void sf_objc_exception_cleanup(void *exception_object)
+{
     if (exception_object == nullptr) {
         return;
     }
@@ -54,25 +57,30 @@ namespace gnustep {
 namespace libobjc {
 
 struct __objc_type_info : public std::type_info {
-    explicit __objc_type_info(const char *name) : std::type_info(name) {
+    explicit __objc_type_info(const char *name) : std::type_info(name)
+    {
     }
 
-    bool __is_pointer_p() const override {
+    bool __is_pointer_p() const override
+    {
         return true;
     }
 
-    bool __is_function_p() const override {
+    bool __is_function_p() const override
+    {
         return false;
     }
 
-    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override {
+    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override
+    {
         (void)thrown_type;
         (void)thrown_object;
         (void)outer;
         return false;
     }
 
-    bool __do_upcast(const __cxxabiv1::__class_type_info *target, void **thrown_object) const override {
+    bool __do_upcast(const __cxxabiv1::__class_type_info *target, void **thrown_object) const override
+    {
         (void)target;
         (void)thrown_object;
         return false;
@@ -83,7 +91,8 @@ struct __objc_class_type_info : public __objc_type_info {
     using __objc_type_info::__objc_type_info;
     ~__objc_class_type_info() override;
 
-    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override {
+    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override
+    {
         (void)outer;
         if (dynamic_cast<const __objc_type_info *>(thrown_type) == nullptr) {
             return false;
@@ -106,12 +115,14 @@ struct __objc_class_type_info : public __objc_type_info {
 };
 
 struct __objc_id_type_info : public __objc_type_info {
-    __objc_id_type_info() : __objc_type_info("@id") {
+    __objc_id_type_info() : __objc_type_info("@id")
+    {
     }
 
     ~__objc_id_type_info() override;
 
-    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override {
+    bool __do_catch(const std::type_info *thrown_type, void **thrown_object, unsigned outer) const override
+    {
         (void)outer;
         if (dynamic_cast<const __objc_type_info *>(thrown_type) == nullptr) {
             return false;
@@ -134,7 +145,8 @@ gnustep::libobjc::__objc_id_type_info __objc_id_type_info;
 
 extern "C" void *__cxa_allocate_exception(size_t thrown_size) __attribute__((nothrow));
 
-extern "C" __attribute__((noreturn)) void objc_exception_throw(id obj) {
+extern "C" __attribute__((noreturn)) void objc_exception_throw(id obj)
+{
     if (!sf_runtime_test_consume_allocation()) {
         abort();
     }
@@ -149,7 +161,8 @@ extern "C" __attribute__((noreturn)) void objc_exception_throw(id obj) {
     __cxxabiv1::__cxa_throw(exception_object, &__objc_id_type_info, sf_objc_exception_cleanup);
 }
 
-extern "C" id objc_begin_catch(void *exception) {
+extern "C" id objc_begin_catch(void *exception)
+{
     if (exception == nullptr) {
         return (id)0;
     }
@@ -158,7 +171,8 @@ extern "C" id objc_begin_catch(void *exception) {
     return (id)__cxxabiv1::__cxa_begin_catch(exception);
 }
 
-extern "C" void objc_end_catch(void) {
+extern "C" void objc_end_catch(void)
+{
     if (g_manual_catch_depth == 0) {
         return;
     }
@@ -167,7 +181,8 @@ extern "C" void objc_end_catch(void) {
     __cxxabiv1::__cxa_end_catch();
 }
 
-extern "C" __attribute__((noreturn)) void objc_exception_rethrow(void *exception) {
+extern "C" __attribute__((noreturn)) void objc_exception_rethrow(void *exception)
+{
     (void)exception;
     __cxxabiv1::__cxa_rethrow();
 }

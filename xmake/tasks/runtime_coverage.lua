@@ -1,7 +1,7 @@
-task("run_runtime_coverage")
+task("run-runtime-coverage")
     set_category("tool")
     set_menu {
-        usage = "xmake run_runtime_coverage [options]",
+        usage = "xmake run-runtime-coverage [options]",
         description = "Build the runtime coverage matrix and enforce the runtime coverage gate.",
         options = {
             {"o", "outdir", "kv", "build/cov-matrix", "Set the coverage output directory."},

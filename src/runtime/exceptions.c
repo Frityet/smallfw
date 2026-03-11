@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unwind.h>
-#if defined(_WIN32) && !defined(_WIN32_WINNT)
+#if defined(_WIN32) and not defined(_WIN32_WINNT)
 #define _WIN32_WINNT 0x0600
 #endif
 #if defined(_WIN32)
@@ -38,7 +38,7 @@ typedef struct SFExceptionMetadata {
     const void *frames[SF_EXCEPTION_BACKTRACE_LIMIT];
 } SFExceptionMetadata_t;
 
-#if !defined(_WIN32)
+#if not defined(_WIN32)
 typedef struct SFBacktraceCapture {
     const void **frames;
     size_t count;
@@ -47,25 +47,28 @@ typedef struct SFBacktraceCapture {
 } SFBacktraceCapture_t;
 #endif
 
-#if !defined(_WIN32)
+#if not defined(_WIN32)
 static __thread SFException_t *g_catch_stack[32];
 static __thread size_t g_catch_stack_size;
 #endif
 static SFRuntimeMutex_t g_exception_metadata_lock = SF_RUNTIME_MUTEX_INITIALIZER;
 static SFExceptionMetadata_t *g_exception_metadata;
 
-static SFException_t *sf_exception_from_unwind(struct _Unwind_Exception *exception_object) {
-    if (exception_object == NULL || exception_object->exception_class != SF_EXCEPTION_CLASS) {
+static SFException_t *sf_exception_from_unwind(struct _Unwind_Exception *exception_object)
+{
+    if (exception_object == NULL or exception_object->exception_class != SF_EXCEPTION_CLASS) {
         return NULL;
     }
     return (SFException_t *)exception_object;
 }
 
-#if !defined(_WIN32)
-static _Unwind_Reason_Code capture_backtrace_frame(struct _Unwind_Context *context, void *arg) {
+#if not defined(_WIN32)
+static _Unwind_Reason_Code capture_backtrace_frame(struct _Unwind_Context *context, void *arg)
+{
     SFBacktraceCapture_t *capture = (SFBacktraceCapture_t *)arg;
     uintptr_t ip = (uintptr_t)_Unwind_GetIP(context);
-    if (ip == 0 || capture->count == capture->limit) return _URC_END_OF_STACK;
+    if (ip == 0 or capture->count == capture->limit)
+        return _URC_END_OF_STACK;
     if (capture->skip > 0) {
         capture->skip -= 1;
         return _URC_NO_REASON;
@@ -75,7 +78,8 @@ static _Unwind_Reason_Code capture_backtrace_frame(struct _Unwind_Context *conte
 }
 #endif
 
-static size_t capture_backtrace(const void **frames, size_t limit) {
+static size_t capture_backtrace(const void **frames, size_t limit)
+{
 #if defined(_WIN32)
     void *captured[SF_EXCEPTION_BACKTRACE_LIMIT];
     USHORT count = 0;
@@ -100,14 +104,18 @@ static size_t capture_backtrace(const void **frames, size_t limit) {
 #endif
 }
 
-static SFExceptionMetadata_t **find_exception_metadata_slot(id obj) {
+static SFExceptionMetadata_t **find_exception_metadata_slot(id obj)
+{
     SFExceptionMetadata_t **slot = &g_exception_metadata;
-    while (*slot != NULL && (*slot)->object != obj) slot = &(*slot)->next;
+    while (*slot != NULL and (*slot)->object != obj)
+        slot = &(*slot)->next;
     return slot;
 }
 
-void sf_exception_capture_metadata(id obj) {
-    if (obj == NULL) return;
+void sf_exception_capture_metadata(id obj)
+{
+    if (obj == NULL)
+        return;
 
     const void *frames[SF_EXCEPTION_BACKTRACE_LIMIT];
     size_t count = capture_backtrace(frames, SF_EXCEPTION_BACKTRACE_LIMIT);
@@ -124,47 +132,58 @@ void sf_exception_capture_metadata(id obj) {
     }
     if (meta != NULL) {
         meta->count = count;
-        if (count > 0) memcpy((void *)meta->frames, frames, count * sizeof(frames[0]));
+        if (count > 0)
+            memcpy((void *)meta->frames, frames, count * sizeof(frames[0]));
     }
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
 }
 
-size_t sf_exception_backtrace_count(id obj) {
+size_t sf_exception_backtrace_count(id obj)
+{
     size_t count = 0;
-    if (obj == NULL) return 0;
+    if (obj == NULL)
+        return 0;
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t *meta = *find_exception_metadata_slot(obj);
-    if (meta != NULL) count = meta->count;
+    if (meta != NULL)
+        count = meta->count;
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     return count;
 }
 
-const void *sf_exception_backtrace_frame(id obj, size_t index) {
+const void *sf_exception_backtrace_frame(id obj, size_t index)
+{
     const void *frame = NULL;
-    if (obj == NULL) return NULL;
+    if (obj == NULL)
+        return NULL;
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t *meta = *find_exception_metadata_slot(obj);
-    if (meta != NULL && index < meta->count) frame = meta->frames[index];
+    if (meta != NULL and index < meta->count)
+        frame = meta->frames[index];
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     return frame;
 }
 
-void sf_exception_clear_metadata(id obj) {
+void sf_exception_clear_metadata(id obj)
+{
     SFExceptionMetadata_t *meta = NULL;
-    if (obj == NULL) return;
+    if (obj == NULL)
+        return;
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t **slot = find_exception_metadata_slot(obj);
     meta = *slot;
-    if (meta != NULL) *slot = meta->next;
+    if (meta != NULL)
+        *slot = meta->next;
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     free(meta);
 }
 
-#if !defined(_WIN32)
-static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Exception *exception_object) {
+#if not defined(_WIN32)
+static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Exception *exception_object)
+{
     (void)code;
     SFException_t *exc = (SFException_t *)exception_object;
     if (exc->object != NULL) {
@@ -173,7 +192,8 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
     free(exc);
 }
 
-void objc_exception_throw(id obj) {
+void objc_exception_throw(id obj)
+{
     SFException_t *exc = (SFException_t *)sf_runtime_test_calloc(1, sizeof(SFException_t));
     if (exc == NULL) {
         abort();
@@ -188,7 +208,8 @@ void objc_exception_throw(id obj) {
     abort();
 }
 
-id objc_begin_catch(void *exception) {
+id objc_begin_catch(void *exception)
+{
     struct _Unwind_Exception *unwind = (struct _Unwind_Exception *)exception;
     SFException_t *exc = sf_exception_from_unwind(unwind);
     if (exc == NULL) {
@@ -201,7 +222,8 @@ id objc_begin_catch(void *exception) {
     return exc->object;
 }
 
-void objc_end_catch(void) {
+void objc_end_catch(void)
+{
     if (g_catch_stack_size == 0) {
         return;
     }
@@ -214,8 +236,9 @@ void objc_end_catch(void) {
     }
 }
 
-void objc_exception_rethrow(void *exception) {
-    if (exception == NULL && g_catch_stack_size > 0) {
+void objc_exception_rethrow(void *exception)
+{
+    if (exception == NULL and g_catch_stack_size > 0) {
         exception = &g_catch_stack[g_catch_stack_size - 1]->unwind;
     }
     _Unwind_Resume_or_Rethrow((struct _Unwind_Exception *)exception);
@@ -223,22 +246,23 @@ void objc_exception_rethrow(void *exception) {
 }
 #endif
 
-#define DW_EH_PE_PTR      0x00
-#define DW_EH_PE_ULEB128  0x01
-#define DW_EH_PE_UDATA2   0x02
-#define DW_EH_PE_UDATA4   0x03
-#define DW_EH_PE_UDATA8   0x04
-#define DW_EH_PE_SLEB128  0x09
-#define DW_EH_PE_SDATA2   0x0A
-#define DW_EH_PE_SDATA4   0x0B
-#define DW_EH_PE_SDATA8   0x0C
+#define DW_EH_PE_PTR 0x00
+#define DW_EH_PE_ULEB128 0x01
+#define DW_EH_PE_UDATA2 0x02
+#define DW_EH_PE_UDATA4 0x03
+#define DW_EH_PE_UDATA8 0x04
+#define DW_EH_PE_SLEB128 0x09
+#define DW_EH_PE_SDATA2 0x0A
+#define DW_EH_PE_SDATA4 0x0B
+#define DW_EH_PE_SDATA8 0x0C
 
-#define DW_EH_PE_ABSPTR   0x00
-#define DW_EH_PE_PCREL    0x10
-#define DW_EH_PE_OMIT     0xFF
+#define DW_EH_PE_ABSPTR 0x00
+#define DW_EH_PE_PCREL 0x10
+#define DW_EH_PE_OMIT 0xFF
 #define DW_EH_PE_INDIRECT 0x80
 
-static uint64_t read_uleb(const uint8_t **ptr) {
+static uint64_t read_uleb(const uint8_t **ptr)
+{
     uint64_t result = 0;
     unsigned shift = 0;
     const uint8_t *p = *ptr;
@@ -254,7 +278,8 @@ static uint64_t read_uleb(const uint8_t **ptr) {
     return result;
 }
 
-static int64_t read_sleb(const uint8_t **ptr) {
+static int64_t read_sleb(const uint8_t **ptr)
+{
     int64_t result = 0;
     unsigned shift = 0;
     uint8_t b = 0;
@@ -267,14 +292,15 @@ static int64_t read_sleb(const uint8_t **ptr) {
             break;
         }
     }
-    if ((shift < 64) && (b & 0x40)) {
+    if ((shift < 64) and (b & 0x40)) {
         result |= -((int64_t)1 << shift);
     }
     *ptr = p;
     return result;
 }
 
-static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding) {
+static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding)
+{
     if (encoding == DW_EH_PE_OMIT) {
         return 0;
     }
@@ -296,19 +322,22 @@ static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding) {
             memcpy(&v, p, sizeof(v));
             value = v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         case DW_EH_PE_UDATA4: {
             uint32_t v;
             memcpy(&v, p, sizeof(v));
             value = v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         case DW_EH_PE_UDATA8: {
             uint64_t v;
             memcpy(&v, p, sizeof(v));
             value = (uintptr_t)v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         case DW_EH_PE_SLEB128:
             value = (uintptr_t)read_sleb(&p);
             break;
@@ -317,19 +346,22 @@ static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding) {
             memcpy(&v, p, sizeof(v));
             value = (uintptr_t)v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         case DW_EH_PE_SDATA4: {
             int32_t v;
             memcpy(&v, p, sizeof(v));
             value = (uintptr_t)v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         case DW_EH_PE_SDATA8: {
             int64_t v;
             memcpy(&v, p, sizeof(v));
             value = (uintptr_t)v;
             p += sizeof(v);
-            break; }
+            break;
+        }
         default:
             abort();
     }
@@ -346,7 +378,8 @@ static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding) {
     return value;
 }
 
-static size_t encoding_size(uint8_t encoding) {
+static size_t encoding_size(uint8_t encoding)
+{
     switch (encoding & 0x0F) {
         case DW_EH_PE_UDATA2:
         case DW_EH_PE_SDATA2:
@@ -364,12 +397,14 @@ static size_t encoding_size(uint8_t encoding) {
     }
 }
 
-static int class_name_matches(id object, const char *wanted) {
-    if (object == NULL || wanted == NULL) return 0;
+static int class_name_matches(id object, const char *wanted)
+{
+    if (object == NULL or wanted == NULL)
+        return 0;
 
     SFObjCClass_t *cls = (SFObjCClass_t *)sf_object_class(object);
     while (cls != NULL) {
-        if (cls->name && strcmp(cls->name, wanted) == 0) {
+        if (cls->name and strcmp(cls->name, wanted) == 0) {
             return 1;
         }
         cls = cls->superclass;
@@ -377,8 +412,9 @@ static int class_name_matches(id object, const char *wanted) {
     return 0;
 }
 
-static int exception_matches_type(struct _Unwind_Exception *exception_object, const char *type_name) {
-    if (exception_object == NULL || type_name == NULL) {
+static int exception_matches_type(struct _Unwind_Exception *exception_object, const char *type_name)
+{
+    if (exception_object == NULL or type_name == NULL) {
         return 0;
     }
 
@@ -402,7 +438,8 @@ typedef struct SFLandingInfo {
 } SFLandingInfo_t;
 
 static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uintptr_t ip,
-                                 struct _Unwind_Exception *exception_object, SFLandingInfo_t *out) {
+                                 struct _Unwind_Exception *exception_object, SFLandingInfo_t *out)
+{
     if (lsda == NULL) {
         return 0;
     }
@@ -438,7 +475,7 @@ static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uint
         uintptr_t cs_lp = read_encoded(&p, call_site_encoding);
         uint64_t cs_action = read_uleb(&p);
 
-        if (ip_offset < cs_start || ip_offset >= (cs_start + cs_len)) {
+        if (ip_offset < cs_start or ip_offset >= (cs_start + cs_len)) {
             continue;
         }
 
@@ -463,7 +500,7 @@ static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uint
             const uint8_t *next_field = cursor;
             int64_t next_offset = read_sleb(&cursor);
 
-            if (tti > 0 && class_info != NULL) {
+            if (tti > 0 and class_info != NULL) {
                 size_t entry_size = encoding_size(ttype_encoding);
                 const uint8_t *type_entry = class_info - (size_t)tti * entry_size;
                 const uint8_t *type_cursor = type_entry;
@@ -493,9 +530,10 @@ static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uint
     return 0;
 }
 
-#if !defined(_WIN32)
+#if not defined(_WIN32)
 static int parse_lsda_for_ip(struct _Unwind_Context *context, struct _Unwind_Exception *exception_object,
-                             SFLandingInfo_t *out) {
+                             SFLandingInfo_t *out)
+{
     const uint8_t *lsda = (const uint8_t *)_Unwind_GetLanguageSpecificData(context);
     uintptr_t func_start = (uintptr_t)_Unwind_GetRegionStart(context);
     uintptr_t ip = (uintptr_t)_Unwind_GetIP(context);
@@ -503,21 +541,25 @@ static int parse_lsda_for_ip(struct _Unwind_Context *context, struct _Unwind_Exc
 }
 #endif
 
-int sf_runtime_test_exception_matches_type(struct _Unwind_Exception *exception_object, const char *type_name) {
+int sf_runtime_test_exception_matches_type(struct _Unwind_Exception *exception_object, const char *type_name)
+{
     return exception_matches_type(exception_object, type_name);
 }
 
-uintptr_t sf_runtime_test_exception_read_encoded(const uint8_t **ptr, uint8_t encoding) {
+uintptr_t sf_runtime_test_exception_read_encoded(const uint8_t **ptr, uint8_t encoding)
+{
     return read_encoded(ptr, encoding);
 }
 
-size_t sf_runtime_test_exception_encoding_size(uint8_t encoding) {
+size_t sf_runtime_test_exception_encoding_size(uint8_t encoding)
+{
     return encoding_size(encoding);
 }
 
 int sf_runtime_test_exception_parse_lsda(const uint8_t *lsda, uintptr_t func_start, uintptr_t ip,
                                          struct _Unwind_Exception *exception_object,
-                                         SFRuntimeTestLandingInfo_t *out) {
+                                         SFRuntimeTestLandingInfo_t *out)
+{
     SFLandingInfo_t info;
     memset(&info, 0, sizeof(info));
     int ok = parse_lsda_for_ip_raw(lsda, func_start, ip, exception_object, &info);
@@ -529,7 +571,8 @@ int sf_runtime_test_exception_parse_lsda(const uint8_t *lsda, uintptr_t func_sta
     return ok;
 }
 
-static _Unwind_Reason_Code personality_result(_Unwind_Action actions, const SFLandingInfo_t *info) {
+static _Unwind_Reason_Code personality_result(_Unwind_Action actions, const SFLandingInfo_t *info)
+{
     if ((actions & _UA_SEARCH_PHASE) != 0) {
         return info->has_handler ? _URC_HANDLER_FOUND : _URC_CONTINUE_UNWIND;
     }
@@ -537,17 +580,18 @@ static _Unwind_Reason_Code personality_result(_Unwind_Action actions, const SFLa
         return _URC_CONTINUE_UNWIND;
     }
     if ((actions & _UA_HANDLER_FRAME) != 0) {
-        if (!info->has_handler && !info->has_cleanup) {
+        if (not info->has_handler and not info->has_cleanup) {
             return _URC_CONTINUE_UNWIND;
         }
-    } else if (!info->has_cleanup) {
+    } else if (not info->has_cleanup) {
         return _URC_CONTINUE_UNWIND;
     }
     return _URC_INSTALL_CONTEXT;
 }
 
 _Unwind_Reason_Code sf_runtime_test_exception_personality_result(_Unwind_Action actions, int has_cleanup,
-                                                                 int has_handler) {
+                                                                 int has_handler)
+{
     SFLandingInfo_t info;
     memset(&info, 0, sizeof(info));
     info.has_cleanup = has_cleanup != 0;
@@ -555,16 +599,18 @@ _Unwind_Reason_Code sf_runtime_test_exception_personality_result(_Unwind_Action 
     return personality_result(actions, &info);
 }
 
-#if !defined(_WIN32)
+#if not defined(_WIN32)
 _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
-                                                  struct _Unwind_Context *context) {
+                                                  struct _Unwind_Context *context)
+{
     (void)version;
     (void)exception_class;
 
     SFLandingInfo_t info;
-    if (!parse_lsda_for_ip(context, exception_object, &info)) return _URC_CONTINUE_UNWIND;
+    if (not parse_lsda_for_ip(context, exception_object, &info))
+        return _URC_CONTINUE_UNWIND;
 
     _Unwind_Reason_Code decision = personality_result(actions, &info);
     if (decision != _URC_INSTALL_CONTEXT) {
@@ -580,7 +626,8 @@ _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action ac
 _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
-                                                  struct _Unwind_Context *context) {
+                                                  struct _Unwind_Context *context)
+{
     (void)version;
     (void)actions;
     (void)exception_class;
@@ -592,36 +639,43 @@ _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action ac
 
 #else
 
-size_t sf_exception_backtrace_count(id obj) {
+size_t sf_exception_backtrace_count(id obj)
+{
     (void)obj;
     return 0;
 }
 
-const void *sf_exception_backtrace_frame(id obj, size_t index) {
+const void *sf_exception_backtrace_frame(id obj, size_t index)
+{
     (void)obj;
     (void)index;
     return NULL;
 }
 
-void sf_exception_clear_metadata(id obj) {
+void sf_exception_clear_metadata(id obj)
+{
     (void)obj;
 }
 
-void objc_exception_throw(id obj) {
+void objc_exception_throw(id obj)
+{
     (void)obj;
     abort();
 }
 
-id objc_begin_catch(void *exception) {
+id objc_begin_catch(void *exception)
+{
     (void)exception;
     abort();
 }
 
-void objc_end_catch(void) {
+void objc_end_catch(void)
+{
     abort();
 }
 
-void objc_exception_rethrow(void *exception) {
+void objc_exception_rethrow(void *exception)
+{
     (void)exception;
     abort();
 }
@@ -629,7 +683,8 @@ void objc_exception_rethrow(void *exception) {
 _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
-                                                  struct _Unwind_Context *context) {
+                                                  struct _Unwind_Context *context)
+{
     (void)version;
     (void)actions;
     (void)exception_class;

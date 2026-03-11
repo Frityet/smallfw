@@ -10,7 +10,7 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly, nullable) Object *parent;
 
 + (instancetype)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
-+ (instancetype)allocWithParent: (Object *)parent;
++ (instancetype)allocWithParent:(Object *)parent;
 + (instancetype _Nullable)allocInPlace:(void *_Nullable)storage size:(size_t)size;
 - (instancetype)init;
 - (void)dealloc;
@@ -29,6 +29,10 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly) size_t exceptionBacktraceCount;
 
 - (const void *_Nullable)exceptionBacktraceFrameAtIndex:(size_t)index;
+@end
+
+@interface ValueObject : Object
+
 @end
 
 #pragma clang assume_nonnull end

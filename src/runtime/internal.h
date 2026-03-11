@@ -73,7 +73,7 @@ size_t sf_object_allocation_size_for_object(id _Nullable obj);
 void sf_register_live_object_header(SFObjHeader_t *_Nonnull hdr);
 void sf_unregister_live_object_header(SFObjHeader_t *_Nonnull hdr);
 size_t sf_exception_backtrace_count(id _Nullable obj);
-const void * _Nullable sf_exception_backtrace_frame(id _Nullable obj, size_t index);
+const void *_Nullable sf_exception_backtrace_frame(id _Nullable obj, size_t index);
 void sf_exception_capture_metadata(id _Nullable obj);
 void sf_exception_clear_metadata(id _Nullable obj);
 
@@ -81,9 +81,9 @@ void sf_runtime_test_reset_alloc_failures(void);
 void sf_runtime_test_fail_allocation_after(size_t successful_allocations);
 int sf_runtime_test_consume_allocation(void);
 void sf_runtime_test_reset_autorelease_state(void);
-void * _Nullable sf_runtime_test_malloc(size_t size);
-void * _Nullable sf_runtime_test_calloc(size_t count, size_t size);
-void * _Nullable sf_runtime_test_realloc(void * _Nullable ptr, size_t size);
+void *_Nullable sf_runtime_test_malloc(size_t size);
+void *_Nullable sf_runtime_test_calloc(size_t count, size_t size);
+void *_Nullable sf_runtime_test_realloc(void *_Nullable ptr, size_t size);
 
 int sf_runtime_test_dispatch_is_digit_char(char c);
 int sf_runtime_test_dispatch_is_type_qualifier(char c);
@@ -104,7 +104,7 @@ typedef struct SFRuntimeTestLandingInfo {
 
 int sf_runtime_test_exception_matches_type(struct _Unwind_Exception *_Nullable exception_object,
                                            const char *_Nullable type_name);
-uintptr_t sf_runtime_test_exception_read_encoded(const uint8_t * _Nonnull * _Nonnull ptr, uint8_t encoding);
+uintptr_t sf_runtime_test_exception_read_encoded(const uint8_t *_Nonnull *_Nonnull ptr, uint8_t encoding);
 size_t sf_runtime_test_exception_encoding_size(uint8_t encoding);
 int sf_runtime_test_exception_parse_lsda(const uint8_t *_Nullable lsda, uintptr_t func_start, uintptr_t ip,
                                          struct _Unwind_Exception *_Nullable exception_object,

@@ -39,7 +39,8 @@ typedef struct SFTestFailAllocCtx {
     int alloc_calls;
 } SFTestFailAllocCtx;
 
-static void *fail_alloc_once(void *ctx, size_t size, size_t align) {
+static void *fail_alloc_once(void *ctx, size_t size, size_t align)
+{
     SFTestFailAllocCtx *state = (SFTestFailAllocCtx *)ctx;
     (void)size;
     (void)align;
@@ -47,26 +48,30 @@ static void *fail_alloc_once(void *ctx, size_t size, size_t align) {
     return NULL;
 }
 
-static void fail_alloc_free(void *ctx, void *ptr, size_t size, size_t align) {
+static void fail_alloc_free(void *ctx, void *ptr, size_t size, size_t align)
+{
     (void)ctx;
     (void)size;
     (void)align;
     free(ptr);
 }
 
-static void child_throw_uncaught(void *ctx) {
+static void child_throw_uncaught(void *ctx)
+{
     (void)ctx;
     __unsafe_unretained ExceptionBase *obj = SFW_NEW(ExceptionBase);
     objc_exception_throw(obj);
 }
 
-static void child_throw_alloc_failure(void *ctx) {
+static void child_throw_alloc_failure(void *ctx)
+{
     (void)ctx;
     sf_runtime_test_fail_allocation_after(0);
     objc_exception_throw(nil);
 }
 
-static void child_direct_rethrow(void *ctx) {
+static void child_direct_rethrow(void *ctx)
+{
     (void)ctx;
     @try {
         @throw SFW_NEW(ExceptionBase);
@@ -77,14 +82,16 @@ static void child_direct_rethrow(void *ctx) {
     }
 }
 
-static void child_invalid_encoding_abort(void *ctx) {
+static void child_invalid_encoding_abort(void *ctx)
+{
     (void)ctx;
     static const uint8_t data[] = {0};
     const uint8_t *p = data;
     (void)sf_runtime_test_exception_read_encoded(&p, UINT8_C(0x05));
 }
 
-static int case_exceptions_begin_catch_passthrough(void) {
+static int case_exceptions_begin_catch_passthrough(void)
+{
     sf_test_reset_common_state();
     if (objc_begin_catch(NULL) != nil) {
         return 0;
@@ -93,7 +100,8 @@ static int case_exceptions_begin_catch_passthrough(void) {
     return 1;
 }
 
-static int case_exceptions_internal_helpers(void) {
+static int case_exceptions_internal_helpers(void)
+{
     SFTestExceptionObject runtime_exc;
     SFTestExceptionObject foreign_exc;
     memset(&runtime_exc, 0, sizeof(runtime_exc));
@@ -102,13 +110,13 @@ static int case_exceptions_internal_helpers(void) {
     runtime_exc.unwind.exception_class = TEST_SF_EXCEPTION_CLASS;
     runtime_exc.object = SFW_NEW(ExceptionChild);
 
-    if (sf_runtime_test_exception_matches_type(NULL, "@id") != 0 ||
-        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, NULL) != 0 ||
-        sf_runtime_test_exception_matches_type(&foreign_exc.unwind, "@id") != 0 ||
-        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "@id") == 0 ||
-        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "ExceptionBase") == 0 ||
-        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "DefinitelyMissingType") != 0 ||
-        sf_exception_backtrace_count(nil) != 0 ||
+    if (sf_runtime_test_exception_matches_type(NULL, "@id") != 0 or
+        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, NULL) != 0 or
+        sf_runtime_test_exception_matches_type(&foreign_exc.unwind, "@id") != 0 or
+        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "@id") == 0 or
+        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "ExceptionBase") == 0 or
+        sf_runtime_test_exception_matches_type(&runtime_exc.unwind, "DefinitelyMissingType") != 0 or
+        sf_exception_backtrace_count(nil) != 0 or
         sf_exception_backtrace_frame(nil, 0) != NULL) {
         objc_release(runtime_exc.object);
         return 0;
@@ -119,7 +127,8 @@ static int case_exceptions_internal_helpers(void) {
     return 1;
 }
 
-static int case_exceptions_backtrace_metadata(void) {
+static int case_exceptions_backtrace_metadata(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained ExceptionBase *source = SFW_NEW(ExceptionBase);
@@ -134,10 +143,10 @@ static int case_exceptions_backtrace_metadata(void) {
         kept = [e retain];
         count = e.exceptionBacktraceCount;
         frame = [e exceptionBacktraceFrameAtIndex:0];
-        if (count == 0 ||
-            frame == NULL ||
-            [e exceptionBacktraceFrameAtIndex:count] != NULL ||
-            sf_exception_backtrace_count(e) != count ||
+        if (count == 0 or
+            frame == NULL or
+            [e exceptionBacktraceFrameAtIndex:count] != NULL or
+            sf_exception_backtrace_count(e) != count or
             sf_exception_backtrace_frame(e, 0) != frame) {
             objc_release(kept);
             return 0;
@@ -151,11 +160,12 @@ static int case_exceptions_backtrace_metadata(void) {
 
     objc_release(source);
     objc_release(kept);
-    return sf_exception_backtrace_count(kept) == 0 &&
+    return sf_exception_backtrace_count(kept) == 0 and
            sf_exception_backtrace_frame(kept, 0) == NULL;
 }
 
-static int case_exceptions_backtrace_metadata_alloc_failure(void) {
+static int case_exceptions_backtrace_metadata_alloc_failure(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained ExceptionBase *source = SFW_NEW(ExceptionBase);
@@ -175,14 +185,15 @@ static int case_exceptions_backtrace_metadata_alloc_failure(void) {
         return 0;
     }
 
-    int ok = kept.exceptionBacktraceCount == 0 &&
+    int ok = kept.exceptionBacktraceCount == 0 and
              [kept exceptionBacktraceFrameAtIndex:0] == NULL;
     objc_release(source);
     objc_release(kept);
-    return ok && sf_exception_backtrace_count(kept) == 0;
+    return ok and sf_exception_backtrace_count(kept) == 0;
 }
 
-static int case_exceptions_object_alloc_failure_throws(void) {
+static int case_exceptions_object_alloc_failure_throws(void)
+{
     SFTestFailAllocCtx ctx = {0};
     SFAllocator_t allocator = {
         .alloc = fail_alloc_once,
@@ -194,16 +205,17 @@ static int case_exceptions_object_alloc_failure_throws(void) {
         (void)[[Object allocWithAllocator:&allocator] init];
     }
     @catch (AllocationFailedException *e) {
-        return ctx.alloc_calls == 1 &&
-               e != nil &&
-               e.exceptionBacktraceCount > 0 &&
+        return ctx.alloc_calls == 1 and
+               e != nil and
+               e.exceptionBacktraceCount > 0 and
                [e exceptionBacktraceFrameAtIndex:e.exceptionBacktraceCount] == NULL;
     }
 
     return 0;
 }
 
-static int case_exceptions_encoding_helpers(void) {
+static int case_exceptions_encoding_helpers(void)
+{
     uintptr_t ptr_value = (uintptr_t)0x1234u;
     uintptr_t indirect_target = (uintptr_t)0x9988u;
     uintptr_t indirect_ptr = (uintptr_t)&indirect_target;
@@ -269,31 +281,53 @@ static int case_exceptions_encoding_helpers(void) {
         return 0;
     }
 
-    return sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA2) == 2 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA2) == 2 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA4) == 4 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA4) == 4 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA8) == 8 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA8) == 8 &&
-           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_PTR) == sizeof(uintptr_t) &&
+    return sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA2) == 2 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA2) == 2 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA4) == 4 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA4) == 4 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_UDATA8) == 8 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_SDATA8) == 8 and
+           sf_runtime_test_exception_encoding_size(TEST_DW_EH_PE_PTR) == sizeof(uintptr_t) and
            sf_runtime_test_exception_encoding_size(UINT8_C(0x05)) == sizeof(uintptr_t);
 }
 
-static int case_exceptions_parse_lsda_helpers(void) {
+static int case_exceptions_parse_lsda_helpers(void)
+{
     static const uint8_t cleanup_direct[] = {
-        TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_ULEB128, 0x04,
-        0x00, 0x0A, 0x04, 0x00,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_ULEB128,
+        0x04,
+        0x00,
+        0x0A,
+        0x04,
+        0x00,
     };
     static const uint8_t cleanup_action[] = {
-        TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_ULEB128, 0x04,
-        0x00, 0x0A, 0x04, 0x01,
-        0x00, 0x00,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_ULEB128,
+        0x04,
+        0x00,
+        0x0A,
+        0x04,
+        0x01,
+        0x00,
+        0x00,
     };
     static const uint8_t no_handler_chain[] = {
-        TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_OMIT, TEST_DW_EH_PE_ULEB128, 0x04,
-        0x00, 0x0A, 0x04, 0x01,
-        0x01, 0x01,
-        0x01, 0x00,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_OMIT,
+        TEST_DW_EH_PE_ULEB128,
+        0x04,
+        0x00,
+        0x0A,
+        0x04,
+        0x01,
+        0x01,
+        0x01,
+        0x01,
+        0x00,
     };
     uint8_t lpstart_zero_lp[8 + sizeof(uintptr_t)] = {0};
     uintptr_t lpstart = (uintptr_t)200u;
@@ -305,8 +339,8 @@ static int case_exceptions_parse_lsda_helpers(void) {
     }
 
     memset(&info, 0, sizeof(info));
-    if (sf_runtime_test_exception_parse_lsda(cleanup_direct, 100, 105, NULL, &info) == 0 ||
-        info.has_cleanup == 0 || info.has_handler != 0 || info.landing_pad != (uintptr_t)104u) {
+    if (sf_runtime_test_exception_parse_lsda(cleanup_direct, 100, 105, NULL, &info) == 0 or
+        info.has_cleanup == 0 or info.has_handler != 0 or info.landing_pad != (uintptr_t)104u) {
         return 0;
     }
 
@@ -325,8 +359,8 @@ static int case_exceptions_parse_lsda_helpers(void) {
     }
 
     memset(&info, 0, sizeof(info));
-    if (sf_runtime_test_exception_parse_lsda(cleanup_action, 100, 105, NULL, &info) == 0 ||
-        info.has_cleanup == 0 || info.has_handler != 0) {
+    if (sf_runtime_test_exception_parse_lsda(cleanup_action, 100, 105, NULL, &info) == 0 or
+        info.has_cleanup == 0 or info.has_handler != 0) {
         return 0;
     }
 
@@ -343,16 +377,18 @@ static int case_exceptions_parse_lsda_helpers(void) {
     return 1;
 }
 
-static int case_exceptions_personality_result_helper(void) {
-    return sf_runtime_test_exception_personality_result(_UA_SEARCH_PHASE, 0, 1) == _URC_HANDLER_FOUND &&
-           sf_runtime_test_exception_personality_result(_UA_SEARCH_PHASE, 0, 0) == _URC_CONTINUE_UNWIND &&
-           sf_runtime_test_exception_personality_result((_Unwind_Action)0, 0, 0) == _URC_CONTINUE_UNWIND &&
-           sf_runtime_test_exception_personality_result((_Unwind_Action)(_UA_CLEANUP_PHASE | _UA_HANDLER_FRAME), 0, 0) == _URC_CONTINUE_UNWIND &&
-           sf_runtime_test_exception_personality_result(_UA_CLEANUP_PHASE, 0, 0) == _URC_CONTINUE_UNWIND &&
+static int case_exceptions_personality_result_helper(void)
+{
+    return sf_runtime_test_exception_personality_result(_UA_SEARCH_PHASE, 0, 1) == _URC_HANDLER_FOUND and
+           sf_runtime_test_exception_personality_result(_UA_SEARCH_PHASE, 0, 0) == _URC_CONTINUE_UNWIND and
+           sf_runtime_test_exception_personality_result((_Unwind_Action)0, 0, 0) == _URC_CONTINUE_UNWIND and
+           sf_runtime_test_exception_personality_result((_Unwind_Action)(_UA_CLEANUP_PHASE | _UA_HANDLER_FRAME), 0, 0) == _URC_CONTINUE_UNWIND and
+           sf_runtime_test_exception_personality_result(_UA_CLEANUP_PHASE, 0, 0) == _URC_CONTINUE_UNWIND and
            sf_runtime_test_exception_personality_result(_UA_CLEANUP_PHASE, 1, 0) == _URC_INSTALL_CONTEXT;
 }
 
-static int case_exceptions_catch_id(void) {
+static int case_exceptions_catch_id(void)
+{
     int got = 0;
     @try {
         @throw SFW_NEW(ExceptionBase);
@@ -363,7 +399,8 @@ static int case_exceptions_catch_id(void) {
     return got == 1;
 }
 
-static int case_exceptions_typed_exact(void) {
+static int case_exceptions_typed_exact(void)
+{
     int got = 0;
     @try {
         @throw SFW_NEW(ExceptionBase);
@@ -379,7 +416,8 @@ static int case_exceptions_typed_exact(void) {
     return got == 1;
 }
 
-static int case_exceptions_typed_subclass(void) {
+static int case_exceptions_typed_subclass(void)
+{
     int got = 0;
     @try {
         @throw SFW_NEW(ExceptionChild);
@@ -395,7 +433,8 @@ static int case_exceptions_typed_subclass(void) {
     return got == 1;
 }
 
-static int case_exceptions_finally_runs(void) {
+static int case_exceptions_finally_runs(void)
+{
     int finally_flag = 0;
     @try {
         @throw SFW_NEW(ExceptionBase);
@@ -409,7 +448,8 @@ static int case_exceptions_finally_runs(void) {
     return finally_flag == 1;
 }
 
-static int case_exceptions_rethrow(void) {
+static int case_exceptions_rethrow(void)
+{
     int outer = 0;
     @try {
         @try {
@@ -427,12 +467,14 @@ static int case_exceptions_rethrow(void) {
     return outer == 1;
 }
 
-static int case_child_exceptions_uncaught_abort(void) {
+static int case_child_exceptions_uncaught_abort(void)
+{
     child_throw_uncaught(NULL);
     return 0;
 }
 
-static int case_exceptions_uncaught_abort(void) {
+static int case_exceptions_uncaught_abort(void)
+{
 #if defined(_WIN32)
     return sf_test_expect_signal_case("__child_exceptions_uncaught_abort", SIGABRT);
 #else
@@ -440,12 +482,14 @@ static int case_exceptions_uncaught_abort(void) {
 #endif
 }
 
-static int case_child_exceptions_throw_alloc_failure_abort(void) {
+static int case_child_exceptions_throw_alloc_failure_abort(void)
+{
     child_throw_alloc_failure(NULL);
     return 0;
 }
 
-static int case_exceptions_throw_alloc_failure_abort(void) {
+static int case_exceptions_throw_alloc_failure_abort(void)
+{
 #if defined(_WIN32)
     return sf_test_expect_signal_case("__child_exceptions_throw_alloc_failure_abort", SIGABRT);
 #else
@@ -453,12 +497,14 @@ static int case_exceptions_throw_alloc_failure_abort(void) {
 #endif
 }
 
-static int case_child_exceptions_direct_rethrow_abort(void) {
+static int case_child_exceptions_direct_rethrow_abort(void)
+{
     child_direct_rethrow(NULL);
     return 0;
 }
 
-static int case_exceptions_direct_rethrow_abort(void) {
+static int case_exceptions_direct_rethrow_abort(void)
+{
 #if defined(_WIN32)
     return sf_test_expect_signal_case("__child_exceptions_direct_rethrow_abort", SIGABRT);
 #else
@@ -466,12 +512,14 @@ static int case_exceptions_direct_rethrow_abort(void) {
 #endif
 }
 
-static int case_child_exceptions_invalid_encoding_abort(void) {
+static int case_child_exceptions_invalid_encoding_abort(void)
+{
     child_invalid_encoding_abort(NULL);
     return 0;
 }
 
-static int case_exceptions_invalid_encoding_abort(void) {
+static int case_exceptions_invalid_encoding_abort(void)
+{
 #if defined(_WIN32)
     return sf_test_expect_signal_case("__child_exceptions_invalid_encoding_abort", SIGABRT);
 #else
@@ -503,68 +551,79 @@ static const SFTestCase g_exception_cases[] = {
     {"__child_exceptions_invalid_encoding_abort", case_child_exceptions_invalid_encoding_abort},
 };
 #else
-static void child_stub_throw(void *ctx) {
+static void child_stub_throw(void *ctx)
+{
     (void)ctx;
     objc_exception_throw(nil);
 }
 
-static void child_stub_begin_catch(void *ctx) {
+static void child_stub_begin_catch(void *ctx)
+{
     (void)ctx;
     (void)objc_begin_catch(NULL);
 }
 
-static void child_stub_end_catch(void *ctx) {
+static void child_stub_end_catch(void *ctx)
+{
     (void)ctx;
     objc_end_catch();
 }
 
-static void child_stub_rethrow(void *ctx) {
+static void child_stub_rethrow(void *ctx)
+{
     (void)ctx;
     objc_exception_rethrow(NULL);
 }
 
-static void child_stub_personality(void *ctx) {
+static void child_stub_personality(void *ctx)
+{
     (void)ctx;
     (void)__gnustep_objc_personality_v0(0, (_Unwind_Action)0, 0, NULL, NULL);
 }
 
-static int case_child_exceptions_stub_throw(void) {
+static int case_child_exceptions_stub_throw(void)
+{
     child_stub_throw(NULL);
     return 0;
 }
 
-static int case_child_exceptions_stub_begin_catch(void) {
+static int case_child_exceptions_stub_begin_catch(void)
+{
     child_stub_begin_catch(NULL);
     return 0;
 }
 
-static int case_child_exceptions_stub_end_catch(void) {
+static int case_child_exceptions_stub_end_catch(void)
+{
     child_stub_end_catch(NULL);
     return 0;
 }
 
-static int case_child_exceptions_stub_rethrow(void) {
+static int case_child_exceptions_stub_rethrow(void)
+{
     child_stub_rethrow(NULL);
     return 0;
 }
 
-static int case_child_exceptions_stub_personality(void) {
+static int case_child_exceptions_stub_personality(void)
+{
     child_stub_personality(NULL);
     return 0;
 }
 
-static int case_exceptions_stubs_abort(void) {
+static int case_exceptions_stubs_abort(void)
+{
 #if defined(_WIN32)
-    return sf_test_expect_signal_case("__child_exceptions_stub_throw", SIGABRT) &&
-           sf_test_expect_signal_case("__child_exceptions_stub_begin_catch", SIGABRT) &&
-           sf_test_expect_signal_case("__child_exceptions_stub_end_catch", SIGABRT) &&
-           sf_test_expect_signal_case("__child_exceptions_stub_rethrow", SIGABRT) &&
+    return sf_test_expect_signal_case("__child_exceptions_stub_throw", SIGABRT) and
+           sf_test_expect_signal_case("__child_exceptions_stub_begin_catch", SIGABRT) and
+           sf_test_expect_signal_case("__child_exceptions_stub_end_catch", SIGABRT) and
+           sf_test_expect_signal_case("__child_exceptions_stub_rethrow", SIGABRT) and
            sf_test_expect_signal_case("__child_exceptions_stub_personality", SIGABRT);
 #else
-    return sf_test_expect_signal(child_stub_throw, NULL, SIGABRT) &&
-           sf_test_expect_signal(child_stub_begin_catch, NULL, SIGABRT) &&
-           sf_test_expect_signal(child_stub_end_catch, NULL, SIGABRT) &&
-           sf_test_expect_signal(child_stub_rethrow, NULL, SIGABRT) &&
+    return sf_test_expect_signal(child_stub_throw, NULL, SIGABRT) and
+           sf_test_expect_signal(child_stub_begin_catch, NULL, SIGABRT) and
+           sf_test_expect_signal(child_stub_end_catch, NULL, SIGABRT) and
+           sf_test_expect_signal(child_stub_rethrow, NULL, SIGABRT) and
            sf_test_expect_signal(child_stub_personality, NULL, SIGABRT);
 #endif
 }
@@ -579,7 +638,8 @@ static const SFTestCase g_exception_cases[] = {
 };
 #endif
 
-const SFTestCase *sf_runtime_exception_cases(size_t *count) {
+const SFTestCase *sf_runtime_exception_cases(size_t *count)
+{
     if (count != NULL) {
         *count = sizeof(g_exception_cases) / sizeof(g_exception_cases[0]);
     }

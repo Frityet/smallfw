@@ -36,14 +36,15 @@ end
 
 local function _configure_runtime_args(args)
     for _, key in ipairs({
-        "runtime_threadsafe",
-        "dispatch_backend",
-        "dispatch_stats",
-        "runtime_exceptions",
-        "runtime_reflection",
-        "runtime_validation",
-        "runtime_sanitize",
-        "runtime_slim_alloc",
+        "runtime-threadsafe",
+        "dispatch-backend",
+        "dispatch-stats",
+        "runtime-exceptions",
+        "runtime-reflection",
+        "runtime-forwarding",
+        "runtime-validation",
+        "runtime-sanitize",
+        "runtime-slim-alloc",
     }) do
         local value = task_helpers.config_value_string(option.get(key))
         if value ~= nil and value ~= "" then
@@ -60,7 +61,7 @@ local function _configure_args(builddir)
         "-p", _string_option("plat", "linux"),
         "-a", _string_option("arch", "x86_64"),
         "-o", builddir,
-        "--analysis_symbols=y",
+        "--analysis-symbols=y",
     }
     _configure_runtime_args(args)
     return args
@@ -203,13 +204,15 @@ local function _write_metadata(filename, run_dir, builddir, binary, case_name, i
             mode = _string_option("mode", "release"),
             plat = _string_option("plat", "linux"),
             arch = _string_option("arch", "x86_64"),
-            dispatch_backend = _string_option("dispatch_backend", nil),
-            runtime_threadsafe = _string_option("runtime_threadsafe", nil),
-            dispatch_stats = _string_option("dispatch_stats", nil),
-            runtime_exceptions = _string_option("runtime_exceptions", nil),
-            runtime_reflection = _string_option("runtime_reflection", nil),
-            runtime_slim_alloc = _string_option("runtime_slim_alloc", nil),
-            runtime_sanitize = _string_option("runtime_sanitize", nil),
+            ["dispatch-backend"] = _string_option("dispatch-backend", nil),
+            ["runtime-threadsafe"] = _string_option("runtime-threadsafe", nil),
+            ["dispatch-stats"] = _string_option("dispatch-stats", nil),
+            ["runtime-exceptions"] = _string_option("runtime-exceptions", nil),
+            ["runtime-reflection"] = _string_option("runtime-reflection", nil),
+            ["runtime-forwarding"] = _string_option("runtime-forwarding", nil),
+            ["runtime-validation"] = _string_option("runtime-validation", nil),
+            ["runtime-slim-alloc"] = _string_option("runtime-slim-alloc", nil),
+            ["runtime-sanitize"] = _string_option("runtime-sanitize", nil),
         },
         host = {
             host = os.host(),
@@ -226,13 +229,13 @@ end
 function main()
     local host_plat = os.host()
     if host_plat ~= "linux" then
-        raise("run_runtime_bench is only supported on Linux hosts.")
+        raise("run-runtime-bench is only supported on Linux hosts.")
     end
 
     local target_plat = _string_option("plat", "linux")
     local target_arch = _string_option("arch", "x86_64")
     if target_plat ~= "linux" or target_arch ~= "x86_64" then
-        raise("run_runtime_bench currently supports only --plat=linux --arch=x86_64.")
+        raise("run-runtime-bench currently supports only --plat=linux --arch=x86_64.")
     end
 
     local outroot = _string_option("outdir", path.join("build", "runtime-analysis", "bench"))
@@ -251,7 +254,7 @@ function main()
     local summary_txt = path.join(run_dir, "summary.txt")
     local metadata_json = path.join(run_dir, "metadata.json")
     local cases_csv = path.join(run_dir, "cases.csv")
-    local runtime_bench = path.absolute(task_helpers.target_binary(builddir, "runtime_bench", mode_name))
+    local runtime_bench = path.absolute(task_helpers.target_binary(builddir, "runtime-bench", mode_name))
     local sample_rows = {"sample,case,iters,total_ns,ns_per"}
     local sample_results = {}
 
@@ -260,8 +263,8 @@ function main()
     print(string.format("Configuring runtime benchmark build in %s", builddir))
     task_helpers.write_command_output(configure_log, "xmake", _configure_args(builddir))
 
-    print("Building runtime_bench")
-    task_helpers.write_command_output(build_log, "xmake", {"b", "runtime_bench"})
+    print("Building runtime-bench")
+    task_helpers.write_command_output(build_log, "xmake", {"b", "runtime-bench"})
 
     local bench_program, bench_list_args = task_helpers.pinned_command(runtime_bench, {"--list"})
     task_helpers.write_command_output(cases_csv, bench_program, bench_list_args)

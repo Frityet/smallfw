@@ -1,8 +1,8 @@
-task("run_runtime_profile")
+task("run-runtime-profile")
     set_category("tool")
     set_menu {
-        usage = "xmake run_runtime_profile [options]",
-        description = "Build an instrumented runtime_bench, capture profile artifacts, and record metadata.",
+        usage = "xmake run-runtime-profile [options]",
+        description = "Build an instrumented runtime-bench, capture profile artifacts, and record metadata.",
         options = smallfw_runtime_config_menu_options({
             {},
             {nil, "case", "kv", "dispatch_monomorphic_hot", "Benchmark case to profile."},

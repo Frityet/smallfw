@@ -1,5 +1,7 @@
 #include "runtime/sf_allocator.h"
 
+#include <iso646.h>
+
 #if defined(_WIN32)
 #include <malloc.h>
 #endif
@@ -22,7 +24,8 @@ enum {
 
 static __thread SFFreeNode_t *g_fast_alloc_bins[SF_FAST_ALLOC_BINS];
 
-static int is_valid_alignment(size_t align) {
+static int is_valid_alignment(size_t align)
+{
     if (align <= sizeof(void *)) {
         return 1;
     }
@@ -32,28 +35,30 @@ static int is_valid_alignment(size_t align) {
     return (align & (align - 1U)) == 0;
 }
 
-static size_t fast_bin_index(size_t size) {
-    if (size == 0 || size > SF_FAST_ALLOC_MAX) {
+static size_t fast_bin_index(size_t size)
+{
+    if (size == 0 or size > SF_FAST_ALLOC_MAX) {
         return (size_t)-1;
     }
     return (size - 1U) / SF_FAST_ALLOC_GRANULE;
 }
 
-static void *default_alloc(void *ctx, size_t size, size_t align) {
+static void *default_alloc(void *ctx, size_t size, size_t align)
+{
 #if !defined(_WIN32)
     void *ptr = NULL;
 #endif
     (void)ctx;
     if (align <= sizeof(void *)) {
         size_t bin = fast_bin_index(size);
-        if (bin != (size_t)-1 && g_fast_alloc_bins[bin] != NULL) {
+        if (bin != (size_t)-1 and g_fast_alloc_bins[bin] != NULL) {
             SFFreeNode_t *node = g_fast_alloc_bins[bin];
             g_fast_alloc_bins[bin] = node->next;
             return node;
         }
         return malloc(size);
     }
-    if (!is_valid_alignment(align)) {
+    if (not is_valid_alignment(align)) {
         return NULL;
     }
 #if defined(_WIN32)
@@ -66,7 +71,8 @@ static void *default_alloc(void *ctx, size_t size, size_t align) {
 #endif
 }
 
-static void default_free(void *ctx, void *ptr, size_t size, size_t align) {
+static void default_free(void *ctx, void *ptr, size_t size, size_t align)
+{
     (void)ctx;
     if (ptr == NULL) {
         return;
@@ -91,7 +97,8 @@ static void default_free(void *ctx, void *ptr, size_t size, size_t align) {
     free(ptr);
 }
 
-SFAllocator_t *sf_default_allocator(void) {
+SFAllocator_t *sf_default_allocator(void)
+{
     static SFAllocator_t allocator = {
         .alloc = default_alloc,
         .free = default_free,

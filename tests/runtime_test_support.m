@@ -33,8 +33,9 @@ static SFForwardSelector g_class_forwarded_value_sel = {"classForwardedValue:", 
 
 extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
 
-#if !defined(_WIN32)
-static void sf_test_flush_profile_and_reraise(int sig) {
+#if not defined(_WIN32)
+static void sf_test_flush_profile_and_reraise(int sig)
+{
     if (sf_test_llvm_profile_write_file != NULL) {
         (void)sf_test_llvm_profile_write_file();
     }
@@ -43,8 +44,9 @@ static void sf_test_flush_profile_and_reraise(int sig) {
 }
 #endif
 
-static void *sf_test_aligned_alloc(size_t size, size_t align) {
-#if !defined(_WIN32)
+static void *sf_test_aligned_alloc(size_t size, size_t align)
+{
+#if not defined(_WIN32)
     void *ptr = NULL;
 #endif
     if (align <= sizeof(void *)) {
@@ -60,7 +62,8 @@ static void *sf_test_aligned_alloc(size_t size, size_t align) {
 #endif
 }
 
-static void sf_test_aligned_free(void *ptr, size_t align) {
+static void sf_test_aligned_free(void *ptr, size_t align)
+{
 #if defined(_WIN32)
     if (align > sizeof(void *)) {
         _aligned_free(ptr);
@@ -73,19 +76,22 @@ static void sf_test_aligned_free(void *ptr, size_t align) {
 }
 
 @implementation CounterObject
-- (void)dealloc {
+- (void)dealloc
+{
     (void)__atomic_fetch_add(&g_counter_deallocs, 1, __ATOMIC_RELAXED);
 }
 @end
 
 @implementation SuperBase
-- (int)ping {
+- (int)ping
+{
     return 10;
 }
 @end
 
 @implementation SuperChild
-- (int)ping {
+- (int)ping
+{
     return [super ping] + 7;
 }
 @end
@@ -94,31 +100,37 @@ static void sf_test_aligned_free(void *ptr, size_t align) {
 @end
 
 @implementation HotDispatch
-- (int)calc:(int)x {
+- (int)calc:(int)x
+{
     return x + 1;
 }
 @end
 
 @implementation StructDispatchProbe
-- (SFTestPair)pairWithLeft:(int)left right:(int)right {
+- (SFTestPair)pairWithLeft:(int)left right:(int)right
+{
     SFTestPair pair = {.left = left, .right = right};
     return pair;
 }
 
-- (long long)sumPair:(SFTestPair)pair {
+- (long long)sumPair:(SFTestPair)pair
+{
     return (long long)pair.left + (long long)pair.right;
 }
 
-- (long long)sumBigStruct:(SFTestBigStruct)big bias:(long long)bias {
+- (long long)sumBigStruct:(SFTestBigStruct)big bias:(long long)bias
+{
     return big.first + big.second + big.third + big.fourth + bias;
 }
 
-- (SFTestWidePair)widePairWithSeed:(long long)seed {
+- (SFTestWidePair)widePairWithSeed:(long long)seed
+{
     SFTestWidePair pair = {.left = seed, .right = seed + 1};
     return pair;
 }
 
-- (SFTestBigStruct)bigStructWithSeed:(long long)seed {
+- (SFTestBigStruct)bigStructWithSeed:(long long)seed
+{
     SFTestBigStruct big = {
         .first = seed,
         .second = seed + 1,
@@ -129,7 +141,8 @@ static void sf_test_aligned_free(void *ptr, size_t align) {
 }
 @end
 
-static ForwardDispatchTarget *sf_test_forward_dispatch_target(void) {
+static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
+{
     static ForwardDispatchTarget *target = nil;
     if (target == nil) {
         target = SFW_NEW(ForwardDispatchTarget);
@@ -138,24 +151,28 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void) {
 }
 
 @implementation ForwardDispatchTarget
-- (int)forwardedValue:(int)x {
+- (int)forwardedValue:(int)x
+{
     return x + 100;
 }
 
-+ (int)classForwardedValue:(int)x {
++ (int)classForwardedValue:(int)x
+{
     return x + 200;
 }
 @end
 
 @implementation ForwardDispatchProxy
-- (id)forwardingTargetForSelector:(SEL)selector {
+- (id)forwardingTargetForSelector:(SEL)selector
+{
     if (sf_selector_equal(selector, (SEL)&g_forwarded_value_sel)) {
         return sf_test_forward_dispatch_target();
     }
     return nil;
 }
 
-+ (id)forwardingTargetForSelector:(SEL)selector {
++ (id)forwardingTargetForSelector:(SEL)selector
+{
     if (sf_selector_equal(selector, (SEL)&g_class_forwarded_value_sel)) {
         return objc_getClass("ForwardDispatchTarget");
     }
@@ -164,10 +181,12 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void) {
 @end
 
 @implementation ReflectionProbe
-+ (int)classPing {
++ (int)classPing
+{
     return 1;
 }
-- (int)instancePing {
+- (int)instancePing
+{
     return 2;
 }
 @end
@@ -180,16 +199,19 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void) {
 @end
 #endif
 
-void sf_test_reset_common_state(void) {
+void sf_test_reset_common_state(void)
+{
     __atomic_store_n(&g_counter_deallocs, 0, __ATOMIC_RELAXED);
     sf_runtime_test_reset_alloc_failures();
 }
 
-CounterObject *sf_test_factory_object(void) {
+CounterObject *sf_test_factory_object(void)
+{
     return SFW_NEW(CounterObject);
 }
 
-void *sf_test_counting_alloc(void *ctx, size_t size, size_t align) {
+void *sf_test_counting_alloc(void *ctx, size_t size, size_t align)
+{
     SFTestAllocatorCtx *state = (SFTestAllocatorCtx *)ctx;
     void *ptr = NULL;
 
@@ -205,7 +227,8 @@ void *sf_test_counting_alloc(void *ctx, size_t size, size_t align) {
     return ptr;
 }
 
-void sf_test_counting_free(void *ctx, void *ptr, size_t size, size_t align) {
+void sf_test_counting_free(void *ctx, void *ptr, size_t size, size_t align)
+{
     SFTestAllocatorCtx *state = (SFTestAllocatorCtx *)ctx;
     (void)size;
     (void)align;
@@ -216,7 +239,8 @@ void sf_test_counting_free(void *ctx, void *ptr, size_t size, size_t align) {
     sf_test_aligned_free(ptr, align);
 }
 
-SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *ctx) {
+SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *ctx)
+{
     SFAllocator_t allocator = {
         .alloc = sf_test_counting_alloc,
         .free = sf_test_counting_free,
@@ -225,7 +249,8 @@ SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *ctx) {
     return allocator;
 }
 
-int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal) {
+int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal)
+{
 #if defined(_WIN32)
     (void)fn;
     (void)ctx;
@@ -246,11 +271,12 @@ int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal) {
     if (waitpid(pid, &status, 0) != pid) {
         return 0;
     }
-    return WIFSIGNALED(status) && WTERMSIG(status) == expected_signal;
+    return WIFSIGNALED(status) and WTERMSIG(status) == expected_signal;
 #endif
 }
 
-int sf_test_expect_signal_case(const char *case_name, int expected_signal) {
+int sf_test_expect_signal_case(const char *case_name, int expected_signal)
+{
 #if defined(_WIN32)
     char exe_path[MAX_PATH];
     char command_line[1024];
@@ -259,7 +285,7 @@ int sf_test_expect_signal_case(const char *case_name, int expected_signal) {
     DWORD exit_code = 0;
 
     (void)expected_signal;
-    if (case_name == NULL || GetModuleFileNameA(NULL, exe_path, MAX_PATH) == 0) {
+    if (case_name == NULL or GetModuleFileNameA(NULL, exe_path, MAX_PATH) == 0) {
         return 0;
     }
 
@@ -270,7 +296,7 @@ int sf_test_expect_signal_case(const char *case_name, int expected_signal) {
         sizeof(command_line)) {
         return 0;
     }
-    if (!CreateProcessA(exe_path, command_line, NULL, NULL, FALSE, 0, NULL, NULL, &startup_info, &process_info)) {
+    if (not CreateProcessA(exe_path, command_line, NULL, NULL, FALSE, 0, NULL, NULL, &startup_info, &process_info)) {
         return 0;
     }
 
@@ -279,7 +305,7 @@ int sf_test_expect_signal_case(const char *case_name, int expected_signal) {
         CloseHandle(process_info.hProcess);
         return 0;
     }
-    if (!GetExitCodeProcess(process_info.hProcess, &exit_code)) {
+    if (not GetExitCodeProcess(process_info.hProcess, &exit_code)) {
         CloseHandle(process_info.hThread);
         CloseHandle(process_info.hProcess);
         return 0;

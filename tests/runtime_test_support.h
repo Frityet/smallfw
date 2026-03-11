@@ -90,7 +90,7 @@ extern int g_counter_deallocs;
 @end
 
 @interface ReflectionProbe : Object {
-@public
+  @public
     int _value;
 }
 + (int)classPing;

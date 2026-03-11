@@ -26,14 +26,15 @@ end
 
 local function _configure_runtime_args(args)
     for _, key in ipairs({
-        "runtime_threadsafe",
-        "dispatch_backend",
-        "dispatch_stats",
-        "runtime_exceptions",
-        "runtime_reflection",
-        "runtime_validation",
-        "runtime_sanitize",
-        "runtime_slim_alloc",
+        "runtime-threadsafe",
+        "dispatch-backend",
+        "dispatch-stats",
+        "runtime-exceptions",
+        "runtime-reflection",
+        "runtime-forwarding",
+        "runtime-validation",
+        "runtime-sanitize",
+        "runtime-slim-alloc",
     }) do
         local value = task_helpers.config_value_string(option.get(key))
         if value ~= nil and value ~= "" then
@@ -59,7 +60,7 @@ local function _configure_args(builddir, profiler)
         "-p", _string_option("plat", "linux"),
         "-a", _string_option("arch", "x86_64"),
         "-o", builddir,
-        "--analysis_symbols=y",
+        "--analysis-symbols=y",
         "--cflags=" .. compile_flags,
         "--cxflags=" .. compile_flags,
         "--mflags=" .. compile_flags,
@@ -150,13 +151,15 @@ local function _write_metadata(filename, run_dir, builddir, binary, profiler, ca
             mode = _string_option("mode", "debug"),
             plat = _string_option("plat", "linux"),
             arch = _string_option("arch", "x86_64"),
-            dispatch_backend = _string_option("dispatch_backend", nil),
-            runtime_threadsafe = _string_option("runtime_threadsafe", nil),
-            dispatch_stats = _string_option("dispatch_stats", nil),
-            runtime_exceptions = _string_option("runtime_exceptions", nil),
-            runtime_reflection = _string_option("runtime_reflection", nil),
-            runtime_slim_alloc = _string_option("runtime_slim_alloc", nil),
-            runtime_sanitize = _string_option("runtime_sanitize", nil),
+            ["dispatch-backend"] = _string_option("dispatch-backend", nil),
+            ["runtime-threadsafe"] = _string_option("runtime-threadsafe", nil),
+            ["dispatch-stats"] = _string_option("dispatch-stats", nil),
+            ["runtime-exceptions"] = _string_option("runtime-exceptions", nil),
+            ["runtime-reflection"] = _string_option("runtime-reflection", nil),
+            ["runtime-forwarding"] = _string_option("runtime-forwarding", nil),
+            ["runtime-validation"] = _string_option("runtime-validation", nil),
+            ["runtime-slim-alloc"] = _string_option("runtime-slim-alloc", nil),
+            ["runtime-sanitize"] = _string_option("runtime-sanitize", nil),
         },
         host = {
             host = os.host(),
@@ -216,13 +219,13 @@ end
 
 function main()
     if os.host() ~= "linux" then
-        raise("run_runtime_profile is only supported on Linux hosts.")
+        raise("run-runtime-profile is only supported on Linux hosts.")
     end
 
     local target_plat = _string_option("plat", "linux")
     local target_arch = _string_option("arch", "x86_64")
     if target_plat ~= "linux" or target_arch ~= "x86_64" then
-        raise("run_runtime_profile currently supports only --plat=linux --arch=x86_64.")
+        raise("run-runtime-profile currently supports only --plat=linux --arch=x86_64.")
     end
 
     local profiler = _select_profiler()
@@ -239,7 +242,7 @@ function main()
     local summary_json = path.join(run_dir, "summary.json")
     local summary_txt = path.join(run_dir, "summary.txt")
     local metadata_json = path.join(run_dir, "metadata.json")
-    local runtime_bench = path.absolute(task_helpers.target_binary(builddir, "runtime_bench", mode_name))
+    local runtime_bench = path.absolute(task_helpers.target_binary(builddir, "runtime-bench", mode_name))
     local artifacts = {
         configure_log = path.absolute(configure_log),
         build_log = path.absolute(build_log),
@@ -251,8 +254,8 @@ function main()
     print(string.format("Configuring instrumented profile build in %s", builddir))
     task_helpers.write_command_output(configure_log, "xmake", _configure_args(builddir, profiler))
 
-    print("Building instrumented runtime_bench")
-    task_helpers.write_command_output(build_log, "xmake", {"b", "runtime_bench"})
+    print("Building instrumented runtime-bench")
+    task_helpers.write_command_output(build_log, "xmake", {"b", "runtime-bench"})
 
     print(string.format("Running profiled benchmark case %s via %s", case_name, profiler))
     if profiler == "gprof" then
@@ -313,7 +316,7 @@ function main()
         end
     end
 
-    local backend = _string_option("dispatch_backend", "asm")
+    local backend = _string_option("dispatch-backend", "asm")
     local llvm_mca = find_tool("llvm-mca")
     if backend == "asm" and llvm_mca ~= nil and llvm_mca.program ~= nil then
         local asm_input = path.join(run_dir, "objc_msgSend.s")

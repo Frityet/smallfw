@@ -18,7 +18,8 @@ typedef struct ParentThreadCtx {
 } ParentThreadCtx;
 
 #if SF_RUNTIME_THREADSAFE
-static void *parent_thread_main(void *arg) {
+static void *parent_thread_main(void *arg)
+{
     ParentThreadCtx *ctx = (ParentThreadCtx *)arg;
 
     for (int i = 0; i < ctx->loops; ++i) {
@@ -34,7 +35,8 @@ static void *parent_thread_main(void *arg) {
 }
 #endif
 
-static int case_parent_group_inheritance(void) {
+static int case_parent_group_inheritance(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -43,21 +45,21 @@ static int case_parent_group_inheritance(void) {
     __unsafe_unretained CounterObject *root = [[CounterObject allocWithAllocator:&allocator] init];
     __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:root] init];
     __unsafe_unretained CounterObject *grandchild = [[CounterObject allocWithParent:child] init];
-    if (root == nil || child == nil || grandchild == nil) {
+    if (root == nil or child == nil or grandchild == nil) {
         return 0;
     }
 
     SFObjHeader_t *root_hdr = sf_header_from_object(root);
     SFObjHeader_t *child_hdr = sf_header_from_object(child);
     SFObjHeader_t *grandchild_hdr = sf_header_from_object(grandchild);
-    int ok = root_hdr != NULL &&
-             child_hdr != NULL &&
-             grandchild_hdr != NULL &&
-             sf_header_group_root(child_hdr) == root_hdr &&
-             sf_header_group_root(grandchild_hdr) == root_hdr &&
-             sf_header_group_live_count(root_hdr) == 3 &&
-             child.parent == root &&
-             grandchild.parent == child &&
+    int ok = root_hdr != NULL and
+             child_hdr != NULL and
+             grandchild_hdr != NULL and
+             sf_header_group_root(child_hdr) == root_hdr and
+             sf_header_group_root(grandchild_hdr) == root_hdr and
+             sf_header_group_live_count(root_hdr) == 3 and
+             child.parent == root and
+             grandchild.parent == child and
              root.parent == nil;
 
     objc_release(grandchild);
@@ -66,7 +68,8 @@ static int case_parent_group_inheritance(void) {
     return ok;
 }
 
-static int case_parent_allocator_propagation(void) {
+static int case_parent_allocator_propagation(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -74,29 +77,30 @@ static int case_parent_allocator_propagation(void) {
 
     __unsafe_unretained CounterObject *root = [[CounterObject allocWithAllocator:&allocator] init];
     __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:root] init];
-    if (root == nil || child == nil) {
+    if (root == nil or child == nil) {
         return 0;
     }
 
-    int ok = [root allocator] == &allocator && [child allocator] == &allocator;
+    int ok = [root allocator] == &allocator and [child allocator] == &allocator;
     objc_release(child);
     objc_release(root);
     return ok;
 }
 
-static int case_parent_getter_lifecycle(void) {
+static int case_parent_getter_lifecycle(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
     __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:root] init];
-    if (child == nil || child.parent != root) {
+    if (child == nil or child.parent != root) {
         objc_release(child);
         objc_release(root);
         return 0;
     }
 
     objc_release(root);
-    if (child.parent != nil || g_counter_deallocs != 1) {
+    if (child.parent != nil or g_counter_deallocs != 1) {
         objc_release(child);
         return 0;
     }
@@ -105,7 +109,8 @@ static int case_parent_getter_lifecycle(void) {
     return g_counter_deallocs == 2;
 }
 
-static int case_parent_child_outlives_parent(void) {
+static int case_parent_child_outlives_parent(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -119,17 +124,18 @@ static int case_parent_child_outlives_parent(void) {
     }
 
     objc_release(root);
-    if (ctx.free_calls != 0 || g_counter_deallocs != 1) {
+    if (ctx.free_calls != 0 or g_counter_deallocs != 1) {
         objc_release(child);
         return 0;
     }
 
     (void)[child hash];
     objc_release(child);
-    return ctx.free_calls == 2 && ctx.active_blocks == 0 && g_counter_deallocs == 2;
+    return ctx.free_calls == 2 and ctx.active_blocks == 0 and g_counter_deallocs == 2;
 }
 
-static int case_parent_group_frees_on_last_release(void) {
+static int case_parent_group_frees_on_last_release(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -143,23 +149,24 @@ static int case_parent_group_frees_on_last_release(void) {
     }
 
     objc_release(child);
-    if (ctx.free_calls != 0 || g_counter_deallocs != 1) {
+    if (ctx.free_calls != 0 or g_counter_deallocs != 1) {
         objc_release(grandchild);
         objc_release(root);
         return 0;
     }
 
     objc_release(root);
-    if (ctx.free_calls != 0 || g_counter_deallocs != 2) {
+    if (ctx.free_calls != 0 or g_counter_deallocs != 2) {
         objc_release(grandchild);
         return 0;
     }
 
     objc_release(grandchild);
-    return ctx.free_calls == 3 && ctx.active_blocks == 0 && g_counter_deallocs == 3;
+    return ctx.free_calls == 3 and ctx.active_blocks == 0 and g_counter_deallocs == 3;
 }
 
-static int case_parent_nested_allocation_same_root(void) {
+static int case_parent_nested_allocation_same_root(void)
+{
     sf_test_reset_common_state();
 
     SFTestAllocatorCtx ctx = {0};
@@ -183,15 +190,16 @@ static int case_parent_nested_allocation_same_root(void) {
     }
 
     SFObjHeader_t *great_hdr = sf_header_from_object(great_grandchild);
-    int ok = great_hdr != NULL && sf_header_group_root(great_hdr) == root_hdr;
+    int ok = great_hdr != NULL and sf_header_group_root(great_hdr) == root_hdr;
 
     objc_release(great_grandchild);
     objc_release(grandchild);
     objc_release(child);
-    return ok && ctx.free_calls == 4 && ctx.active_blocks == 0;
+    return ok and ctx.free_calls == 4 and ctx.active_blocks == 0;
 }
 
-static int case_parent_alloc_with_nil_parent(void) {
+static int case_parent_alloc_with_nil_parent(void)
+{
     sf_test_reset_common_state();
 
 #if defined(__clang__)
@@ -207,12 +215,13 @@ static int case_parent_alloc_with_nil_parent(void) {
     }
 
     SFObjHeader_t *hdr = sf_header_from_object(obj);
-    int ok = hdr != NULL && sf_header_group_root(hdr) == hdr && obj.parent == nil;
+    int ok = hdr != NULL and sf_header_group_root(hdr) == hdr and obj.parent == nil;
     objc_release(obj);
     return ok;
 }
 
-static int case_parent_dead_parent_rejects_new_child(void) {
+static int case_parent_dead_parent_rejects_new_child(void)
+{
     sf_test_reset_common_state();
 
     __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
@@ -223,34 +232,36 @@ static int case_parent_dead_parent_rejects_new_child(void) {
     }
 
     objc_release(root);
-    #if SF_RUNTIME_EXCEPTIONS
+#if SF_RUNTIME_EXCEPTIONS
     int threw = 0;
     @try {
         (void)[[CounterObject allocWithParent:root] init];
     }
     @catch (AllocationFailedException *e) {
-        threw = e != nil && e.exceptionBacktraceCount > 0;
+        threw = e != nil and e.exceptionBacktraceCount > 0;
     }
-    if (!threw) {
+    if (not threw) {
         objc_release(child);
         return 0;
     }
-    #else
+#else
     if ([[CounterObject allocWithParent:root] init] != nil) {
         objc_release(child);
         return 0;
     }
-    #endif
+#endif
 
     objc_release(child);
     return g_counter_deallocs == 2;
 }
 
-static int case_parent_concurrent_alloc_release(void) {
+static int case_parent_concurrent_alloc_release(void)
+{
 #if SF_RUNTIME_THREADSAFE
     sf_test_reset_common_state();
 
-    enum { thread_count = 4, loops_per_thread = 2000 };
+    enum { thread_count = 4,
+           loops_per_thread = 2000 };
     pthread_t threads[thread_count];
     ParentThreadCtx ctx[thread_count];
 
@@ -270,7 +281,7 @@ static int case_parent_concurrent_alloc_release(void) {
     }
 
     for (int i = 0; i < thread_count; ++i) {
-        if (pthread_join(threads[i], NULL) != 0 || !ctx[i].ok) {
+        if (pthread_join(threads[i], NULL) != 0 or not ctx[i].ok) {
             objc_release(root);
             return 0;
         }
@@ -295,7 +306,8 @@ static const SFTestCase g_parent_cases[] = {
     {"parent_concurrent_alloc_release", case_parent_concurrent_alloc_release},
 };
 
-const SFTestCase *sf_runtime_parent_cases(size_t *count) {
+const SFTestCase *sf_runtime_parent_cases(size_t *count)
+{
     if (count != NULL) {
         *count = sizeof(g_parent_cases) / sizeof(g_parent_cases[0]);
     }

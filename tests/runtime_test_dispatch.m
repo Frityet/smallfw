@@ -25,7 +25,8 @@ typedef struct SFTestSelector {
 } SFTestSelector;
 
 #if SF_RUNTIME_THREADSAFE
-static void *dispatch_thread_main(void *arg) {
+static void *dispatch_thread_main(void *arg)
+{
     DispatchThreadCtx *ctx = (DispatchThreadCtx *)arg;
     long long sum = 0;
 
@@ -55,21 +56,24 @@ typedef struct SFTestDispatchBundle {
 static int g_probe_argc = 0;
 static uintptr_t g_probe_values[4] = {0, 0, 0, 0};
 
-static id probe0(id self, SEL cmd) {
+static id probe0(id self, SEL cmd)
+{
     (void)cmd;
     g_probe_argc = 0;
     memset(g_probe_values, 0, sizeof(g_probe_values));
     return self;
 }
 
-static id probe1(id self, SEL cmd, uintptr_t a0) {
+static id probe1(id self, SEL cmd, uintptr_t a0)
+{
     (void)cmd;
     g_probe_argc = 1;
     g_probe_values[0] = a0;
     return self;
 }
 
-static id probe2(id self, SEL cmd, uintptr_t a0, uintptr_t a1) {
+static id probe2(id self, SEL cmd, uintptr_t a0, uintptr_t a1)
+{
     (void)cmd;
     g_probe_argc = 2;
     g_probe_values[0] = a0;
@@ -77,7 +81,8 @@ static id probe2(id self, SEL cmd, uintptr_t a0, uintptr_t a1) {
     return self;
 }
 
-static id probe3(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2) {
+static id probe3(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2)
+{
     (void)cmd;
     g_probe_argc = 3;
     g_probe_values[0] = a0;
@@ -86,7 +91,8 @@ static id probe3(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2) {
     return self;
 }
 
-static id probe4(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) {
+static id probe4(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
     (void)cmd;
     g_probe_argc = 4;
     g_probe_values[0] = a0;
@@ -119,7 +125,8 @@ static SFTestSelector g_c_empty = {"takeEmpty", ""};
 static SFTestSelector g_c_null_types = {"takeNullTypes", NULL};
 static SFTestSelector g_c_unsupported = {"takeDouble:", "@24@0:8d16"};
 
-static SFTestDispatchBundle *dispatch_bundle(void) {
+static SFTestDispatchBundle *dispatch_bundle(void)
+{
     static SFTestDispatchBundle bundle;
     static int initialized = 0;
     if (initialized) {
@@ -159,7 +166,8 @@ static SFTestDispatchBundle *dispatch_bundle(void) {
 }
 #endif
 
-static int case_dispatch_cache_warm_hits(void) {
+static int case_dispatch_cache_warm_hits(void)
+{
     sf_dispatch_reset_stats();
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
     int sum = 0;
@@ -171,25 +179,27 @@ static int case_dispatch_cache_warm_hits(void) {
     objc_release(obj);
 #if SF_DISPATCH_STATS
     (void)sum;
-    return sf_dispatch_cache_hits() > sf_dispatch_cache_misses() && sf_dispatch_method_walks() > 0;
+    return sf_dispatch_cache_hits() > sf_dispatch_cache_misses() and sf_dispatch_method_walks() > 0;
 #else
     return sum == ((2000 * 2001) / 2);
 #endif
 }
 
-static int case_dispatch_super_lookup(void) {
+static int case_dispatch_super_lookup(void)
+{
     __unsafe_unretained SuperChild *obj = SFW_NEW(SuperChild);
     int ok = [obj ping] == 17;
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_lookup_nil_paths(void) {
+static int case_dispatch_lookup_nil_paths(void)
+{
     static SFTestSelector ping_sel = {"ping", "i16@0:8"};
     static SFTestSelector missing_sel = {"missing", "@16@0:8"};
 
     IMP nil_receiver_imp = sf_lookup_imp(nil, (SEL)&ping_sel);
-    if (nil_receiver_imp == NULL || objc_msgSend(nil, (SEL)&ping_sel) != nil) {
+    if (nil_receiver_imp == NULL or objc_msgSend(nil, (SEL)&ping_sel) != nil) {
         return 0;
     }
     if (sf_lookup_imp_in_class(NULL, (SEL)&ping_sel) != NULL) {
@@ -205,59 +215,63 @@ static int case_dispatch_lookup_nil_paths(void) {
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
     IMP nil_sel_imp = sf_lookup_imp(obj, NULL);
     IMP missing_imp = sf_lookup_imp(obj, (SEL)&missing_sel);
-    int ok = nil_sel_imp != NULL &&
-             objc_msgSend(obj, NULL) == nil &&
-             missing_imp != NULL &&
+    int ok = nil_sel_imp != NULL and
+             objc_msgSend(obj, NULL) == nil and
+             missing_imp != NULL and
              objc_msgSend(obj, (SEL)&missing_sel) == nil;
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_selector_equality(void) {
+static int case_dispatch_selector_equality(void)
+{
     static SFTestSelector a = {"value", "@16@0:8"};
     static SFTestSelector b = {"value", "@16@0:8"};
     static SFTestSelector c = {"value", NULL};
     static SFTestSelector d = {"other", "@16@0:8"};
     static SFTestSelector e = {NULL, "@16@0:8"};
 
-    return sf_selector_equal((SEL)&a, (SEL)&a) &&
-           sf_selector_equal((SEL)&a, (SEL)&b) &&
-           sf_selector_equal((SEL)&a, (SEL)&c) &&
-           !sf_selector_equal((SEL)&a, (SEL)&e) &&
-           !sf_selector_equal((SEL)&a, (SEL)&d) &&
-           !sf_selector_equal((SEL)&a, NULL) &&
+    return sf_selector_equal((SEL)&a, (SEL)&a) and
+           sf_selector_equal((SEL)&a, (SEL)&b) and
+           sf_selector_equal((SEL)&a, (SEL)&c) and
+           not sf_selector_equal((SEL)&a, (SEL)&e) and
+           not sf_selector_equal((SEL)&a, (SEL)&d) and
+           not sf_selector_equal((SEL)&a, NULL) and
            sf_selector_equal(NULL, NULL);
 }
 
-static int case_dispatch_msg_lookup_super_nil_paths(void) {
+static int case_dispatch_msg_lookup_super_nil_paths(void)
+{
     static SFTestSelector ping_sel = {"ping", "i16@0:8"};
     struct sf_objc_super nil_super = {.self = nil, .super_class = NULL};
 
     IMP imp0 = objc_msg_lookup_super(NULL, (SEL)&ping_sel);
     IMP imp1 = objc_msg_lookup_super(&nil_super, (SEL)&ping_sel);
     IMP imp2 = objc_msg_lookup_super(&nil_super, NULL);
-    return imp0 != NULL &&
-           imp1 != NULL &&
+    return imp0 != NULL and
+           imp1 != NULL and
            imp2 != NULL;
 }
 
-static int case_dispatch_cache_nil_imp(void) {
+static int case_dispatch_cache_nil_imp(void)
+{
     static SFTestSelector missing_sel = {"missingDispatch", "@16@0:8"};
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
     IMP imp0 = sf_lookup_imp(obj, (SEL)&missing_sel);
     IMP imp1 = sf_lookup_imp(obj, (SEL)&missing_sel);
-    int ok = imp0 != NULL &&
-             imp1 != NULL &&
+    int ok = imp0 != NULL and
+             imp1 != NULL and
              objc_msgSend(obj, (SEL)&missing_sel) == nil;
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_stats_accessors(void) {
+static int case_dispatch_stats_accessors(void)
+{
     static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
 
     sf_dispatch_reset_stats();
-    if (sf_dispatch_cache_hits() != 0 || sf_dispatch_cache_misses() != 0 || sf_dispatch_method_walks() != 0) {
+    if (sf_dispatch_cache_hits() != 0 or sf_dispatch_cache_misses() != 0 or sf_dispatch_method_walks() != 0) {
         return 0;
     }
 
@@ -269,25 +283,28 @@ static int case_dispatch_stats_accessors(void) {
     (void)sf_lookup_imp(obj, (SEL)&calc_sel);
 
 #if SF_DISPATCH_STATS
-    int ok = sf_dispatch_cache_hits() > 0 && sf_dispatch_cache_misses() > 0 && sf_dispatch_method_walks() > 0;
+    int ok = sf_dispatch_cache_hits() > 0 and sf_dispatch_cache_misses() > 0 and sf_dispatch_method_walks() > 0;
 #else
-    int ok = sf_dispatch_cache_hits() == 0 && sf_dispatch_cache_misses() == 0 && sf_dispatch_method_walks() == 0;
+    int ok = sf_dispatch_cache_hits() == 0 and sf_dispatch_cache_misses() == 0 and sf_dispatch_method_walks() == 0;
 #endif
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_fake_object_null_class(void) {
+static int case_dispatch_fake_object_null_class(void)
+{
     static SFTestSelector ping_sel = {"ping", "i16@0:8"};
     Class fake_cls = Nil;
     id fake = (id)&fake_cls;
     IMP imp = sf_lookup_imp(fake, (SEL)&ping_sel);
-    return imp != NULL && objc_msgSend(fake, (SEL)&ping_sel) == nil;
+    return imp != NULL and objc_msgSend(fake, (SEL)&ping_sel) == nil;
 }
 
-static int case_dispatch_concurrent_cache(void) {
+static int case_dispatch_concurrent_cache(void)
+{
 #if SF_RUNTIME_THREADSAFE
-    enum { thread_count = 4, loops_per_thread = 50000 };
+    enum { thread_count = 4,
+           loops_per_thread = 50000 };
     pthread_t threads[thread_count];
     DispatchThreadCtx ctx[thread_count];
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
@@ -319,47 +336,54 @@ static int case_dispatch_concurrent_cache(void) {
 #endif
 }
 
-static int case_dispatch_c_msgsend_signatures(void) {
+static int case_dispatch_c_msgsend_signatures(void)
+{
 #ifdef SF_DISPATCH_BACKEND_C
     SFTestDispatchBundle *bundle = dispatch_bundle();
 
     __unsafe_unretained Object *obj = (Object *)sf_alloc_object((Class)&bundle->cls, NULL);
     int array_values[4] = {1, 2, 3, 4};
-    struct { int left; int right; } pair = {5, 6};
-    union { int left; int right; } either = {.left = 7};
+    struct {
+        int left;
+        int right;
+    } pair = {5, 6};
+    union {
+        int left;
+        int right;
+    } either = {.left = 7};
 
     if (objc_msgSend(obj, (SEL)&g_c_zero) != obj) {
         sf_object_dispose(obj);
         return 0;
     }
-    if (objc_msgSend(obj, (SEL)&g_c_i, 11) != obj || g_probe_argc != 1 || g_probe_values[0] != 11U) {
+    if (objc_msgSend(obj, (SEL)&g_c_i, 11) != obj or g_probe_argc != 1 or g_probe_values[0] != 11U) {
         sf_object_dispose(obj);
         return 0;
     }
-    if (objc_msgSend(obj, (SEL)&g_c_Iq, 12U, 13LL) != obj || g_probe_argc != 2) {
+    if (objc_msgSend(obj, (SEL)&g_c_Iq, 12U, 13LL) != obj or g_probe_argc != 2) {
         sf_object_dispose(obj);
         return 0;
     }
-    if (objc_msgSend(obj, (SEL)&g_c_QstarSel, 14ULL, "hello", (SEL)&g_c_zero) != obj || g_probe_argc != 3) {
+    if (objc_msgSend(obj, (SEL)&g_c_QstarSel, 14ULL, "hello", (SEL)&g_c_zero) != obj or g_probe_argc != 3) {
         sf_object_dispose(obj);
         return 0;
     }
-    if (objc_msgSend(obj, (SEL)&g_c_objClassPtrConst, obj, (Class)&bundle->cls, (void *)&pair, "const") != obj ||
+    if (objc_msgSend(obj, (SEL)&g_c_objClassPtrConst, obj, (Class)&bundle->cls, (void *)&pair, "const") != obj or
         g_probe_argc != 4) {
         sf_object_dispose(obj);
         return 0;
     }
-    if (objc_msgSend(obj, (SEL)&g_c_char, 'a') != obj ||
-        objc_msgSend(obj, (SEL)&g_c_short, (short)2) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_bool, 1) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_C, (unsigned int)3) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_S, (unsigned int)4) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_long, (long)5) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_ulong, (unsigned long)6) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_pointer, (void *)&pair) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_struct, (void *)&pair) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_union, (void *)&either) != obj ||
-        objc_msgSend(obj, (SEL)&g_c_array, (void *)array_values) != obj ||
+    if (objc_msgSend(obj, (SEL)&g_c_char, 'a') != obj or
+        objc_msgSend(obj, (SEL)&g_c_short, (short)2) != obj or
+        objc_msgSend(obj, (SEL)&g_c_bool, 1) != obj or
+        objc_msgSend(obj, (SEL)&g_c_C, (unsigned int)3) != obj or
+        objc_msgSend(obj, (SEL)&g_c_S, (unsigned int)4) != obj or
+        objc_msgSend(obj, (SEL)&g_c_long, (long)5) != obj or
+        objc_msgSend(obj, (SEL)&g_c_ulong, (unsigned long)6) != obj or
+        objc_msgSend(obj, (SEL)&g_c_pointer, (void *)&pair) != obj or
+        objc_msgSend(obj, (SEL)&g_c_struct, (void *)&pair) != obj or
+        objc_msgSend(obj, (SEL)&g_c_union, (void *)&either) != obj or
+        objc_msgSend(obj, (SEL)&g_c_array, (void *)array_values) != obj or
         objc_msgSend(obj, (SEL)&g_c_block, (void *)bundle) != obj) {
         sf_object_dispose(obj);
         return 0;
@@ -372,7 +396,8 @@ static int case_dispatch_c_msgsend_signatures(void) {
 #endif
 }
 
-static int case_dispatch_c_msgsend_unsupported_float(void) {
+static int case_dispatch_c_msgsend_unsupported_float(void)
+{
 #ifdef SF_DISPATCH_BACKEND_C
     SFTestDispatchBundle *bundle = dispatch_bundle();
 
@@ -380,13 +405,14 @@ static int case_dispatch_c_msgsend_unsupported_float(void) {
     g_probe_argc = 0;
     id result = objc_msgSend(obj, (SEL)&g_c_unsupported, 1.25);
     sf_object_dispose(obj);
-    return result == nil && g_probe_argc == 0;
+    return result == nil and g_probe_argc == 0;
 #else
     return 1;
 #endif
 }
 
-static int case_dispatch_c_msgsend_parser_edges(void) {
+static int case_dispatch_c_msgsend_parser_edges(void)
+{
 #ifdef SF_DISPATCH_BACKEND_C
     if (objc_msgSend(nil, NULL) != nil) {
         return 0;
@@ -409,7 +435,8 @@ static int case_dispatch_c_msgsend_parser_edges(void) {
 #endif
 }
 
-static int case_dispatch_c_internal_helpers(void) {
+static int case_dispatch_c_internal_helpers(void)
+{
 #ifdef SF_DISPATCH_BACKEND_C
     char codes[4] = {0, 0, 0, 0};
     int unsupported = -1;
@@ -417,51 +444,51 @@ static int case_dispatch_c_internal_helpers(void) {
     SEL zero_sel = (SEL)&g_c_zero;
     Class zero_class = (Class)&g_c_zero;
 
-    if (!sf_runtime_test_dispatch_is_digit_char('7') || sf_runtime_test_dispatch_is_digit_char('x')) {
+    if (not sf_runtime_test_dispatch_is_digit_char('7') or sf_runtime_test_dispatch_is_digit_char('x')) {
         return 0;
     }
-    if (!sf_runtime_test_dispatch_is_type_qualifier('r') || sf_runtime_test_dispatch_is_type_qualifier('x')) {
+    if (not sf_runtime_test_dispatch_is_type_qualifier('r') or sf_runtime_test_dispatch_is_type_qualifier('x')) {
         return 0;
     }
-    if (*sf_runtime_test_dispatch_skip_type_token("r^i") != '\0' ||
-        *sf_runtime_test_dispatch_skip_type_token("{Pair=ii}") != '\0' ||
-        *sf_runtime_test_dispatch_skip_type_token("(Either=ii)") != '\0' ||
-        *sf_runtime_test_dispatch_skip_type_token("[4i]") != '\0' ||
-        *sf_runtime_test_dispatch_skip_type_token("@?") != '\0' ||
+    if (*sf_runtime_test_dispatch_skip_type_token("r^i") != '\0' or
+        *sf_runtime_test_dispatch_skip_type_token("{Pair=ii}") != '\0' or
+        *sf_runtime_test_dispatch_skip_type_token("(Either=ii)") != '\0' or
+        *sf_runtime_test_dispatch_skip_type_token("[4i]") != '\0' or
+        *sf_runtime_test_dispatch_skip_type_token("@?") != '\0' or
         *sf_runtime_test_dispatch_skip_type_token("i") != '\0') {
         return 0;
     }
-    if (sf_runtime_test_dispatch_primary_type_code("r^i") != '^' ||
+    if (sf_runtime_test_dispatch_primary_type_code("r^i") != '^' or
         sf_runtime_test_dispatch_primary_type_code("i") != 'i') {
         return 0;
     }
 
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(NULL, codes, &unsupported) != 0 || unsupported != 0) {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(NULL, codes, &unsupported) != 0 or unsupported != 0) {
         return 0;
     }
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_null_types, codes, &unsupported) != 0 ||
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_null_types, codes, &unsupported) != 0 or
         unsupported != 0) {
         return 0;
     }
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_empty, codes, &unsupported) != 0 ||
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_empty, codes, &unsupported) != 0 or
         unsupported != 0) {
         return 0;
     }
     memset(codes, 0, sizeof(codes));
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 ||
-        codes[0] != '@' || codes[1] != '#' || codes[2] != '^' || codes[3] != '*') {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 or
+        codes[0] != '@' or codes[1] != '#' or codes[2] != '^' or codes[3] != '*') {
         return 0;
     }
     unsupported = 0;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_unsupported, codes, &unsupported) != 0 ||
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_unsupported, codes, &unsupported) != 0 or
         unsupported == 0) {
         return 0;
     }
     unsupported = 0;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_many, codes, &unsupported) != 4 ||
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_many, codes, &unsupported) != 4 or
         unsupported == 0) {
         return 0;
     }
@@ -470,33 +497,33 @@ static int case_dispatch_c_internal_helpers(void) {
         return 0;
     }
     memset(codes, 0, sizeof(codes));
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 ||
-        codes[0] != '@' || codes[1] != '#' || codes[2] != '^' || codes[3] != '*') {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 or
+        codes[0] != '@' or codes[1] != '#' or codes[2] != '^' or codes[3] != '*') {
         return 0;
     }
     if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(NULL, codes, &unsupported) != 0) {
         return 0;
     }
 
-    if (sf_runtime_test_dispatch_read_word_arg('c', 11) != (uintptr_t)11 ||
-        sf_runtime_test_dispatch_read_word_arg('s', 12) != (uintptr_t)12 ||
-        sf_runtime_test_dispatch_read_word_arg('i', 13) != (uintptr_t)13 ||
-        sf_runtime_test_dispatch_read_word_arg('B', 1) != (uintptr_t)1 ||
-        sf_runtime_test_dispatch_read_word_arg('C', (unsigned int)14) != (uintptr_t)14 ||
-        sf_runtime_test_dispatch_read_word_arg('S', (unsigned int)15) != (uintptr_t)15 ||
-        sf_runtime_test_dispatch_read_word_arg('I', (unsigned int)16) != (uintptr_t)16 ||
-        sf_runtime_test_dispatch_read_word_arg('l', (long)17) != (uintptr_t)17 ||
-        sf_runtime_test_dispatch_read_word_arg('L', (unsigned long)18) != (uintptr_t)18 ||
-        sf_runtime_test_dispatch_read_word_arg('q', (long long)19) != (uintptr_t)19 ||
-        sf_runtime_test_dispatch_read_word_arg('Q', (unsigned long long)20) != (uintptr_t)20 ||
-        sf_runtime_test_dispatch_read_word_arg('*', ptr_arg) != (uintptr_t)(const void *)ptr_arg ||
-        sf_runtime_test_dispatch_read_word_arg(':', zero_sel) != (uintptr_t)(const void *)zero_sel ||
-        sf_runtime_test_dispatch_read_word_arg('@', nil) != (uintptr_t)nil ||
-        sf_runtime_test_dispatch_read_word_arg('#', zero_class) != (uintptr_t)(const void *)zero_class ||
-        sf_runtime_test_dispatch_read_word_arg('^', (void *)&codes) != (uintptr_t)(void *)&codes ||
-        sf_runtime_test_dispatch_read_word_arg('[', (void *)&codes) != (uintptr_t)(void *)&codes ||
-        sf_runtime_test_dispatch_read_word_arg('(', (void *)&codes) != (uintptr_t)(void *)&codes ||
-        sf_runtime_test_dispatch_read_word_arg('{', (void *)&codes) != (uintptr_t)(void *)&codes ||
+    if (sf_runtime_test_dispatch_read_word_arg('c', 11) != (uintptr_t)11 or
+        sf_runtime_test_dispatch_read_word_arg('s', 12) != (uintptr_t)12 or
+        sf_runtime_test_dispatch_read_word_arg('i', 13) != (uintptr_t)13 or
+        sf_runtime_test_dispatch_read_word_arg('B', 1) != (uintptr_t)1 or
+        sf_runtime_test_dispatch_read_word_arg('C', (unsigned int)14) != (uintptr_t)14 or
+        sf_runtime_test_dispatch_read_word_arg('S', (unsigned int)15) != (uintptr_t)15 or
+        sf_runtime_test_dispatch_read_word_arg('I', (unsigned int)16) != (uintptr_t)16 or
+        sf_runtime_test_dispatch_read_word_arg('l', (long)17) != (uintptr_t)17 or
+        sf_runtime_test_dispatch_read_word_arg('L', (unsigned long)18) != (uintptr_t)18 or
+        sf_runtime_test_dispatch_read_word_arg('q', (long long)19) != (uintptr_t)19 or
+        sf_runtime_test_dispatch_read_word_arg('Q', (unsigned long long)20) != (uintptr_t)20 or
+        sf_runtime_test_dispatch_read_word_arg('*', ptr_arg) != (uintptr_t)(const void *)ptr_arg or
+        sf_runtime_test_dispatch_read_word_arg(':', zero_sel) != (uintptr_t)(const void *)zero_sel or
+        sf_runtime_test_dispatch_read_word_arg('@', nil) != (uintptr_t)nil or
+        sf_runtime_test_dispatch_read_word_arg('#', zero_class) != (uintptr_t)(const void *)zero_class or
+        sf_runtime_test_dispatch_read_word_arg('^', (void *)&codes) != (uintptr_t)(void *)&codes or
+        sf_runtime_test_dispatch_read_word_arg('[', (void *)&codes) != (uintptr_t)(void *)&codes or
+        sf_runtime_test_dispatch_read_word_arg('(', (void *)&codes) != (uintptr_t)(void *)&codes or
+        sf_runtime_test_dispatch_read_word_arg('{', (void *)&codes) != (uintptr_t)(void *)&codes or
         sf_runtime_test_dispatch_read_word_arg('?', (void *)&codes) != (uintptr_t)(void *)&codes) {
         return 0;
     }
@@ -506,7 +533,8 @@ static int case_dispatch_c_internal_helpers(void) {
 #endif
 }
 
-static int case_dispatch_struct_params(void) {
+static int case_dispatch_struct_params(void)
+{
     __unsafe_unretained StructDispatchProbe *obj = SFW_NEW(StructDispatchProbe);
     SFTestPair pair = {0, 0};
     SFTestBigStruct big = {0, 0, 0, 0};
@@ -518,15 +546,17 @@ static int case_dispatch_struct_params(void) {
 
     pair = [obj pairWithLeft:5 right:9];
     big = (SFTestBigStruct){.first = 1, .second = 2, .third = 3, .fourth = 4};
-    ok = pair.left == 5 &&
-         pair.right == 9 &&
-         [obj sumPair:(SFTestPair){.left = 7, .right = 11}] == 18 &&
-         [obj sumBigStruct:big bias:10] == 20;
+    ok = pair.left == 5 and
+         pair.right == 9 and
+         [obj sumPair:(SFTestPair){.left = 7, .right = 11}] == 18 and
+         [obj sumBigStruct:big
+                      bias:10] == 20;
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_struct_returns(void) {
+static int case_dispatch_struct_returns(void)
+{
     __unsafe_unretained StructDispatchProbe *obj = SFW_NEW(StructDispatchProbe);
     SFTestWidePair wide = {0, 0};
     SFTestBigStruct big = {0, 0, 0, 0};
@@ -538,17 +568,18 @@ static int case_dispatch_struct_returns(void) {
 
     wide = [obj widePairWithSeed:20];
     big = [obj bigStructWithSeed:40];
-    ok = wide.left == 20 &&
-         wide.right == 21 &&
-         big.first == 40 &&
-         big.second == 41 &&
-         big.third == 42 &&
+    ok = wide.left == 20 and
+         wide.right == 21 and
+         big.first == 40 and
+         big.second == 41 and
+         big.third == 42 and
          big.fourth == 43;
     objc_release(obj);
     return ok;
 }
 
-static int case_dispatch_runtime_selector_resolution(void) {
+static int case_dispatch_runtime_selector_resolution(void)
+{
 #if SF_RUNTIME_FORWARDING
     static SFTestSelector calc_sel_data = {"calc:", NULL};
     SEL calc_sel = (SEL)&calc_sel_data;
@@ -567,7 +598,8 @@ static int case_dispatch_runtime_selector_resolution(void) {
 #endif
 }
 
-static int case_dispatch_forwarding_targets(void) {
+static int case_dispatch_forwarding_targets(void)
+{
 #if SF_RUNTIME_FORWARDING
     static SFTestSelector instance_sel_data = {"forwardedValue:", NULL};
     static SFTestSelector class_sel_data = {"classForwardedValue:", NULL};
@@ -580,7 +612,7 @@ static int case_dispatch_forwarding_targets(void) {
     int class_result0 = 0;
     int class_result1 = 0;
 
-    if (proxy == nil || proxy_cls == Nil) {
+    if (proxy == nil or proxy_cls == Nil) {
         return 0;
     }
 
@@ -589,9 +621,9 @@ static int case_dispatch_forwarding_targets(void) {
     class_result0 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 7);
     class_result1 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 8);
     objc_release(proxy);
-    return instance_result0 == 105 &&
-           instance_result1 == 106 &&
-           class_result0 == 207 &&
+    return instance_result0 == 105 and
+           instance_result1 == 106 and
+           class_result0 == 207 and
            class_result1 == 208;
 #else
     return 1;
@@ -618,7 +650,8 @@ static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_forwarding_targets", case_dispatch_forwarding_targets},
 };
 
-const SFTestCase *sf_runtime_dispatch_cases(size_t *count) {
+const SFTestCase *sf_runtime_dispatch_cases(size_t *count)
+{
     if (count != NULL) {
         *count = sizeof(g_dispatch_cases) / sizeof(g_dispatch_cases[0]);
     }

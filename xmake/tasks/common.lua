@@ -6,14 +6,15 @@ function smallfw_runtime_config_menu_options(extra_options, defaults)
         {"a", "arch", "kv", defaults.arch, "Set target architecture."},
         {"o", "builddir", "kv", nil, "Set xmake build directory."},
         {},
-        {nil, "runtime_threadsafe", "kv", nil, "Override runtime_threadsafe.", " - y", " - n"},
-        {nil, "dispatch_backend", "kv", nil, "Override dispatch_backend.", " - asm", " - c"},
-        {nil, "dispatch_stats", "kv", nil, "Override dispatch_stats.", " - y", " - n"},
-        {nil, "runtime_exceptions", "kv", nil, "Override runtime_exceptions.", " - y", " - n"},
-        {nil, "runtime_reflection", "kv", nil, "Override runtime_reflection.", " - y", " - n"},
-        {nil, "runtime_validation", "kv", nil, "Override runtime_validation.", " - y", " - n"},
-        {nil, "runtime_sanitize", "kv", nil, "Override runtime_sanitize.", " - y", " - n"},
-        {nil, "runtime_slim_alloc", "kv", nil, "Override runtime_slim_alloc.", " - y", " - n"},
+        {nil, "runtime-threadsafe", "kv", nil, "Override runtime-threadsafe.", " - y", " - n"},
+        {nil, "dispatch-backend", "kv", nil, "Override dispatch-backend.", " - asm", " - c"},
+        {nil, "dispatch-stats", "kv", nil, "Override dispatch-stats.", " - y", " - n"},
+        {nil, "runtime-exceptions", "kv", nil, "Override runtime-exceptions.", " - y", " - n"},
+        {nil, "runtime-reflection", "kv", nil, "Override runtime-reflection.", " - y", " - n"},
+        {nil, "runtime-forwarding", "kv", nil, "Override runtime-forwarding.", " - y", " - n"},
+        {nil, "runtime-validation", "kv", nil, "Override runtime-validation.", " - y", " - n"},
+        {nil, "runtime-sanitize", "kv", nil, "Override runtime-sanitize.", " - y", " - n"},
+        {nil, "runtime-slim-alloc", "kv", nil, "Override runtime-slim-alloc.", " - y", " - n"},
     }
 
     for _, entry in ipairs(extra_options or {}) do

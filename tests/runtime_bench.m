@@ -17,13 +17,18 @@
 #endif
 
 #define SFW_NEW(T) [[T allocWithAllocator:sf_default_allocator()] init]
-#define SFW_RELEASE(obj) do { if ((obj) != NULL) objc_release((obj)); } while (0)
+#define SFW_RELEASE(obj)         \
+    do {                         \
+        if ((obj) != NULL)       \
+            objc_release((obj)); \
+    } while (0)
 
 @interface BenchMono : Object
 - (int)calc:(int)x;
 @end
 @implementation BenchMono
-- (int)calc:(int)x {
+- (int)calc:(int)x
+{
     return x + 1;
 }
 @end
@@ -32,7 +37,8 @@
 - (int)calc:(int)x;
 @end
 @implementation BenchPolyA
-- (int)calc:(int)x {
+- (int)calc:(int)x
+{
     return x + 1;
 }
 @end
@@ -41,7 +47,8 @@
 - (int)calc:(int)x;
 @end
 @implementation BenchPolyB
-- (int)calc:(int)x {
+- (int)calc:(int)x
+{
     return x + 2;
 }
 @end
@@ -51,13 +58,15 @@
 @implementation BenchARC
 @end
 
-static uint64_t now_ns(void) {
+static uint64_t now_ns(void)
+{
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ((uint64_t)ts.tv_sec * UINT64_C(1000000000)) + (uint64_t)ts.tv_nsec;
 }
 
-static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink) {
+static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
+{
     BenchMono *obj = SFW_NEW(BenchMono);
     int local = 0;
 
@@ -74,12 +83,13 @@ static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink) {
+static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
+{
     BenchPolyA *a = SFW_NEW(BenchPolyA);
     BenchPolyB *b = SFW_NEW(BenchPolyB);
     int local = 0;
 
-    if (a == NULL || b == NULL) {
+    if (a == NULL or b == NULL) {
         SFW_RELEASE(a);
         SFW_RELEASE(b);
         return 0;
@@ -99,7 +109,8 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_dispatch_nil_receiver_hot(int iters, volatile uint64_t *sink) {
+static int bench_dispatch_nil_receiver_hot(int iters, volatile uint64_t *sink)
+{
     BenchMono *obj = NULL;
     int local = 0;
 
@@ -111,7 +122,8 @@ static int bench_dispatch_nil_receiver_hot(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink) {
+static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink)
+{
     BenchARC *obj = SFW_NEW(BenchARC);
 
     for (int i = 0; i < iters; ++i) {
@@ -124,7 +136,8 @@ static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *sink) {
+static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *sink)
+{
     enum { pool_size = 256 };
     BenchARC *objs[pool_size];
 
@@ -152,12 +165,13 @@ static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *si
     return 1;
 }
 
-static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink) {
+static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
+{
     BenchARC *a = SFW_NEW(BenchARC);
     BenchARC *b = SFW_NEW(BenchARC);
     id slot = NULL;
 
-    if (a == NULL || b == NULL) {
+    if (a == NULL or b == NULL) {
         SFW_RELEASE(a);
         SFW_RELEASE(b);
         return 0;
@@ -174,7 +188,8 @@ static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink) {
+static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink)
+{
     uint64_t local = 0;
 
     for (int i = 0; i < iters; ++i) {
@@ -190,13 +205,14 @@ static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink) {
     return 1;
 }
 
-static int bench_parent_group_cycle(int iters, volatile uint64_t *sink) {
+static int bench_parent_group_cycle(int iters, volatile uint64_t *sink)
+{
     uint64_t local = 0;
 
     for (int i = 0; i < iters; ++i) {
         BenchARC *root = SFW_NEW(BenchARC);
         BenchARC *child = [[BenchARC allocWithParent:root] init];
-        if (root == NULL || child == NULL) {
+        if (root == NULL or child == NULL) {
             SFW_RELEASE(child);
             SFW_RELEASE(root);
             return 0;
@@ -229,12 +245,13 @@ static const BenchCase g_benches[] = {
     {.name = "parent_group_cycle", .fn = bench_parent_group_cycle, .default_iters = 1000000},
 };
 
-static int run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink) {
+static int run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink)
+{
     uint64_t t0 = now_ns();
     int ok = bench->fn(iters, sink);
     uint64_t t1 = now_ns();
 
-    if (!ok) {
+    if (not ok) {
         return 0;
     }
 
@@ -244,7 +261,8 @@ static int run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink)
     return 1;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     const char *case_name = NULL;
     int iters = 0;
     int list_only = 0;
@@ -254,16 +272,16 @@ int main(int argc, char **argv) {
             list_only = 1;
             continue;
         }
-        if (strcmp(argv[i], "--case") == 0 && (i + 1) < argc) {
+        if (strcmp(argv[i], "--case") == 0 and (i + 1) < argc) {
             case_name = argv[++i];
             continue;
         }
-        if (strcmp(argv[i], "--iters") == 0 && (i + 1) < argc) {
+        if (strcmp(argv[i], "--iters") == 0 and (i + 1) < argc) {
             char *end = NULL;
             const char *raw = argv[++i];
             errno = 0;
             long parsed = strtol(raw, &end, 10);
-            if (errno != 0 || end == raw || *end != '\0' || parsed < 1L || parsed > (long)INT_MAX) {
+            if (errno != 0 or end == raw or *end != '\0' or parsed < 1L or parsed > (long)INT_MAX) {
                 fprintf(stderr, "invalid --iters value: %s\n", raw);
                 return 2;
             } else {
@@ -289,7 +307,7 @@ int main(int argc, char **argv) {
     if (strcmp(case_name, "all") == 0) {
         for (size_t i = 0; i < sizeof(g_benches) / sizeof(g_benches[0]); ++i) {
             int bench_iters = (iters > 0) ? iters : g_benches[i].default_iters;
-            if (!run_bench(&g_benches[i], bench_iters, &sink)) {
+            if (not run_bench(&g_benches[i], bench_iters, &sink)) {
                 return 1;
             }
         }
@@ -300,7 +318,7 @@ int main(int argc, char **argv) {
         if (strcmp(g_benches[i].name, case_name) == 0) {
             int bench_iters = (iters > 0) ? iters : g_benches[i].default_iters;
             int ok = run_bench(&g_benches[i], bench_iters, &sink);
-            if (!ok) {
+            if (not ok) {
                 return 1;
             }
             return sink == UINT64_C(0xdeadbeefdeadbeef);

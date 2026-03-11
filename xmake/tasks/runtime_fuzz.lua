@@ -1,7 +1,7 @@
-task("run_runtime_fuzz")
+task("run-runtime-fuzz")
     set_category("tool")
     set_menu {
-        usage = "xmake run_runtime_fuzz [options]",
+        usage = "xmake run-runtime-fuzz [options]",
         description = "Build and run a runtime libFuzzer harness with validation and sanitizers enabled.",
         options = smallfw_runtime_config_menu_options({
             {},

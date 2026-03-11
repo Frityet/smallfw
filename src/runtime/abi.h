@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <iso646.h>
 
 #include "runtime/locking.h"
 #include "runtime/objc/runtime_exports.h"
@@ -92,30 +93,36 @@ typedef struct SFObjCSelectorFields {
     const char *_Nullable types;
 } SFObjCSelectorFields_t;
 
-static inline const SFObjCSelectorFields_t *_Nullable sf_selector_fields(SEL _Nullable sel) {
+static inline const SFObjCSelectorFields_t *_Nullable sf_selector_fields(SEL _Nullable sel)
+{
     return (const SFObjCSelectorFields_t *)(const void *)sel;
 }
 
-static inline const char *_Nullable sf_selector_name(SEL _Nullable sel) {
+static inline const char *_Nullable sf_selector_name(SEL _Nullable sel)
+{
     const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
     return fields != NULL ? fields->name : NULL;
 }
 
-static inline const char *_Nullable sf_selector_types(SEL _Nullable sel) {
+static inline const char *_Nullable sf_selector_types(SEL _Nullable sel)
+{
     const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
     return fields != NULL ? fields->types : NULL;
 }
 
-static inline SEL _Nullable sf_method_selector_ptr(SFObjCMethod_t *_Nullable method) {
+static inline SEL _Nullable sf_method_selector_ptr(SFObjCMethod_t *_Nullable method)
+{
     return method != NULL ? method->selector : NULL;
 }
 
-static inline const char *_Nullable sf_method_types(SFObjCMethod_t *_Nullable method) {
+static inline const char *_Nullable sf_method_types(SFObjCMethod_t *_Nullable method)
+{
     return method != NULL ? method->types : NULL;
 }
 
 static inline void sf_method_assign_selector(SFObjCMethod_t *_Nonnull method, SEL _Nullable selector,
-                                             const char *_Nullable types) {
+                                             const char *_Nullable types)
+{
     method->selector = selector;
     method->types = (types != NULL) ? types : sf_selector_types(selector);
 }

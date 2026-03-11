@@ -36,25 +36,32 @@ typedef pthread_rwlock_t SFRuntimeRwlock_t;
 typedef pthread_mutex_t SFRuntimeMutex_t;
 #define SF_RUNTIME_RWLOCK_INITIALIZER PTHREAD_RWLOCK_INITIALIZER
 #define SF_RUNTIME_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
-static inline void sf_runtime_rwlock_rdlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_rdlock(SFRuntimeRwlock_t *lock)
+{
     (void)pthread_rwlock_rdlock(lock);
 }
-static inline void sf_runtime_rwlock_wrlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_wrlock(SFRuntimeRwlock_t *lock)
+{
     (void)pthread_rwlock_wrlock(lock);
 }
-static inline void sf_runtime_rwlock_unlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_unlock(SFRuntimeRwlock_t *lock)
+{
     (void)pthread_rwlock_unlock(lock);
 }
-static inline void sf_runtime_mutex_init(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_init(SFRuntimeMutex_t *lock)
+{
     (void)pthread_mutex_init(lock, NULL);
 }
-static inline void sf_runtime_mutex_destroy(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_destroy(SFRuntimeMutex_t *lock)
+{
     (void)pthread_mutex_destroy(lock);
 }
-static inline void sf_runtime_mutex_lock(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_lock(SFRuntimeMutex_t *lock)
+{
     (void)pthread_mutex_lock(lock);
 }
-static inline void sf_runtime_mutex_unlock(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_unlock(SFRuntimeMutex_t *lock)
+{
     (void)pthread_mutex_unlock(lock);
 }
 #else
@@ -62,25 +69,32 @@ typedef int SFRuntimeRwlock_t;
 typedef int SFRuntimeMutex_t;
 #define SF_RUNTIME_RWLOCK_INITIALIZER 0
 #define SF_RUNTIME_MUTEX_INITIALIZER 0
-static inline void sf_runtime_rwlock_rdlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_rdlock(SFRuntimeRwlock_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_rwlock_wrlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_wrlock(SFRuntimeRwlock_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_rwlock_unlock(SFRuntimeRwlock_t *lock) {
+static inline void sf_runtime_rwlock_unlock(SFRuntimeRwlock_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_mutex_init(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_init(SFRuntimeMutex_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_mutex_destroy(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_destroy(SFRuntimeMutex_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_mutex_lock(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_lock(SFRuntimeMutex_t *lock)
+{
     (void)lock;
 }
-static inline void sf_runtime_mutex_unlock(SFRuntimeMutex_t *lock) {
+static inline void sf_runtime_mutex_unlock(SFRuntimeMutex_t *lock)
+{
     (void)lock;
 }
 #endif

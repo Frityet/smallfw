@@ -10,7 +10,7 @@
 #pragma clang diagnostic ignored "-Wpre-c11-compat"
 #endif
 
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(__clang__) or defined(__GNUC__)
 #define SF_ALWAYS_INLINE inline __attribute__((always_inline))
 #else
 #define SF_ALWAYS_INLINE inline
@@ -47,53 +47,59 @@ static uint64_t g_method_walks;
 #define SF_STATS_INC(counter) ((void)0)
 #endif
 
-id sf_dispatch_nil_imp(id self, SEL cmd, ...) {
+id sf_dispatch_nil_imp(id self, SEL cmd, ...)
+{
     (void)self;
     (void)cmd;
     return (id)0;
 }
 
-static int selector_equal_local(SEL lhs, SEL rhs) {
+static int selector_equal_local(SEL lhs, SEL rhs)
+{
     if (lhs == rhs) {
         return 1;
     }
-    if (lhs == NULL || rhs == NULL) {
+    if (lhs == NULL or rhs == NULL) {
         return 0;
     }
 
-    if (lhs->name == rhs->name && lhs->types == rhs->types) {
+    if (lhs->name == rhs->name and lhs->types == rhs->types) {
         return 1;
     }
 
-    if (lhs->name == NULL || rhs->name == NULL) {
+    if (lhs->name == NULL or rhs->name == NULL) {
         return 0;
     }
     if (strcmp(lhs->name, rhs->name) != 0) {
         return 0;
     }
 
-    if (lhs->types == NULL || rhs->types == NULL) {
+    if (lhs->types == NULL or rhs->types == NULL) {
         return 1;
     }
     return strcmp(lhs->types, rhs->types) == 0;
 }
 
-int sf_selector_equal(SEL a, SEL b) {
+int sf_selector_equal(SEL a, SEL b)
+{
     return selector_equal_local(a, b);
 }
 
-int sf_dispatch_imp_is_nil(IMP imp) {
+int sf_dispatch_imp_is_nil(IMP imp)
+{
     return imp == (IMP)sf_dispatch_nil_imp;
 }
 
-static size_t cache_index_for(Class cls, SEL op) {
+static size_t cache_index_for(Class cls, SEL op)
+{
     uintptr_t cls_bits = ((uintptr_t)cls) >> 4U;
     uintptr_t sel_bits = ((uintptr_t)op) >> 4U;
     uintptr_t mixed = cls_bits ^ sel_bits ^ (sel_bits >> 9U) ^ (cls_bits >> 11U);
     return (size_t)(mixed & (SF_DISPATCH_CACHE_SIZE - 1U));
 }
 
-static SF_ALWAYS_INLINE int entry_match_inline(const SFDispatchEntry_t *entry, Class cls, SEL op, IMP *out_imp) {
+static SF_ALWAYS_INLINE int entry_match_inline(const SFDispatchEntry_t *entry, Class cls, SEL op, IMP *out_imp)
+{
     IMP cached_imp = NULL;
 
     if (entry->cls != cls) {
@@ -105,24 +111,27 @@ static SF_ALWAYS_INLINE int entry_match_inline(const SFDispatchEntry_t *entry, C
     }
 
     cached_imp = entry->imp;
-    if (cached_imp == NULL) return 0;
+    if (cached_imp == NULL)
+        return 0;
 
     *out_imp = cached_imp;
     return 1;
 }
 
-static SF_ALWAYS_INLINE void entry_store(SFDispatchEntry_t *entry, Class cls, SEL op, IMP imp) {
+static SF_ALWAYS_INLINE void entry_store(SFDispatchEntry_t *entry, Class cls, SEL op, IMP imp)
+{
     entry->cls = cls;
     entry->sel = op;
     entry->imp = imp;
     entry->reserved = 0;
 }
 
-static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op) {
+static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op)
+{
     SFObjCClass_t *c = NULL;
     SFObjCClass_t *next = NULL;
 
-    if (cls == NULL || op == NULL) {
+    if (cls == NULL or op == NULL) {
         return NULL;
     }
 
@@ -133,9 +142,9 @@ static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op) {
             int32_t i = 0;
             for (i = 0; i < list->count; ++i) {
                 SFObjCMethod_t *m = &list->methods[i];
-                if (m->selector == op ||
-                    (m->selector != NULL && op != NULL &&
-                     m->selector->name == op->name && m->selector->types == op->types) ||
+                if (m->selector == op or
+                    (m->selector != NULL and op != NULL and
+                     m->selector->name == op->name and m->selector->types == op->types) or
                     selector_equal_local(m->selector, op)) {
                     return m;
                 }
@@ -149,16 +158,19 @@ static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op) {
     return NULL;
 }
 
-SFObjCMethod_t *sf_lookup_method_in_class(Class cls, SEL op) {
+SFObjCMethod_t *sf_lookup_method_in_class(Class cls, SEL op)
+{
     return lookup_method_in_class_local(cls, op);
 }
 
-IMP sf_lookup_imp_in_class(Class cls, SEL op) {
+IMP sf_lookup_imp_in_class(Class cls, SEL op)
+{
     SFObjCMethod_t *method = lookup_method_in_class_local(cls, op);
     return method != NULL ? method->imp : NULL;
 }
 
-IMP sf_lookup_imp_miss(Class cls, SEL op) {
+IMP sf_lookup_imp_miss(Class cls, SEL op)
+{
     IMP imp = NULL;
     SFDispatchEntry_t *entry = NULL;
     size_t index = 0;
@@ -186,7 +198,8 @@ IMP sf_lookup_imp_miss(Class cls, SEL op) {
     return imp;
 }
 
-static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op) {
+static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op)
+{
     IMP imp = NULL;
     SFDispatchEntry_t *entry = NULL;
     size_t index = 0;
@@ -217,10 +230,11 @@ static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op) {
     return sf_lookup_imp_miss(cls, op);
 }
 
-IMP sf_lookup_imp(id receiver, SEL op) {
+IMP sf_lookup_imp(id receiver, SEL op)
+{
     Class cls = NULL;
 
-    if (receiver == NULL || op == NULL) {
+    if (receiver == NULL or op == NULL) {
         return (IMP)sf_dispatch_nil_imp;
     }
 
@@ -233,11 +247,13 @@ IMP sf_lookup_imp(id receiver, SEL op) {
 }
 
 #if SF_RUNTIME_FORWARDING
-static int selector_types_missing(SEL sel) {
-    return sel == NULL || sel->types == NULL || sel->types[0] == '\0';
+static int selector_types_missing(SEL sel)
+{
+    return sel == NULL or sel->types == NULL or sel->types[0] == '\0';
 }
 
-static SEL resolved_selector_for_method(const SFObjCMethod_t *method, SEL fallback) {
+static SEL resolved_selector_for_method(const SFObjCMethod_t *method, SEL fallback)
+{
     if (method == NULL) {
         return fallback;
     }
@@ -248,7 +264,8 @@ static SEL resolved_selector_for_method(const SFObjCMethod_t *method, SEL fallba
 }
 #endif
 
-IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
+IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
+{
     id current_receiver = NULL;
     SEL current_sel = NULL;
 #if SF_RUNTIME_FORWARDING
@@ -256,7 +273,7 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
     int forward_hops_remaining = 0;
 #endif
 
-    if (receiver == NULL || op == NULL) {
+    if (receiver == NULL or op == NULL) {
         return (IMP)sf_dispatch_nil_imp;
     }
 
@@ -277,7 +294,7 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
         id target = NULL;
 #endif
 
-        if (current_receiver == NULL || current_sel == NULL) {
+        if (current_receiver == NULL or current_sel == NULL) {
             break;
         }
 
@@ -287,7 +304,7 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
         }
 
         imp = sf_lookup_imp(current_receiver, current_sel);
-        if (imp != NULL && !sf_dispatch_imp_is_nil(imp)) {
+        if (imp != NULL and not sf_dispatch_imp_is_nil(imp)) {
 #if SF_RUNTIME_FORWARDING
             if (selector_types_missing(current_sel)) {
                 method = lookup_method_in_class_local(cls, current_sel);
@@ -300,17 +317,17 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
         }
 
 #if SF_RUNTIME_FORWARDING
-        if (forward_hops_remaining <= 0 || forwarding_sel == NULL || sf_selector_equal(current_sel, forwarding_sel)) {
+        if (forward_hops_remaining <= 0 or forwarding_sel == NULL or sf_selector_equal(current_sel, forwarding_sel)) {
             break;
         }
 
         forward_method = lookup_method_in_class_local(cls, forwarding_sel);
-        if (forward_method == NULL || forward_method->imp == NULL) {
+        if (forward_method == NULL or forward_method->imp == NULL) {
             break;
         }
 
         target = ((id (*)(id, SEL, SEL))forward_method->imp)(current_receiver, forwarding_sel, current_sel);
-        if (target == NULL || target == current_receiver) {
+        if (target == NULL or target == current_receiver) {
             break;
         }
 
@@ -329,14 +346,16 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op) {
     return (IMP)sf_dispatch_nil_imp;
 }
 
-IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op) {
-    if (super_info == NULL || super_info->super_class == NULL || op == NULL) {
+IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op)
+{
+    if (super_info == NULL or super_info->super_class == NULL or op == NULL) {
         return (IMP)sf_dispatch_nil_imp;
     }
     return lookup_cached_inline(super_info->super_class, op);
 }
 
-uint64_t sf_dispatch_cache_hits(void) {
+uint64_t sf_dispatch_cache_hits(void)
+{
 #if SF_DISPATCH_STATS
     return SF_STATS_LOAD(g_cache_hits);
 #else
@@ -344,7 +363,8 @@ uint64_t sf_dispatch_cache_hits(void) {
 #endif
 }
 
-uint64_t sf_dispatch_cache_misses(void) {
+uint64_t sf_dispatch_cache_misses(void)
+{
 #if SF_DISPATCH_STATS
     return SF_STATS_LOAD(g_cache_misses);
 #else
@@ -352,7 +372,8 @@ uint64_t sf_dispatch_cache_misses(void) {
 #endif
 }
 
-uint64_t sf_dispatch_method_walks(void) {
+uint64_t sf_dispatch_method_walks(void)
+{
 #if SF_DISPATCH_STATS
     return SF_STATS_LOAD(g_method_walks);
 #else
@@ -360,7 +381,8 @@ uint64_t sf_dispatch_method_walks(void) {
 #endif
 }
 
-void sf_dispatch_reset_stats(void) {
+void sf_dispatch_reset_stats(void)
+{
     size_t i = 0;
 
 #if SF_RUNTIME_THREADSAFE

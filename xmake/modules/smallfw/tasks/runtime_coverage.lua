@@ -44,41 +44,41 @@ local function _coverage_matrix()
         {
             name = "asm_base",
             options = {
-                "--dispatch_backend=asm",
-                "--runtime_threadsafe=n",
-                "--dispatch_stats=n",
-                "--runtime_exceptions=y",
-                "--runtime_reflection=y",
+                "--dispatch-backend=asm",
+                "--runtime-threadsafe=n",
+                "--dispatch-stats=n",
+                "--runtime-exceptions=y",
+                "--runtime-reflection=y",
             },
         },
         {
             name = "asm_threadsafe",
             options = {
-                "--dispatch_backend=asm",
-                "--runtime_threadsafe=y",
-                "--dispatch_stats=y",
-                "--runtime_exceptions=y",
-                "--runtime_reflection=y",
+                "--dispatch-backend=asm",
+                "--runtime-threadsafe=y",
+                "--dispatch-stats=y",
+                "--runtime-exceptions=y",
+                "--runtime-reflection=y",
             },
         },
         {
             name = "c_backend",
             options = {
-                "--dispatch_backend=c",
-                "--runtime_threadsafe=n",
-                "--dispatch_stats=y",
-                "--runtime_exceptions=y",
-                "--runtime_reflection=y",
+                "--dispatch-backend=c",
+                "--runtime-threadsafe=n",
+                "--dispatch-stats=y",
+                "--runtime-exceptions=y",
+                "--runtime-reflection=y",
             },
         },
         {
             name = "asm_min",
             options = {
-                "--dispatch_backend=asm",
-                "--runtime_threadsafe=n",
-                "--dispatch_stats=n",
-                "--runtime_exceptions=n",
-                "--runtime_reflection=n",
+                "--dispatch-backend=asm",
+                "--runtime-threadsafe=n",
+                "--dispatch-stats=n",
+                "--runtime-exceptions=n",
+                "--runtime-reflection=n",
             },
         },
     }
@@ -242,7 +242,7 @@ end
 
 function main()
     if os.host() ~= "linux" then
-        raise("run_runtime_coverage is only supported on Linux hosts.")
+        raise("run-runtime-coverage is only supported on Linux hosts.")
     end
 
     local llvm_profdata = task_helpers.find_required_tool("llvm-profdata", "llvm-profdata not found")
@@ -260,7 +260,7 @@ function main()
     for _, entry in ipairs(matrix) do
         local builddir = path.join(outdir, entry.name)
         local profdir = path.join(builddir, "profiles")
-        local runtime_tests = task_helpers.target_binary(builddir, "runtime_tests", "debug")
+        local runtime_tests = task_helpers.target_binary(builddir, "runtime-tests", "debug")
         local configure_log = builddir .. ".configure.log"
         local build_log = builddir .. ".build.log"
         local run_log = builddir .. ".run.log"
@@ -286,7 +286,7 @@ function main()
         task_helpers.write_command_output(configure_log, "xmake", configure_args)
 
         print(string.format("Building coverage target %s", entry.name))
-        task_helpers.write_command_output(build_log, "xmake", {"b", "runtime_tests"})
+        task_helpers.write_command_output(build_log, "xmake", {"b", "runtime-tests"})
 
         print(string.format("Running coverage target %s", entry.name))
         task_helpers.write_command_output(run_log, runtime_tests, {"--all"}, {

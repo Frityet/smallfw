@@ -22,9 +22,9 @@ end
 
 local function _fuzz_target_name(name)
     local targets = {
-        dispatch = "runtime_fuzz_dispatch",
-        loader = "runtime_fuzz_loader",
-        exceptions = "runtime_fuzz_exceptions",
+        dispatch = "runtime-fuzz-dispatch",
+        loader = "runtime-fuzz-loader",
+        exceptions = "runtime-fuzz-exceptions",
     }
     local target = targets[name]
     assert(target ~= nil, "unknown fuzz target: " .. tostring(name))
@@ -38,10 +38,10 @@ function main()
     local runs = _positive_integer_option("runs", 10000)
     local corpus = _string_option("corpus", nil)
     local configure_args = task_helpers.collect_configure_args({
-        "--analysis_symbols=y",
-        "--runtime_validation=y",
-        "--runtime_sanitize=y",
-        "--dispatch_backend=c",
+        "--analysis-symbols=y",
+        "--runtime-validation=y",
+        "--runtime-sanitize=y",
+        "--dispatch-backend=c",
     }, {mode = mode_name, plat = "linux", arch = "x86_64", builddir = builddir})
 
     task_helpers.run_xmake(configure_args)

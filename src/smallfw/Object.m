@@ -11,6 +11,10 @@
 @end
 #endif
 
+@interface Object ()
+
+@end
+
 @implementation Object
 
 + (instancetype)allocWithAllocator:(SFAllocator_t *)allocator
@@ -32,7 +36,7 @@
     SFObjHeader_t *hdr = NULL;
     id obj = NULL;
 
-    if (storage == NULL || size < required || required > UINT32_MAX) {
+    if (storage == NULL or size < required or required > UINT32_MAX) {
         return NULL;
     }
     memset(storage, 0, size);
@@ -55,7 +59,7 @@
 {
     SFObjHeader_t *hdr = NULL;
     SFAllocator_t *allocator = NULL;
-    if (!sf_object_is_heap(self))
+    if (not sf_object_is_heap(self))
         return sf_default_allocator();
     hdr = sf_header_from_object(self);
     allocator = sf_header_allocator(hdr);
@@ -82,7 +86,7 @@
     SFObjHeader_t *hdr = NULL;
     id parent = NULL;
     SFObjHeader_t *parent_hdr = NULL;
-    if (!sf_object_is_heap(self))
+    if (not sf_object_is_heap(self))
         return NULL;
     hdr = sf_header_from_object(self);
     if (hdr == NULL)
@@ -91,7 +95,7 @@
     if (parent == NULL)
         return NULL;
     parent_hdr = sf_header_from_object(parent);
-    if (parent_hdr == NULL || parent_hdr->state != SF_OBJ_STATE_LIVE)
+    if (parent_hdr == NULL or parent_hdr->state != SF_OBJ_STATE_LIVE)
         return NULL;
     return (Object *)parent;
 }
@@ -121,7 +125,9 @@
 }
 
 - (int)isEqual:(Object *)other
-{ return self == other; }
+{
+    return self == other;
+}
 
 - (unsigned long)hash
 {
@@ -141,5 +147,22 @@
     return (id)0;
 }
 #endif
+
+@end
+
+//the idea here is that if this class is used as a type for ivars, then the class that has it as an ivar should generate the storage for it
+//MyObject *myObj; //MyObject : ValueObject
+//MyObject2 *myObj2;
+//and this is whats generated:
+//MyObject *myObj = ...;
+//MyObject2 *myObj2 = ...;
+//uint8_t myObj_storage[alignup(sizeof(SFObjHeader_t) + sizeof(MyObject))];
+//but these aren't actual ivars.
+//This should be done when the class is registered, where the runtime should make it so the instancesize of this class
+//also accounts for the storage
+//then, in +(instancetype)allocWithParent: (Object *)parent;, if the class is a ValueObject then it should just alloc into the storage of the parent, and return a pointer to that storage as the instance of the ValueObject
+@implementation ValueObject
+
+
 
 @end

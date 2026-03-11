@@ -53,14 +53,15 @@ function collect_configure_args(extra_args, defaults)
     _append_config_arg(args, "-o", option.get("builddir") or defaults.builddir)
 
     for _, key in ipairs({
-        "runtime_threadsafe",
-        "dispatch_backend",
-        "dispatch_stats",
-        "runtime_exceptions",
-        "runtime_reflection",
-        "runtime_validation",
-        "runtime_sanitize",
-        "runtime_slim_alloc",
+        "runtime-threadsafe",
+        "dispatch-backend",
+        "dispatch-stats",
+        "runtime-exceptions",
+        "runtime-reflection",
+        "runtime-forwarding",
+        "runtime-validation",
+        "runtime-sanitize",
+        "runtime-slim-alloc",
     }) do
         local value = config_value_string(option.get(key))
         if value ~= nil and value ~= "" then

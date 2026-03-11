@@ -1,7 +1,7 @@
-task("run_runtime_sanitize")
+task("run-runtime-sanitize")
     set_category("tool")
     set_menu {
-        usage = "xmake run_runtime_sanitize [options]",
+        usage = "xmake run-runtime-sanitize [options]",
         description = "Build and run runtime tests with validation, AddressSanitizer, and UndefinedBehaviorSanitizer enabled.",
         options = smallfw_runtime_config_menu_options({
             {},

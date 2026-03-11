@@ -23,14 +23,16 @@ typedef struct FuzzClassBundle {
     int32_t offsets[4];
 } FuzzClassBundle;
 
-static const char *fuzz_type_for_byte(uint8_t value) {
+static const char *fuzz_type_for_byte(uint8_t value)
+{
     static const char *k_types[] = {"i", "@", "^v", "{Pair=ii}", "[4I]", "q"};
     return k_types[value % (sizeof(k_types) / sizeof(k_types[0]))];
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
     static const char *k_ivar_names[] = {"a", "b", "c", "d"};
     FuzzClassBundle parent;
     FuzzClassBundle child;

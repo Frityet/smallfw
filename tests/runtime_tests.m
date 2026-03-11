@@ -20,7 +20,8 @@ static const SFTestSuiteFn g_suites[] = {
     sf_runtime_exception_cases,
 };
 
-static int run_case_named(const char *case_name) {
+static int run_case_named(const char *case_name)
+{
     for (size_t suite_index = 0; suite_index < sizeof(g_suites) / sizeof(g_suites[0]); ++suite_index) {
         size_t count = 0;
         const SFTestCase *cases = g_suites[suite_index](&count);
@@ -38,7 +39,8 @@ static int run_case_named(const char *case_name) {
     return 3;
 }
 
-static int run_all_cases(void) {
+static int run_all_cases(void)
+{
     int failed = 0;
 
     for (size_t suite_index = 0; suite_index < sizeof(g_suites) / sizeof(g_suites[0]); ++suite_index) {
@@ -52,7 +54,7 @@ static int run_all_cases(void) {
             ok = cases[case_index].fn();
             printf("CASE %s %s\n", cases[case_index].name, ok ? "PASS" : "FAIL");
             fflush(stdout);
-            if (!ok) {
+            if (not ok) {
                 failed = 1;
             }
         }
@@ -61,12 +63,13 @@ static int run_all_cases(void) {
     return failed ? 1 : 0;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     const char *case_name = NULL;
     int run_all = 0;
 
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--case") == 0 && (i + 1) < argc) {
+        if (strcmp(argv[i], "--case") == 0 and (i + 1) < argc) {
             case_name = argv[i + 1];
             ++i;
         } else if (strcmp(argv[i], "--all") == 0) {
