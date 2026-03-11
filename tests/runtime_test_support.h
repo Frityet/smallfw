@@ -59,6 +59,35 @@ extern int g_counter_deallocs;
 @interface CounterObject : Object
 @end
 
+@interface InlineValue : ValueObject {
+  @public
+    int _payload;
+}
+@end
+
+@interface InlineValueSub : InlineValue
+@end
+
+@interface InlineLargeValueSub : InlineValue {
+  @public
+    long long _extra[4];
+}
+@end
+
+@interface InlineHolder : Object {
+  @public
+    InlineValue *_value;
+    Object *_ref;
+}
+@end
+
+@interface InlinePairHolder : Object {
+  @public
+    InlineValue *_first;
+    InlineValue *_second;
+}
+@end
+
 @interface SuperBase : Object
 - (int)ping;
 @end

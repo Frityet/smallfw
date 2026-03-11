@@ -141,6 +141,7 @@ typedef struct SFGroupState {
 enum {
     SF_OBJ_FLAG_NONE = 0U,
     SF_OBJ_FLAG_IMMORTAL = 1U << 0U,
+    SF_OBJ_FLAG_EMBEDDED = 1U << 1U,
 };
 
 typedef struct SFObjHeader {

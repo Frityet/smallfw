@@ -704,6 +704,20 @@ static int case_reflection_failure_paths(void)
     ensure_extra_registered_classes();
 
     unsigned int count = 0;
+    Class *baseline = objc_copyClassList(&count);
+    if (baseline == NULL or count == 0) {
+        free((void *)baseline);
+        return 0;
+    }
+
+    size_t required_allocs = 1;
+    size_t cap = 16;
+    while (cap < (size_t)count) {
+        cap *= 2U;
+        required_allocs += 1U;
+    }
+    free((void *)baseline);
+
     sf_runtime_test_fail_allocation_after(0);
     Class *classes = objc_copyClassList(&count);
     sf_runtime_test_reset_alloc_failures();
@@ -712,7 +726,11 @@ static int case_reflection_failure_paths(void)
         return 0;
     }
 
-    sf_runtime_test_fail_allocation_after(1);
+    if (required_allocs > 1U) {
+        sf_runtime_test_fail_allocation_after(required_allocs - 1U);
+    } else {
+        sf_runtime_test_fail_allocation_after(0);
+    }
     classes = objc_copyClassList(&count);
     sf_runtime_test_reset_alloc_failures();
     if (classes != NULL) {
@@ -720,7 +738,7 @@ static int case_reflection_failure_paths(void)
         return 0;
     }
 
-    sf_runtime_test_fail_allocation_after(2);
+    sf_runtime_test_fail_allocation_after(required_allocs);
     classes = objc_copyClassList(&count);
     sf_runtime_test_reset_alloc_failures();
     if (classes == NULL or count == 0) {

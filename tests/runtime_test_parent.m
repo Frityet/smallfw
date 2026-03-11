@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "runtime_test_support.h"
@@ -9,6 +10,7 @@
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #pragma clang diagnostic ignored "-Wdeclaration-after-statement"
 #pragma clang diagnostic ignored "-Wpadded"
+#pragma clang diagnostic ignored "-Wdirect-ivar-access"
 #endif
 
 typedef struct ParentThreadCtx {
@@ -16,6 +18,15 @@ typedef struct ParentThreadCtx {
     int loops;
     int ok;
 } ParentThreadCtx;
+
+static size_t test_align_up(size_t value, size_t align)
+{
+    if (align <= 1U) {
+        return value;
+    }
+    size_t mask = align - 1U;
+    return (value + mask) & ~mask;
+}
 
 #if SF_RUNTIME_THREADSAFE
 static void *parent_thread_main(void *arg)
@@ -34,6 +45,221 @@ static void *parent_thread_main(void *arg)
     return NULL;
 }
 #endif
+
+static int case_value_parent_layout_hidden_storage(void)
+{
+    Class holder_cls = (Class)objc_getClass("InlineHolder");
+    Class object_cls = (Class)objc_getClass("Object");
+    Class value_cls = (Class)objc_getClass("InlineValue");
+    if (holder_cls == Nil or object_cls == Nil or value_cls == Nil) {
+        return 0;
+    }
+
+    size_t holder_size = class_getInstanceSize(holder_cls);
+    size_t visible_min = class_getInstanceSize(object_cls) + (2U * sizeof(void *));
+    size_t slot_min = test_align_up(sizeof(SFObjHeader_t) + class_getInstanceSize(value_cls), sizeof(void *));
+    if (holder_size < visible_min + slot_min) {
+        return 0;
+    }
+
+#if SF_RUNTIME_REFLECTION
+    unsigned int count = 0;
+    Ivar *ivars = class_copyIvarList(holder_cls, &count);
+    int ok = count == 2U and
+             class_getInstanceVariable(holder_cls, "_value") != NULL and
+             class_getInstanceVariable(holder_cls, "_ref") != NULL and
+             ivars != NULL;
+    free((void *)ivars);
+    return ok;
+#else
+    return 1;
+#endif
+}
+
+static int case_value_parent_alloc_embeds_in_parent(void)
+{
+    sf_test_reset_common_state();
+
+    SFTestAllocatorCtx ctx = {0};
+    SFAllocator_t allocator = sf_test_make_counting_allocator(&ctx);
+
+    __unsafe_unretained InlineHolder *holder = [[InlineHolder allocWithAllocator:&allocator] init];
+    __unsafe_unretained InlineValueSub *child = [[InlineValueSub allocWithParent:holder] init];
+    if (holder == nil or child == nil) {
+        return 0;
+    }
+
+    SFObjHeader_t *holder_hdr = sf_header_from_object(holder);
+    SFObjHeader_t *child_hdr = sf_header_from_object(child);
+    uintptr_t holder_begin = (uintptr_t)(void *)holder_hdr;
+    uintptr_t holder_end = holder_begin + sf_object_allocation_size_for_object(holder);
+    uintptr_t child_begin = (uintptr_t)(void *)child_hdr;
+    uintptr_t child_end = child_begin + test_align_up(sizeof(SFObjHeader_t) +
+                                                      class_getInstanceSize((Class)objc_getClass("InlineValueSub")),
+                                                      sizeof(void *));
+    int ok = holder_hdr != NULL and
+             child_hdr != NULL and
+             ctx.alloc_calls == 1 and
+             ctx.free_calls == 0 and
+             holder->_value == (InlineValue *)child and
+             child.parent == holder and
+             [child allocator] == &allocator and
+             sf_header_group_root(child_hdr) == holder_hdr and
+             sf_header_group_live_count(holder_hdr) == 2U and
+             child_begin >= holder_begin and
+             child_end <= holder_end;
+
+    objc_release(child);
+    objc_storeStrong((id *)&holder->_value, nil);
+    objc_release(holder);
+    return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
+}
+
+static int case_value_parent_duplicate_slots_reuse(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained InlinePairHolder *holder = SFW_NEW(InlinePairHolder);
+    __unsafe_unretained InlineValue *first = [[InlineValue allocWithParent:holder] init];
+    __unsafe_unretained InlineValue *second = [[InlineValue allocWithParent:holder] init];
+    if (holder == nil or first == nil or second == nil) {
+        return 0;
+    }
+
+    int ok = holder->_first == first and holder->_second == second;
+
+    objc_release(first);
+    objc_release(second);
+    objc_storeStrong((id *)&holder->_first, nil);
+    if (holder->_first != nil or holder->_second != second) {
+        objc_storeStrong((id *)&holder->_second, nil);
+        objc_release(holder);
+        return 0;
+    }
+
+    __unsafe_unretained InlineValue *reused = [[InlineValue allocWithParent:holder] init];
+    ok = ok and reused != nil and holder->_first == reused and holder->_second == second;
+
+    if (reused != nil) {
+        objc_release(reused);
+    }
+    objc_storeStrong((id *)&holder->_first, nil);
+    objc_storeStrong((id *)&holder->_second, nil);
+    objc_release(holder);
+    return ok;
+}
+
+static int case_value_parent_child_outlives_parent(void)
+{
+    sf_test_reset_common_state();
+
+    SFTestAllocatorCtx ctx = {0};
+    SFAllocator_t allocator = sf_test_make_counting_allocator(&ctx);
+
+    __unsafe_unretained InlineHolder *holder = [[InlineHolder allocWithAllocator:&allocator] init];
+    __unsafe_unretained InlineValue *child = [[InlineValue allocWithParent:holder] init];
+    if (holder == nil or child == nil) {
+        return 0;
+    }
+
+    objc_release(holder);
+    int ok = ctx.alloc_calls == 1 and
+             ctx.free_calls == 0 and
+             [child allocator] == &allocator and
+             child.parent == nil;
+
+    objc_release(child);
+    return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
+}
+
+static int case_value_parent_standalone_heap_alloc(void)
+{
+    sf_test_reset_common_state();
+
+    SFTestAllocatorCtx ctx = {0};
+    SFAllocator_t allocator = sf_test_make_counting_allocator(&ctx);
+
+    __unsafe_unretained InlineValue *direct = [[InlineValue allocWithAllocator:&allocator] init];
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+#endif
+    __unsafe_unretained InlineValue *nil_parent = [[InlineValue allocWithParent:nil] init];
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+    if (direct == nil or nil_parent == nil) {
+        return 0;
+    }
+
+    SFObjHeader_t *direct_hdr = sf_header_from_object(direct);
+    SFObjHeader_t *nil_parent_hdr = sf_header_from_object(nil_parent);
+    int ok = direct_hdr != NULL and
+             nil_parent_hdr != NULL and
+             sf_header_group_root(direct_hdr) == direct_hdr and
+             sf_header_group_root(nil_parent_hdr) == nil_parent_hdr and
+             direct.parent == nil and
+             nil_parent.parent == nil and
+             [direct allocator] == &allocator and
+             ctx.alloc_calls == 1;
+
+    objc_release(direct);
+    objc_release(nil_parent);
+    return ok and ctx.free_calls == 1;
+}
+
+static int case_value_parent_slot_exhaustion(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained InlineHolder *holder = SFW_NEW(InlineHolder);
+    __unsafe_unretained InlineValue *child = [[InlineValue allocWithParent:holder] init];
+    if (holder == nil or child == nil) {
+        return 0;
+    }
+
+#if SF_RUNTIME_EXCEPTIONS
+    int ok = 0;
+    @try {
+        (void)[[InlineValue allocWithParent:holder] init];
+    }
+    @catch (AllocationFailedException *e) {
+        ok = e != nil;
+    }
+#else
+    int ok = [[InlineValue allocWithParent:holder] init] == nil;
+#endif
+
+    objc_release(child);
+    objc_storeStrong((id *)&holder->_value, nil);
+    objc_release(holder);
+    return ok;
+}
+
+static int case_value_parent_oversized_subclass_rejected(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained InlineHolder *holder = SFW_NEW(InlineHolder);
+    if (holder == nil) {
+        return 0;
+    }
+
+#if SF_RUNTIME_EXCEPTIONS
+    int ok = 0;
+    @try {
+        (void)[[InlineLargeValueSub allocWithParent:holder] init];
+    }
+    @catch (AllocationFailedException *e) {
+        ok = e != nil;
+    }
+#else
+    int ok = [[InlineLargeValueSub allocWithParent:holder] init] == nil;
+#endif
+
+    objc_release(holder);
+    return ok;
+}
 
 static int case_parent_group_inheritance(void)
 {
@@ -295,6 +521,13 @@ static int case_parent_concurrent_alloc_release(void)
 }
 
 static const SFTestCase g_parent_cases[] = {
+    {"value_parent_layout_hidden_storage", case_value_parent_layout_hidden_storage},
+    {"value_parent_alloc_embeds_in_parent", case_value_parent_alloc_embeds_in_parent},
+    {"value_parent_duplicate_slots_reuse", case_value_parent_duplicate_slots_reuse},
+    {"value_parent_child_outlives_parent", case_value_parent_child_outlives_parent},
+    {"value_parent_standalone_heap_alloc", case_value_parent_standalone_heap_alloc},
+    {"value_parent_slot_exhaustion", case_value_parent_slot_exhaustion},
+    {"value_parent_oversized_subclass_rejected", case_value_parent_oversized_subclass_rejected},
     {"parent_group_inheritance", case_parent_group_inheritance},
     {"parent_allocator_propagation", case_parent_allocator_propagation},
     {"parent_getter_lifecycle", case_parent_getter_lifecycle},

@@ -82,6 +82,21 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 }
 @end
 
+@implementation InlineValue
+@end
+
+@implementation InlineValueSub
+@end
+
+@implementation InlineLargeValueSub
+@end
+
+@implementation InlineHolder
+@end
+
+@implementation InlinePairHolder
+@end
+
 @implementation SuperBase
 - (int)ping
 {

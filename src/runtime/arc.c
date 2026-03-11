@@ -1,5 +1,6 @@
 #include "runtime/internal.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -128,6 +129,84 @@ static int ensure_marker_capacity(size_t wanted)
     return 1;
 }
 
+static void clear_embedded_owner_slot(SFObjHeader_t *hdr, id obj)
+{
+    if (hdr == NULL or obj == NULL or (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+        return;
+    }
+
+    id parent = sf_header_parent(hdr);
+    if (parent == NULL) {
+        return;
+    }
+
+    unsigned char *parent_bytes = (unsigned char *)(void *)parent;
+    id *owner_slot = (id *)(void *)(parent_bytes + hdr->reserved);
+    if (*owner_slot == obj) {
+        *owner_slot = NULL;
+    }
+}
+
+static IMP lookup_named_imp(Class cls, const char *name)
+{
+    SFObjCClass_t *cursor = (SFObjCClass_t *)cls;
+    while (cursor != NULL) {
+        for (SFObjCMethodList_t *list = cursor->methods; list != NULL; list = list->next) {
+            for (int32_t i = 0; i < list->count; ++i) {
+                SFObjCMethod_t *method = &list->methods[i];
+                const char *method_name = sf_selector_name(method->selector);
+                if (method_name != NULL and name != NULL and strcmp(method_name, name) == 0) {
+                    return method->imp;
+                }
+            }
+        }
+        cursor = (cursor->superclass != cursor) ? cursor->superclass : NULL;
+    }
+    return NULL;
+}
+
+static void clear_object_ivars(id obj)
+{
+    unsigned char *obj_bytes = (unsigned char *)(void *)obj;
+    SFObjCClass_t *cursor = (SFObjCClass_t *)sf_object_class(obj);
+    while (cursor != NULL) {
+        SFObjCIvarList_t *list = (SFObjCIvarList_t *)cursor->ivars;
+        if (list != NULL and list->count > 0) {
+            size_t stride = (size_t)list->item_size;
+            if (stride < sizeof(SFObjCIvar_t)) {
+                stride = sizeof(SFObjCIvar_t);
+            }
+
+            unsigned char *ivar_cursor = (unsigned char *)list->ivars;
+            for (uintptr_t i = 0; i < list->count; ++i, ivar_cursor += stride) {
+                SFObjCIvar_t *ivar = (SFObjCIvar_t *)(void *)ivar_cursor;
+                const char *type = ivar->type;
+                if (ivar->offset == NULL or type == NULL) {
+                    continue;
+                }
+                while (*type == 'r' or *type == 'n' or *type == 'N' or *type == 'o' or *type == 'O' or
+                       *type == 'R' or *type == 'V') {
+                    ++type;
+                }
+                if (*type != '@' or type[1] == '?') {
+                    continue;
+                }
+
+                int32_t offset = *ivar->offset;
+                if (offset == INT32_MAX) {
+                    continue;
+                }
+
+                id *slot = (id *)(void *)(obj_bytes + (size_t)offset);
+                if (*slot != NULL) {
+                    objc_storeStrong(slot, NULL);
+                }
+            }
+        }
+        cursor = (cursor->superclass != cursor) ? cursor->superclass : NULL;
+    }
+}
+
 static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator)
 {
     SFObjHeader_t *member = head;
@@ -135,8 +214,11 @@ static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator)
     while (member != NULL) {
         SFObjHeader_t *next = sf_header_group_next(member);
         size_t total_size = (size_t)member->alloc_size;
+        int embedded = (member->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
         sf_header_destroy_sidecar(member, 0);
-        use_allocator->free(use_allocator->ctx, (void *)member, total_size, sizeof(void *));
+        if (not embedded) {
+            use_allocator->free(use_allocator->ctx, (void *)member, total_size, sizeof(void *));
+        }
         member = next;
     }
 }
@@ -164,9 +246,11 @@ void sf_object_dispose(id obj)
     if (not sf_header_grouped(hdr) or group_lock == NULL) {
         SFAllocator_t *allocator = sf_header_allocator(hdr);
         size_t total_size = (size_t)hdr->alloc_size;
+        int embedded = (hdr->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
         if (hdr->state != SF_OBJ_STATE_LIVE) {
             return;
         }
+        clear_embedded_owner_slot(hdr, obj);
         sf_unregister_live_object_header(hdr);
         hdr->state = SF_OBJ_STATE_DISPOSED;
 #if SF_RUNTIME_VALIDATION
@@ -176,7 +260,9 @@ void sf_object_dispose(id obj)
             allocator = sf_default_allocator();
         }
         sf_header_destroy_sidecar(hdr, 0);
-        allocator->free(allocator->ctx, (void *)hdr, total_size, sizeof(void *));
+        if (not embedded) {
+            allocator->free(allocator->ctx, (void *)hdr, total_size, sizeof(void *));
+        }
         return;
     }
 
@@ -186,6 +272,7 @@ void sf_object_dispose(id obj)
         return;
     }
 
+    clear_embedded_owner_slot(hdr, obj);
     sf_unregister_live_object_header(hdr);
     hdr->state = SF_OBJ_STATE_DISPOSED;
 #if SF_RUNTIME_VALIDATION
@@ -243,6 +330,8 @@ static void release_object_now(id obj)
 #endif
 
     SEL dealloc_sel = sf_cached_selector_dealloc();
+    static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
+    static SEL cxx_destruct_sel;
 
     if (obj == g_last_header_obj) {
         g_last_header_obj = NULL;
@@ -255,6 +344,19 @@ static void release_object_now(id obj)
     }
     if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
         (void)imp(obj, dealloc_sel);
+    }
+    clear_object_ivars(obj);
+    if (cxx_destruct_sel == NULL) {
+        cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+    }
+    if (cxx_destruct_sel != NULL) {
+        IMP cxx_destruct_imp = sf_lookup_imp_in_class(sf_object_class(obj), cxx_destruct_sel);
+        if (cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
+            cxx_destruct_imp = lookup_named_imp(sf_object_class(obj), ".cxx_destruct");
+        }
+        if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
+            (void)cxx_destruct_imp(obj, cxx_destruct_sel);
+        }
     }
     sf_object_dispose(obj);
 }
