@@ -26,7 +26,7 @@ objc_msgSend:
     JZ .LHEAP_RECEIVER
     // this is where we get the actual class the pointer is
     LEA R11, [RIP + g_tagged_pointer_slot_classes]
-    MOV R10, QWORD PTR [R11 + R10*8]
+    MOV R10, QWORD PTR [R11 + R10*0x8]
     // uh oh! you didnt register your tag :(
     TEST R10, R10
     JE .LNIL_RETURN
@@ -58,15 +58,15 @@ objc_msgSend:
 #if SF_RUNTIME_THREADSAFE
     CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
     JNE .LCHECK_L0_SECOND // .cls miss
-    CMP RSI, QWORD PTR FS:g_dispatch_l0@tpoff+8
+    CMP RSI, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
     JNE .LCHECK_L0_SECOND // .sel miss
-    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+16
+    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
 #else
     CMP R10, QWORD PTR [RIP + g_dispatch_l0]
     JNE .LCHECK_L0_SECOND
-    CMP RSI, QWORD PTR [RIP + g_dispatch_l0 + 8]
+    CMP RSI, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
     JNE .LCHECK_L0_SECOND
-    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 16]
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
 #endif
     TEST RAX, RAX // .imp == NULL
     JE .LMISS_WITHOUT_XMM
@@ -85,17 +85,17 @@ objc_msgSend:
 .LCHECK_L0_SECOND:
 #if SF_DISPATCH_L0_DUAL
 #if SF_RUNTIME_THREADSAFE
-    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff+32
+    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff+0x20
     JNE .LGLOBAL_CACHE
-    CMP RSI, QWORD PTR FS:g_dispatch_l0@tpoff+40
+    CMP RSI, QWORD PTR FS:g_dispatch_l0@tpoff+0x28
     JNE .LGLOBAL_CACHE
-    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+48
+    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+0x30
 #else
-    CMP R10, QWORD PTR [RIP + g_dispatch_l0 + 32]
+    CMP R10, QWORD PTR [RIP + g_dispatch_l0 + 0x20]
     JNE .LGLOBAL_CACHE
-    CMP RSI, QWORD PTR [RIP + g_dispatch_l0 + 40]
+    CMP RSI, QWORD PTR [RIP + g_dispatch_l0 + 0x28]
     JNE .LGLOBAL_CACHE
-    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 48]
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 0x30]
 #endif
     TEST RAX, RAX
     JE .LMISS_WITHOUT_XMM
@@ -111,32 +111,34 @@ objc_msgSend:
 #endif
 
 .LGLOBAL_CACHE:
-    MOV RAX, R10
-    SHR RAX, 4
-    MOV R11, RSI
-    SHR R11, 4
+    // quick hash to get our index
+    MOV RAX, R10 // R10 for the class
+    SHR RAX, 0x4
+    MOV R11, RSI // RSI for the SEL
+    SHR R11, 0x4
     XOR RAX, R11
     MOV R11, RSI
-    SHR R11, 13
+    SHR R11, 0xD
     XOR RAX, R11
     MOV R11, R10
-    SHR R11, 11
+    SHR R11, 0xB
     XOR RAX, R11
-    #if SF_DISPATCH_CACHE_2WAY
-    AND RAX, 2047
-    SHL RAX, 6
-    #else
-    AND RAX, 4095
-    SHL RAX, 5
-    #endif
+#if SF_DISPATCH_CACHE_2WAY
+    AND RAX, 0b11111111111
+    SHL RAX, 0b110
+#else
+    AND RAX, 0b0000111111111111
+    SHL RAX, 0b101
+#endif
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
 
     CMP R10, QWORD PTR [R11]
     JNE .LCHECK_GLOBAL_WAY1
-    CMP RSI, QWORD PTR [R11 + 8]
+    CMP RSI, QWORD PTR [R11 + 0x8]
     JNE .LCHECK_GLOBAL_WAY1
-    MOV RAX, QWORD PTR [R11 + 16]
+    // first way hit, grab the imp
+    MOV RAX, QWORD PTR [R11 + 0x10]
     TEST RAX, RAX
     JE .LMISS_WITHOUT_XMM
     LEA R11, [RIP + sf_dispatch_nil_imp]
@@ -150,14 +152,16 @@ objc_msgSend:
     JMP .LGLOBAL_STORE_L0
 
 .LCHECK_GLOBAL_WAY1:
+    // another cool optimisation: 2way cache!
+    // the idea here is that if we have a miss, but the receiver and selector match on the 2nd we dont need to use the slow path
 #if SF_DISPATCH_CACHE_2WAY
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
-    CMP R10, QWORD PTR [R11 + 32]
+    CMP R10, QWORD PTR [R11 + 0x20]
     JNE .LMISS_WITHOUT_XMM
-    CMP RSI, QWORD PTR [R11 + 40]
+    CMP RSI, QWORD PTR [R11 + 0x28]
     JNE .LMISS_WITHOUT_XMM
-    MOV RAX, QWORD PTR [R11 + 48]
+    MOV RAX, QWORD PTR [R11 + 0x30]
     TEST RAX, RAX
     JE .LMISS_WITHOUT_XMM
     LEA R11, [RIP + sf_dispatch_nil_imp]
@@ -173,115 +177,122 @@ objc_msgSend:
 #endif
 
 .LGLOBAL_STORE_L0:
+    // promote the global cache hit back into l0 so the next send is basically free
 
 #if SF_RUNTIME_THREADSAFE
 #if SF_DISPATCH_L0_DUAL
+    // shift the old hot entry down into slot 1 first
     MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+32, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+8
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+40, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+16
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+48, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+24
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+56, R11
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x20, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x28, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x30, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x18
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x38, R11
 #endif
     MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+8, RSI
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+16, RAX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+24, 0
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x8, RSI
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x10, RAX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x18, 0
 #else
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR [RIP + g_dispatch_l0]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 32], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 8]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 40], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 16]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 48], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 24]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 56], R11
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x20], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x28], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x30], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x18]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x38], R11
 #endif
     MOV QWORD PTR [RIP + g_dispatch_l0], R10
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RSI
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x8], RSI
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x10], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x18], 0
 #endif
     JMP RAX
 
 .LGLOBAL_RETURN_NIL:
+    // same thing, but this case we are saving the fact that this will always miss
 #if SF_RUNTIME_THREADSAFE
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+32, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+8
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+40, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+16
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+48, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+24
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+56, R11
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x20, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x28, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x30, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x18
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x38, R11
 #endif
     MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+8, RSI
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+16, RAX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+24, 0
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x8, RSI
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x10, RAX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x18, 0
 #else
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR [RIP + g_dispatch_l0]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 32], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 8]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 40], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 16]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 48], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 24]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 56], R11
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x20], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x28], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x30], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x18]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x38], R11
 #endif
     MOV QWORD PTR [RIP + g_dispatch_l0], R10
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RSI
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x8], RSI
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x10], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x18], 0
 #endif
     JMP .LNIL_RETURN
 
 .LMISS_WITHOUT_XMM:
+    // now the slow path :(
     SUB RSP, 0x38
 
     MOV QWORD PTR [RSP], RDI
-    MOV QWORD PTR [RSP + 8], RSI
-    MOV QWORD PTR [RSP + 16], RDX
-    MOV QWORD PTR [RSP + 24], RCX
-    MOV QWORD PTR [RSP + 32], R8
-    MOV QWORD PTR [RSP + 40], R9
+    MOV QWORD PTR [RSP + 0x8], RSI
+    MOV QWORD PTR [RSP + 0x10], RDX
+    MOV QWORD PTR [RSP + 0x18], RCX
+    MOV QWORD PTR [RSP + 0x20], R8
+    MOV QWORD PTR [RSP + 0x28], R9
 
     LEA RDI, [RSP]
     LEA RSI, [RSP + 8]
     CALL sf_resolve_message_dispatch
 
+    // restore the call frame
     MOV RDI, QWORD PTR [RSP]
-    MOV RSI, QWORD PTR [RSP + 8]
-    MOV RDX, QWORD PTR [RSP + 16]
-    MOV RCX, QWORD PTR [RSP + 24]
-    MOV R8, QWORD PTR [RSP + 32]
-    MOV R9, QWORD PTR [RSP + 40]
+    MOV RSI, QWORD PTR [RSP + 0x8]
+    MOV RDX, QWORD PTR [RSP + 0x10]
+    MOV RCX, QWORD PTR [RSP + 0x18]
+    MOV R8, QWORD PTR [RSP + 0x20]
+    MOV R9, QWORD PTR [RSP + 0x28]
 
+    // if the resolver misses then we just return nil
     LEA R10, [RIP + sf_dispatch_nil_imp]
     CMP RAX, R10
     JE .LMISS_RETURN_NIL_WITHOUT_XMM
 
     ADD RSP, 0x38
-    JMP RAX
+    JMP RAX // tail call :)
 
 .LMISS_RETURN_NIL_WITHOUT_XMM:
     ADD RSP, 0x38
     JMP .LNIL_RETURN
 
 .LWITH_XMM:
+    // same miss path as above, except now we also have vector args to preserve
     SUB RSP, 0xB8
 
     MOV QWORD PTR [RSP], RDI
-    MOV QWORD PTR [RSP + 8], RSI
-    MOV QWORD PTR [RSP + 16], RDX
-    MOV QWORD PTR [RSP + 24], RCX
-    MOV QWORD PTR [RSP + 32], R8
-    MOV QWORD PTR [RSP + 40], R9
+    MOV QWORD PTR [RSP + 0x8], RSI
+    MOV QWORD PTR [RSP + 0x10], RDX
+    MOV QWORD PTR [RSP + 0x18], RCX
+    MOV QWORD PTR [RSP + 0x20], R8
+    MOV QWORD PTR [RSP + 0x28], R9
 
     MOVAPS XMMWORD PTR [RSP + 0x30], XMM0
     MOVAPS XMMWORD PTR [RSP + 0x40], XMM1
@@ -297,11 +308,11 @@ objc_msgSend:
     CALL sf_resolve_message_dispatch
 
     MOV RDI, QWORD PTR [RSP]
-    MOV RSI, QWORD PTR [RSP + 8]
-    MOV RDX, QWORD PTR [RSP + 16]
-    MOV RCX, QWORD PTR [RSP + 24]
-    MOV R8, QWORD PTR [RSP + 32]
-    MOV R9, QWORD PTR [RSP + 40]
+    MOV RSI, QWORD PTR [RSP + 0x8]
+    MOV RDX, QWORD PTR [RSP + 0x10]
+    MOV RCX, QWORD PTR [RSP + 0x18]
+    MOV R8, QWORD PTR [RSP + 0x20]
+    MOV R9, QWORD PTR [RSP + 0x28]
 
     MOVAPS XMM0, XMMWORD PTR [RSP + 0x30]
     MOVAPS XMM1, XMMWORD PTR [RSP + 0x40]
@@ -324,30 +335,33 @@ objc_msgSend:
     JMP .LNIL_RETURN
 
 .LNIL_RETURN:
+    // objc nil messaging wants nil for basically everything
     XOR EAX, EAX
     PXOR XMM0, XMM0
     RET
 
 .size objc_msgSend, .-objc_msgSend
 
+// struct objc_msgSend_stret(struct *RDI out, id RSI receiver, SEL RDX selector, ...)
+
 .globl objc_msgSend_stret
 .type objc_msgSend_stret,@function
 objc_msgSend_stret:
+    // for structs we basically do the same idea, but RDI is the out buffer so receiver/selector shift right by one reg
     TEST RSI, RSI
     JE .LSTRET_RETURN
     TEST RDX, RDX
     JE .LSTRET_RETURN
-
     TEST AL, AL
     JNZ .LSTRET_WITH_XMM
 
 .LSTRET_WITHOUT_XMM:
 #if SF_RUNTIME_TAGGED_POINTERS
     MOV R10, RSI
-    AND R10, 7
+    AND R10, 0b111
     JZ .LSTRET_HEAP_RECEIVER
     LEA R11, [RIP + g_tagged_pointer_slot_classes]
-    MOV R10, QWORD PTR [R11 + R10*8]
+    MOV R10, QWORD PTR [R11 + R10*0x8]
     TEST R10, R10
     JE .LSTRET_RETURN
     JMP .LSTRET_CLASS_READY
@@ -361,18 +375,19 @@ objc_msgSend_stret:
 .LSTRET_CLASS_READY:
 #endif
 
+    // same l0 cache lookup, except the key is now (class, selector) in (R10, RDX)
 #if SF_RUNTIME_THREADSAFE
     CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff
     JNE .LSTRET_CHECK_L0_SECOND
-    CMP RDX, QWORD PTR FS:g_dispatch_l0@tpoff+8
+    CMP RDX, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
     JNE .LSTRET_CHECK_L0_SECOND
-    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+16
+    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
 #else
     CMP R10, QWORD PTR [RIP + g_dispatch_l0]
     JNE .LSTRET_CHECK_L0_SECOND
-    CMP RDX, QWORD PTR [RIP + g_dispatch_l0 + 8]
+    CMP RDX, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
     JNE .LSTRET_CHECK_L0_SECOND
-    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 16]
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
 #endif
     TEST RAX, RAX
     JE .LSTRET_MISS_WITHOUT_XMM
@@ -389,17 +404,17 @@ objc_msgSend_stret:
 .LSTRET_CHECK_L0_SECOND:
 #if SF_DISPATCH_L0_DUAL
 #if SF_RUNTIME_THREADSAFE
-    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff+32
+    CMP R10, QWORD PTR FS:g_dispatch_l0@tpoff+0x20
     JNE .LSTRET_GLOBAL_CACHE
-    CMP RDX, QWORD PTR FS:g_dispatch_l0@tpoff+40
+    CMP RDX, QWORD PTR FS:g_dispatch_l0@tpoff+0x28
     JNE .LSTRET_GLOBAL_CACHE
-    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+48
+    MOV RAX, QWORD PTR FS:g_dispatch_l0@tpoff+0x30
 #else
-    CMP R10, QWORD PTR [RIP + g_dispatch_l0 + 32]
+    CMP R10, QWORD PTR [RIP + g_dispatch_l0 + 0x20]
     JNE .LSTRET_GLOBAL_CACHE
-    CMP RDX, QWORD PTR [RIP + g_dispatch_l0 + 40]
+    CMP RDX, QWORD PTR [RIP + g_dispatch_l0 + 0x28]
     JNE .LSTRET_GLOBAL_CACHE
-    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 48]
+    MOV RAX, QWORD PTR [RIP + g_dispatch_l0 + 0x30]
 #endif
     TEST RAX, RAX
     JE .LSTRET_MISS_WITHOUT_XMM
@@ -416,31 +431,32 @@ objc_msgSend_stret:
 
 .LSTRET_GLOBAL_CACHE:
     MOV RAX, R10
-    SHR RAX, 4
+    SHR RAX, 0b100
     MOV R11, RDX
-    SHR R11, 4
+    SHR R11, 0b100
     XOR RAX, R11
     MOV R11, RDX
-    SHR R11, 13
+    SHR R11, 0b1101
     XOR RAX, R11
     MOV R11, R10
-    SHR R11, 11
+    SHR R11, 0b1011
     XOR RAX, R11
     #if SF_DISPATCH_CACHE_2WAY
-    AND RAX, 2047
-    SHL RAX, 6
+    AND RAX, 0b11111111111
+    SHL RAX, 0b110
     #else
-    AND RAX, 4095
-    SHL RAX, 5
+    AND RAX, 0b111111111111
+    SHL RAX, 0b101
     #endif
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
 
     CMP R10, QWORD PTR [R11]
     JNE .LSTRET_CHECK_GLOBAL_WAY1
-    CMP RDX, QWORD PTR [R11 + 8]
+    CMP RDX, QWORD PTR [R11 + 0x8]
     JNE .LSTRET_CHECK_GLOBAL_WAY1
-    MOV RAX, QWORD PTR [R11 + 16]
+
+    MOV RAX, QWORD PTR [R11 + 0x10]
     TEST RAX, RAX
     JE .LSTRET_MISS_WITHOUT_XMM
     LEA R11, [RIP + sf_dispatch_nil_imp]
@@ -454,14 +470,15 @@ objc_msgSend_stret:
     JMP .LSTRET_GLOBAL_STORE_L0
 
 .LSTRET_CHECK_GLOBAL_WAY1:
+
 #if SF_DISPATCH_CACHE_2WAY
     LEA R11, [RIP + g_dispatch_cache]
     ADD R11, RAX
-    CMP R10, QWORD PTR [R11 + 32]
+    CMP R10, QWORD PTR [R11 + 0x20]
     JNE .LSTRET_MISS_WITHOUT_XMM
-    CMP RDX, QWORD PTR [R11 + 40]
+    CMP RDX, QWORD PTR [R11 + 0x28]
     JNE .LSTRET_MISS_WITHOUT_XMM
-    MOV RAX, QWORD PTR [R11 + 48]
+    MOV RAX, QWORD PTR [R11 + 0x30]
     TEST RAX, RAX
     JE .LSTRET_MISS_WITHOUT_XMM
     LEA R11, [RIP + sf_dispatch_nil_imp]
@@ -477,37 +494,36 @@ objc_msgSend_stret:
 #endif
 
 .LSTRET_GLOBAL_STORE_L0:
-
 #if SF_RUNTIME_THREADSAFE
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+32, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+8
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+40, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+16
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+48, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+24
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x20, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x28, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x30, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x18
     MOV QWORD PTR FS:g_dispatch_l0@tpoff+56, R11
 #endif
     MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+8, RDX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+16, RAX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+24, 0
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x8, RDX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x10, RAX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x18, 0
 #else
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR [RIP + g_dispatch_l0]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 32], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 8]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 40], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 16]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 48], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 24]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 56], R11
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x20], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x28], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x30], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x18]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x38], R11
 #endif
     MOV QWORD PTR [RIP + g_dispatch_l0], R10
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RDX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x8], RDX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x10], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x18], 0
 #endif
     JMP RAX
 
@@ -515,56 +531,57 @@ objc_msgSend_stret:
 #if SF_RUNTIME_THREADSAFE
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+32, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+8
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+40, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+16
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+48, R11
-    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+24
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+56, R11
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x20, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x8
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x28, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x10
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x30, R11
+    MOV R11, QWORD PTR FS:g_dispatch_l0@tpoff+0x18
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x38, R11
 #endif
     MOV QWORD PTR FS:g_dispatch_l0@tpoff, R10
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+8, RDX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+16, RAX
-    MOV QWORD PTR FS:g_dispatch_l0@tpoff+24, 0
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x8, RDX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x10, RAX
+    MOV QWORD PTR FS:g_dispatch_l0@tpoff+0x18, 0
 #else
 #if SF_DISPATCH_L0_DUAL
     MOV R11, QWORD PTR [RIP + g_dispatch_l0]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 32], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 8]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 40], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 16]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 48], R11
-    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 24]
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 56], R11
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x20], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x8]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x28], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x10]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x30], R11
+    MOV R11, QWORD PTR [RIP + g_dispatch_l0 + 0x18]
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x38], R11
 #endif
     MOV QWORD PTR [RIP + g_dispatch_l0], R10
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 8], RDX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 16], RAX
-    MOV QWORD PTR [RIP + g_dispatch_l0 + 24], 0
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x8], RDX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x10], RAX
+    MOV QWORD PTR [RIP + g_dispatch_l0 + 0x18], 0
 #endif
     JMP .LSTRET_RETURN
 
 .LSTRET_MISS_WITHOUT_XMM:
+    // slow path again, but the resolver wants receiver/selector after the stret out pointer
     SUB RSP, 0x38
 
     MOV QWORD PTR [RSP], RDI
-    MOV QWORD PTR [RSP + 8], RSI
-    MOV QWORD PTR [RSP + 16], RDX
-    MOV QWORD PTR [RSP + 24], RCX
-    MOV QWORD PTR [RSP + 32], R8
-    MOV QWORD PTR [RSP + 40], R9
+    MOV QWORD PTR [RSP + 0x8], RSI
+    MOV QWORD PTR [RSP + 0x10], RDX
+    MOV QWORD PTR [RSP + 0x18], RCX
+    MOV QWORD PTR [RSP + 0x20], R8
+    MOV QWORD PTR [RSP + 0x28], R9
 
-    LEA RDI, [RSP + 8]
-    LEA RSI, [RSP + 16]
+    LEA RDI, [RSP + 0x8]
+    LEA RSI, [RSP + 0x10]
     CALL sf_resolve_message_dispatch
 
     MOV RDI, QWORD PTR [RSP]
-    MOV RSI, QWORD PTR [RSP + 8]
-    MOV RDX, QWORD PTR [RSP + 16]
-    MOV RCX, QWORD PTR [RSP + 24]
-    MOV R8, QWORD PTR [RSP + 32]
-    MOV R9, QWORD PTR [RSP + 40]
+    MOV RSI, QWORD PTR [RSP + 0x8]
+    MOV RDX, QWORD PTR [RSP + 0x10]
+    MOV RCX, QWORD PTR [RSP + 0x18]
+    MOV R8, QWORD PTR [RSP + 0x20]
+    MOV R9, QWORD PTR [RSP + 0x28]
 
     LEA R10, [RIP + sf_dispatch_nil_imp]
     CMP RAX, R10
@@ -581,11 +598,11 @@ objc_msgSend_stret:
     SUB RSP, 0xB8
 
     MOV QWORD PTR [RSP], RDI
-    MOV QWORD PTR [RSP + 8], RSI
-    MOV QWORD PTR [RSP + 16], RDX
-    MOV QWORD PTR [RSP + 24], RCX
-    MOV QWORD PTR [RSP + 32], R8
-    MOV QWORD PTR [RSP + 40], R9
+    MOV QWORD PTR [RSP + 0x8], RSI
+    MOV QWORD PTR [RSP + 0x10], RDX
+    MOV QWORD PTR [RSP + 0x18], RCX
+    MOV QWORD PTR [RSP + 0x20], R8
+    MOV QWORD PTR [RSP + 0x28], R9
 
     MOVAPS XMMWORD PTR [RSP + 0x30], XMM0
     MOVAPS XMMWORD PTR [RSP + 0x40], XMM1
@@ -596,16 +613,16 @@ objc_msgSend_stret:
     MOVAPS XMMWORD PTR [RSP + 0x90], XMM6
     MOVAPS XMMWORD PTR [RSP + 0xA0], XMM7
 
-    LEA RDI, [RSP + 8]
-    LEA RSI, [RSP + 16]
+    LEA RDI, [RSP + 0x8]
+    LEA RSI, [RSP + 0x10]
     CALL sf_resolve_message_dispatch
 
     MOV RDI, QWORD PTR [RSP]
-    MOV RSI, QWORD PTR [RSP + 8]
-    MOV RDX, QWORD PTR [RSP + 16]
-    MOV RCX, QWORD PTR [RSP + 24]
-    MOV R8, QWORD PTR [RSP + 32]
-    MOV R9, QWORD PTR [RSP + 40]
+    MOV RSI, QWORD PTR [RSP + 0x8]
+    MOV RDX, QWORD PTR [RSP + 0x10]
+    MOV RCX, QWORD PTR [RSP + 0x18]
+    MOV R8, QWORD PTR [RSP + 0x20]
+    MOV R9, QWORD PTR [RSP + 0x28]
 
     MOVAPS XMM0, XMMWORD PTR [RSP + 0x30]
     MOVAPS XMM1, XMMWORD PTR [RSP + 0x40]
@@ -628,6 +645,7 @@ objc_msgSend_stret:
     JMP .LSTRET_RETURN
 
 .LSTRET_RETURN:
+    // the out buffer already holds the result for stret, so we just leave
     RET
 
 .size objc_msgSend_stret, .-objc_msgSend_stret
