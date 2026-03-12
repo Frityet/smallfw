@@ -4,4 +4,6 @@
 /compile_commands.json
 /gmon.out
 /perf.data
+/default.profraw
 /xmake-docs.txt
+

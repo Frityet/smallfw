@@ -1,11 +1,17 @@
 #include "runtime/internal.h"
 
-id objc_autorelease(id obj)
+#if defined(__clang__) || defined(__GNUC__)
+#define SF_ARC_RUNTIME_ENTRY __attribute__((used))
+#else
+#define SF_ARC_RUNTIME_ENTRY
+#endif
+
+SF_ARC_RUNTIME_ENTRY id objc_autorelease(id obj)
 {
     return sf_autorelease(obj);
 }
 
-id objc_alloc(Class cls)
+SF_ARC_RUNTIME_ENTRY id objc_alloc(Class cls)
 {
     Class meta_cls = sf_object_class((id)cls);
     SEL alloc_sel = sf_cached_selector_alloc();
@@ -19,7 +25,7 @@ id objc_alloc(Class cls)
     return imp((id)cls, alloc_sel, sf_default_allocator());
 }
 
-id objc_alloc_init(Class cls)
+SF_ARC_RUNTIME_ENTRY id objc_alloc_init(Class cls)
 {
     SEL init_sel = sf_cached_selector_init();
     id obj = objc_alloc(cls);

@@ -220,11 +220,65 @@ static int case_loader_header_validation(void)
 
 static int case_loader_header_size_modes(void)
 {
+#if SF_RUNTIME_COMPACT_HEADERS
+#if SF_RUNTIME_VALIDATION
+    return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64 and
+           sizeof(SFInlineValueHeader_t) < sizeof(SFObjHeader_t);
+#else
+    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
+           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#endif
+#else
 #if SF_RUNTIME_VALIDATION
     return sizeof(SFObjHeader_t) >= 64;
 #else
     return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
 #endif
+#endif
+}
+
+static int case_loader_fast_object_constraints(void)
+{
+    sf_test_reset_common_state();
+
+    Class plain_cls = (Class)objc_getClass("PlainFastObject");
+    Class invalid_cls = (Class)objc_getClass("InvalidFastObject");
+    Class tracked_cls = (Class)objc_getClass("TrackedFastObject");
+    id plain = nil;
+    id invalid = nil;
+    id tracked = nil;
+    int ok = 0;
+
+    if (plain_cls == Nil or invalid_cls == Nil or tracked_cls == Nil) {
+        return 0;
+    }
+
+    plain = sf_alloc_object(plain_cls, sf_default_allocator());
+    if (plain == nil) {
+        return 0;
+    }
+
+#if SF_RUNTIME_FAST_OBJECTS
+    invalid = sf_alloc_object(invalid_cls, sf_default_allocator());
+    tracked = sf_alloc_object(tracked_cls, sf_default_allocator());
+    ok = invalid == nil and tracked == nil;
+#else
+    invalid = sf_alloc_object(invalid_cls, sf_default_allocator());
+    tracked = sf_alloc_object(tracked_cls, sf_default_allocator());
+    ok = invalid != nil and tracked != nil;
+    if (tracked != nil) {
+        objc_release(tracked);
+    }
+    if (invalid != nil) {
+        objc_release(invalid);
+    }
+#endif
+
+    objc_release(plain);
+#if !SF_RUNTIME_FAST_OBJECTS
+    ok = ok and g_counter_deallocs == 1;
+#endif
+    return ok;
 }
 
 static int case_loader_manual_registration(void)
@@ -816,6 +870,7 @@ static const SFTestCase g_loader_cases[] = {
     {"loader_lookup_missing", case_loader_lookup_missing},
     {"loader_header_validation", case_loader_header_validation},
     {"loader_header_size_modes", case_loader_header_size_modes},
+    {"loader_fast_object_constraints", case_loader_fast_object_constraints},
     {"loader_manual_registration", case_loader_manual_registration},
     {"loader_class_size_synthetic", case_loader_class_size_synthetic},
     {"loader_hash_helpers", case_loader_hash_helpers},

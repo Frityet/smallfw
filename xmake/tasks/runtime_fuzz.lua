@@ -3,7 +3,7 @@ task("run-runtime-fuzz")
     set_menu {
         usage = "xmake run-runtime-fuzz [options]",
         description = "Build and run a runtime libFuzzer harness with validation and sanitizers enabled.",
-        options = smallfw_runtime_config_menu_options({
+        options = smallfw.runtime_config_menu_options({
             {},
             {"t", "target", "kv", "dispatch", "Select fuzz harness target.", " - dispatch", " - loader", " - exceptions"},
             {"r", "runs", "kv", "10000", "Set the libFuzzer -runs count."},

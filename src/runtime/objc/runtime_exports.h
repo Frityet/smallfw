@@ -20,7 +20,7 @@
 #define SF_RUNTIME_TAGGED_POINTERS 0
 #endif
 
-#if SF_RUNTIME_TAGGED_POINTERS and UINTPTR_MAX != UINT64_MAX
+#if SF_RUNTIME_TAGGED_POINTERS && UINTPTR_MAX != UINT64_MAX
 #error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
 #endif
 
@@ -33,6 +33,15 @@ extern "C" {
 #else
 #define SF_NOT_TAIL_CALLED
 #endif
+
+#if defined(_WIN32)
+#define SF_RUNTIME_EXPORT
+#elif defined(__clang__) || defined(__GNUC__)
+#define SF_RUNTIME_EXPORT __attribute__((visibility("default")))
+#else
+#define SF_RUNTIME_EXPORT
+#endif
+
 #pragma clang assume_nonnull begin
 
 #ifndef __OBJC__
@@ -57,77 +66,78 @@ struct sf_objc_super {
     Class super_class;
 };
 
-void __objc_load(void *_Nullable init);
+SF_RUNTIME_EXPORT void __objc_load(void *_Nullable init);
 
-id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...) SF_NOT_TAIL_CALLED;
+SF_RUNTIME_EXPORT id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...) SF_NOT_TAIL_CALLED;
 #ifndef __OBJC__
-void objc_msgSend_stret(void *_Nonnull out, id _Nullable receiver, SEL _Nullable op, ...);
+SF_RUNTIME_EXPORT void objc_msgSend_stret(void *_Nonnull out, id _Nullable receiver, SEL _Nullable op, ...);
 #endif
-IMP objc_msg_lookup(id _Nullable receiver, SEL _Nullable op);
-IMP objc_msg_lookup_stret(id _Nullable receiver, SEL _Nullable op);
-IMP objc_msg_lookup_super(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
-IMP objc_msg_lookup_super_stret(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
+SF_RUNTIME_EXPORT IMP objc_msg_lookup(id _Nullable receiver, SEL _Nullable op);
+SF_RUNTIME_EXPORT IMP objc_msg_lookup_stret(id _Nullable receiver, SEL _Nullable op);
+SF_RUNTIME_EXPORT IMP objc_msg_lookup_super(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
+SF_RUNTIME_EXPORT IMP objc_msg_lookup_super_stret(struct sf_objc_super *_Nullable super_info, SEL _Nullable op);
 
-id _Nullable objc_retain(id _Nullable obj);
-void objc_release(id _Nullable obj);
-id _Nullable objc_autorelease(id _Nullable obj);
-id _Nullable objc_alloc(Class _Nullable cls);
-id _Nullable objc_alloc_init(Class _Nullable cls);
-id _Nullable objc_retainAutorelease(id _Nullable obj);
-id _Nullable objc_retainAutoreleasedReturnValue(id _Nullable obj);
-id _Nullable objc_autoreleaseReturnValue(id _Nullable obj);
-id _Nullable objc_retainAutoreleaseReturnValue(id _Nullable obj);
-void objc_storeStrong(id _Nullable *_Nonnull dst, id _Nullable value);
-void *_Nonnull objc_autoreleasePoolPush(void);
-void objc_autoreleasePoolPop(void *_Nullable pool);
+SF_RUNTIME_EXPORT id _Nullable objc_retain(id _Nullable obj);
+SF_RUNTIME_EXPORT void objc_release(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_autorelease(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_alloc(Class _Nullable cls);
+SF_RUNTIME_EXPORT id _Nullable objc_alloc_init(Class _Nullable cls);
+SF_RUNTIME_EXPORT id _Nullable objc_retainAutorelease(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_retainAutoreleasedReturnValue(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_autoreleaseReturnValue(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_retainAutoreleaseReturnValue(id _Nullable obj);
+SF_RUNTIME_EXPORT void objc_storeStrong(id _Nullable *_Nonnull dst, id _Nullable value);
+SF_RUNTIME_EXPORT void *_Nonnull objc_autoreleasePoolPush(void);
+SF_RUNTIME_EXPORT void objc_autoreleasePoolPop(void *_Nullable pool);
 
-void objc_exception_throw(id _Nullable obj);
-id _Nullable objc_begin_catch(void *_Nullable exception);
-void objc_end_catch(void);
-void objc_exception_rethrow(void *_Nullable exception);
-_Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
-                                                  uint64_t exception_class,
-                                                  struct _Unwind_Exception *_Nullable exception_object,
-                                                  struct _Unwind_Context *_Nullable context);
-_Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions,
-                                              uint64_t exception_class,
-                                              struct _Unwind_Exception *_Nullable exception_object,
-                                              struct _Unwind_Context *_Nullable context);
+SF_RUNTIME_EXPORT void objc_exception_throw(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_begin_catch(void *_Nullable exception);
+SF_RUNTIME_EXPORT void objc_end_catch(void);
+SF_RUNTIME_EXPORT void objc_exception_rethrow(void *_Nullable exception);
+SF_RUNTIME_EXPORT _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
+                                                                    uint64_t exception_class,
+                                                                    struct _Unwind_Exception *_Nullable exception_object,
+                                                                    struct _Unwind_Context *_Nullable context);
+SF_RUNTIME_EXPORT _Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions,
+                                                                uint64_t exception_class,
+                                                                struct _Unwind_Exception *_Nullable exception_object,
+                                                                struct _Unwind_Context *_Nullable context);
 
-size_t class_getInstanceSize(Class _Nullable cls);
-Class _Nullable objc_lookup_class(const char *_Nullable name);
-Class _Nullable objc_get_class(const char *_Nullable name);
-id _Nullable objc_getClass(const char *_Nullable name);
+SF_RUNTIME_EXPORT size_t class_getInstanceSize(Class _Nullable cls);
+SF_RUNTIME_EXPORT Class _Nullable objc_lookup_class(const char *_Nullable name);
+SF_RUNTIME_EXPORT Class _Nullable objc_get_class(const char *_Nullable name);
+SF_RUNTIME_EXPORT id _Nullable objc_getClass(const char *_Nullable name);
 
 #if SF_RUNTIME_REFLECTION
-const char *_Nullable class_getName(Class _Nullable cls);
-Class _Nullable class_getSuperclass(Class _Nullable cls);
-Class _Nullable object_getClass(id _Nullable obj);
-Class _Nullable objc_getMetaClass(const char *_Nullable name);
-Class _Nullable *_Nullable objc_copyClassList(unsigned int *_Nullable outCount);
-Method _Nullable class_getInstanceMethod(Class _Nullable cls, SEL _Nullable sel);
-Method _Nullable class_getClassMethod(Class _Nullable cls, SEL _Nullable sel);
-Method _Nullable *_Nullable class_copyMethodList(Class _Nullable cls, unsigned int *_Nullable outCount);
-SEL _Nullable method_getName(Method _Nullable method);
-IMP method_getImplementation(Method _Nullable method);
-const char *_Nullable method_getTypeEncoding(Method _Nullable method);
-Ivar _Nullable class_getInstanceVariable(Class _Nullable cls, const char *_Nullable name);
-Ivar _Nullable *_Nullable class_copyIvarList(Class _Nullable cls, unsigned int *_Nullable outCount);
-const char *_Nullable ivar_getName(Ivar _Nullable ivar);
-const char *_Nullable ivar_getTypeEncoding(Ivar _Nullable ivar);
-ptrdiff_t ivar_getOffset(Ivar _Nullable ivar);
-const char *_Nullable sel_getName(SEL _Nullable sel);
-SEL _Nullable sel_registerName(const char *_Nullable name);
-int sel_isEqual(SEL _Nullable lhs, SEL _Nullable rhs);
+SF_RUNTIME_EXPORT const char *_Nullable class_getName(Class _Nullable cls);
+SF_RUNTIME_EXPORT Class _Nullable class_getSuperclass(Class _Nullable cls);
+SF_RUNTIME_EXPORT Class _Nullable object_getClass(id _Nullable obj);
+SF_RUNTIME_EXPORT Class _Nullable objc_getMetaClass(const char *_Nullable name);
+SF_RUNTIME_EXPORT Class _Nullable *_Nullable objc_copyClassList(unsigned int *_Nullable outCount);
+SF_RUNTIME_EXPORT Method _Nullable class_getInstanceMethod(Class _Nullable cls, SEL _Nullable sel);
+SF_RUNTIME_EXPORT Method _Nullable class_getClassMethod(Class _Nullable cls, SEL _Nullable sel);
+SF_RUNTIME_EXPORT Method _Nullable *_Nullable class_copyMethodList(Class _Nullable cls, unsigned int *_Nullable outCount);
+SF_RUNTIME_EXPORT SEL _Nullable method_getName(Method _Nullable method);
+SF_RUNTIME_EXPORT IMP method_getImplementation(Method _Nullable method);
+SF_RUNTIME_EXPORT const char *_Nullable method_getTypeEncoding(Method _Nullable method);
+SF_RUNTIME_EXPORT Ivar _Nullable class_getInstanceVariable(Class _Nullable cls, const char *_Nullable name);
+SF_RUNTIME_EXPORT Ivar _Nullable *_Nullable class_copyIvarList(Class _Nullable cls, unsigned int *_Nullable outCount);
+SF_RUNTIME_EXPORT const char *_Nullable ivar_getName(Ivar _Nullable ivar);
+SF_RUNTIME_EXPORT const char *_Nullable ivar_getTypeEncoding(Ivar _Nullable ivar);
+SF_RUNTIME_EXPORT ptrdiff_t ivar_getOffset(Ivar _Nullable ivar);
+SF_RUNTIME_EXPORT const char *_Nullable sel_getName(SEL _Nullable sel);
+SF_RUNTIME_EXPORT SEL _Nullable sel_registerName(const char *_Nullable name);
+SF_RUNTIME_EXPORT int sel_isEqual(SEL _Nullable lhs, SEL _Nullable rhs);
 #endif
 
-uint64_t sf_dispatch_cache_hits(void);
-uint64_t sf_dispatch_cache_misses(void);
-uint64_t sf_dispatch_method_walks(void);
-void sf_dispatch_reset_stats(void);
+SF_RUNTIME_EXPORT uint64_t sf_dispatch_cache_hits(void);
+SF_RUNTIME_EXPORT uint64_t sf_dispatch_cache_misses(void);
+SF_RUNTIME_EXPORT uint64_t sf_dispatch_method_walks(void);
+SF_RUNTIME_EXPORT void sf_dispatch_reset_stats(void);
 
 #pragma clang assume_nonnull end
 #undef SF_NOT_TAIL_CALLED
+#undef SF_RUNTIME_EXPORT
 
 #ifdef __cplusplus
 }

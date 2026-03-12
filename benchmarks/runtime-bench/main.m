@@ -61,7 +61,7 @@ static uint64_t now_ns(void)
 static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
 {
     BenchMono *obj = SFW_NEW(BenchMono);
-    int local = 0;
+    int64_t local = 0;
 
     if (obj == NULL) {
         return 0;
@@ -80,7 +80,7 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
 {
     BenchPolyA *a = SFW_NEW(BenchPolyA);
     BenchPolyB *b = SFW_NEW(BenchPolyB);
-    int local = 0;
+    int64_t local = 0;
 
     if (a == NULL or b == NULL) {
         SFW_RELEASE(a);
@@ -105,7 +105,7 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
 static int bench_dispatch_nil_receiver_hot(int iters, volatile uint64_t *sink)
 {
     BenchMono *obj = NULL;
-    int local = 0;
+    int64_t local = 0;
 
     for (int i = 0; i < iters; ++i) {
         local += [obj calc:i];

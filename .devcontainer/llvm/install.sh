@@ -24,7 +24,7 @@ check_packages() {
   fi
 }
 
-check_packages lsb-release wget software-properties-common gnupg
+check_packages lsb-release wget gnupg
 
 # Remove any previous LLVM that may be in the base image
 # LLVM packages packaged by Ubuntu may get picked over us and
@@ -45,9 +45,6 @@ chmod +x llvm.sh
 ./llvm.sh $VERSION all
 rm llvm.sh
 
-# Remove downloads to keep Docker layer small
-apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
 llvm_root_prefix=/usr/lib/llvm-
 
 if [ -z $VERSION ]; then
@@ -66,10 +63,16 @@ if [ -z $VERSION ]; then
 fi
 
 llvm_root=${llvm_root_prefix}${VERSION}
+check_packages "bolt-${VERSION}" linux-perf
 
 for bin in $llvm_root/bin/*; do
   bin=$(basename $bin)
   if [ -f /usr/bin/$bin-$VERSION ]; then
     ln -sf /usr/bin/$bin-$VERSION /usr/bin/$bin
+  elif [ -f $llvm_root/bin/$bin ]; then
+    ln -sf $llvm_root/bin/$bin /usr/bin/$bin
   fi
 done
+
+# Remove downloads to keep Docker layer small
+apt-get clean -y && rm -rf /var/lib/apt/lists/*

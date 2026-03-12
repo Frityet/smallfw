@@ -4,7 +4,7 @@
 	"name": "debian",
 	"remoteUser": "vscode",
 	"updateRemoteUserUID": true,
-	"image": "mcr.microsoft.com/devcontainers/base:bullseye",
+	"image": "mcr.microsoft.com/devcontainers/base:trixie",
 	"runArgs": [
 		"--security-opt=seccomp=unconfined",
 		"--security-opt=apparmor=unconfined",
@@ -28,12 +28,20 @@
 		"./llvm": {
 			"version": "21"
 		},
-		"./xmake": {}
+		"./xmake": {},
+		// // "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
+		// "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/wasmtime-wasi:0": {
+		// 	"version": "24",
+		// 	"wasmtime_version": "v24.0.0",
+		// 	"wit_version": "0.30.0",
+		// 	"wasm_tools_version": "1.214.0",
+		// 	"location": "/usr/local"
+		// }
 	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"llvm-vs-code-extensions.vscode-clangd"
+				"llvm-vs-code-extensions.vscode-clangd",
 			]
 		}
 	},

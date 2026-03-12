@@ -14,6 +14,12 @@ typedef struct SFTestSelector {
     const char *types;
 } SFTestSelector;
 
+typedef struct SFDispatchCandidate {
+    id obj;
+    Class cls;
+    SEL sel;
+} SFDispatchCandidate;
+
 #if SF_RUNTIME_THREADSAFE
 static void *dispatch_thread_main(void *arg)
 {
@@ -254,6 +260,158 @@ static int case_dispatch_cache_nil_imp(void)
              objc_msgSend(obj, (SEL)&missing_sel) == nil;
     objc_release(obj);
     return ok;
+}
+
+static int case_dispatch_negative_cache_hits(void)
+{
+    static SFTestSelector missing_sel = {"missingDispatchNegative", "@16@0:8"};
+    __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
+    IMP imp0 = NULL;
+    IMP imp1 = NULL;
+
+    if (obj == nil) {
+        return 0;
+    }
+
+    sf_dispatch_reset_stats();
+    imp0 = sf_lookup_imp(obj, (SEL)&missing_sel);
+    imp1 = sf_lookup_imp(obj, (SEL)&missing_sel);
+    objc_release(obj);
+
+#if SF_DISPATCH_CACHE_NEGATIVE && SF_DISPATCH_STATS
+    return imp0 == (IMP)sf_dispatch_nil_imp and
+           imp1 == (IMP)sf_dispatch_nil_imp and
+           sf_dispatch_cache_misses() == 1 and
+           sf_dispatch_cache_hits() >= 1;
+#elif SF_DISPATCH_CACHE_NEGATIVE
+    return imp0 == (IMP)sf_dispatch_nil_imp and imp1 == (IMP)sf_dispatch_nil_imp;
+#elif SF_DISPATCH_STATS
+    return imp0 == (IMP)sf_dispatch_nil_imp and
+           imp1 == (IMP)sf_dispatch_nil_imp and
+           sf_dispatch_cache_misses() >= 2 and
+           sf_dispatch_cache_hits() == 0;
+#else
+    return imp0 == (IMP)sf_dispatch_nil_imp and imp1 == (IMP)sf_dispatch_nil_imp;
+#endif
+}
+
+static int case_dispatch_l0_dual_state(void)
+{
+#if SF_DISPATCH_L0_DUAL
+    static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
+    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
+    __unsafe_unretained HotDispatch *hot = SFW_NEW(HotDispatch);
+    __unsafe_unretained SuperChild *super_obj = SFW_NEW(SuperChild);
+    const SFDispatchEntry_t *lane0 = NULL;
+    const SFDispatchEntry_t *lane1 = NULL;
+
+    if (hot == nil or super_obj == nil) {
+        return 0;
+    }
+
+    sf_dispatch_reset_stats();
+    (void)sf_lookup_imp(hot, (SEL)&calc_sel);
+    (void)sf_lookup_imp(super_obj, (SEL)&ping_sel);
+
+    lane0 = sf_runtime_test_dispatch_l0_entry(0);
+    lane1 = sf_runtime_test_dispatch_l0_entry(1);
+
+    objc_release(hot);
+    objc_release(super_obj);
+    return lane0 != NULL and lane1 != NULL and
+           lane0->cls == (Class)objc_getClass("SuperChild") and
+           lane0->sel == (SEL)&ping_sel and
+           lane1->cls == (Class)objc_getClass("HotDispatch") and
+           lane1->sel == (SEL)&calc_sel;
+#else
+    return 1;
+#endif
+}
+
+static int dispatch_find_collision_pair(SFDispatchCandidate *out_a, SFDispatchCandidate *out_b)
+{
+    static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
+    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
+    static SFTestSelector sum_pair_sel = {"sumPair:", "q24@0:8{?=ii}16"};
+    static SFTestSelector instance_ping_sel = {"instancePing", "i16@0:8"};
+    SFDispatchCandidate candidates[4];
+
+    candidates[0] = (SFDispatchCandidate){.obj = SFW_NEW(HotDispatch), .cls = (Class)objc_getClass("HotDispatch"),
+                                          .sel = (SEL)&calc_sel};
+    candidates[1] = (SFDispatchCandidate){.obj = SFW_NEW(SuperChild), .cls = (Class)objc_getClass("SuperChild"),
+                                          .sel = (SEL)&ping_sel};
+    candidates[2] = (SFDispatchCandidate){.obj = SFW_NEW(StructDispatchProbe),
+                                          .cls = (Class)objc_getClass("StructDispatchProbe"),
+                                          .sel = (SEL)&sum_pair_sel};
+    candidates[3] = (SFDispatchCandidate){.obj = SFW_NEW(ReflectionProbe),
+                                          .cls = (Class)objc_getClass("ReflectionProbe"),
+                                          .sel = (SEL)&instance_ping_sel};
+
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        for (size_t j = i + 1U; j < sizeof(candidates) / sizeof(candidates[0]); ++j) {
+            if (candidates[i].obj == nil or candidates[j].obj == nil) {
+                continue;
+            }
+            if (sf_runtime_test_dispatch_cache_base_index(candidates[i].cls, candidates[i].sel) ==
+                sf_runtime_test_dispatch_cache_base_index(candidates[j].cls, candidates[j].sel)) {
+                *out_a = candidates[i];
+                *out_b = candidates[j];
+                for (size_t k = 0; k < sizeof(candidates) / sizeof(candidates[0]); ++k) {
+                    if (k != i and k != j and candidates[k].obj != nil) {
+                        objc_release(candidates[k].obj);
+                    }
+                }
+                return 1;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        if (candidates[i].obj != nil) {
+            objc_release(candidates[i].obj);
+        }
+    }
+    return 0;
+}
+
+static int case_dispatch_cache_2way_collision(void)
+{
+#if SF_DISPATCH_CACHE_2WAY && SF_DISPATCH_STATS
+    SFDispatchCandidate first = {0};
+    SFDispatchCandidate second = {0};
+    size_t base = 0U;
+    const SFDispatchEntry_t *way0 = NULL;
+    const SFDispatchEntry_t *way1 = NULL;
+    uint64_t misses = 0;
+    uint64_t hits = 0;
+    int ok = 0;
+
+    if (not dispatch_find_collision_pair(&first, &second)) {
+        return 0;
+    }
+
+    base = sf_runtime_test_dispatch_cache_base_index(first.cls, first.sel);
+    sf_dispatch_reset_stats();
+    (void)sf_lookup_imp(first.obj, first.sel);
+    (void)sf_lookup_imp(second.obj, second.sel);
+    misses = sf_dispatch_cache_misses();
+    (void)sf_lookup_imp(first.obj, first.sel);
+    hits = sf_dispatch_cache_hits();
+    way0 = sf_runtime_test_dispatch_cache_entry(base);
+    way1 = sf_runtime_test_dispatch_cache_entry(base + 1U);
+
+    ok = misses == 2 and hits >= 1 and way0 != NULL and way1 != NULL and
+         ((way0->cls == first.cls and way0->sel == first.sel) or
+          (way1->cls == first.cls and way1->sel == first.sel)) and
+         ((way0->cls == second.cls and way0->sel == second.sel) or
+          (way1->cls == second.cls and way1->sel == second.sel));
+
+    objc_release(first.obj);
+    objc_release(second.obj);
+    return ok;
+#else
+    return 1;
+#endif
 }
 
 static int case_dispatch_stats_accessors(void)
@@ -627,6 +785,9 @@ static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_selector_equality", case_dispatch_selector_equality},
     {"dispatch_msg_lookup_super_nil_paths", case_dispatch_msg_lookup_super_nil_paths},
     {"dispatch_cache_nil_imp", case_dispatch_cache_nil_imp},
+    {"dispatch_negative_cache_hits", case_dispatch_negative_cache_hits},
+    {"dispatch_l0_dual_state", case_dispatch_l0_dual_state},
+    {"dispatch_cache_2way_collision", case_dispatch_cache_2way_collision},
     {"dispatch_stats_accessors", case_dispatch_stats_accessors},
     {"dispatch_fake_object_null_class", case_dispatch_fake_object_null_class},
     {"dispatch_concurrent_cache", case_dispatch_concurrent_cache},

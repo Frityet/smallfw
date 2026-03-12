@@ -8,7 +8,7 @@
 #define SF_RUNTIME_TAGGED_POINTERS 0
 #endif
 
-#if SF_RUNTIME_TAGGED_POINTERS and UINTPTR_MAX != UINT64_MAX
+#if SF_RUNTIME_TAGGED_POINTERS && UINTPTR_MAX != UINT64_MAX
 #error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
 #endif
 
@@ -51,6 +51,10 @@ __attribute__((objc_root_class))
 // Their lifetime is bound to that owner slot: clearing the slot or destroying the parent
 // invalidates the embedded ValueObject, and retain/release do not extend that lifetime.
 @interface ValueObject : Object
+
+@end
+
+@interface FastObject : Object
 
 @end
 

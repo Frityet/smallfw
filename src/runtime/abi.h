@@ -123,6 +123,7 @@ static inline void sf_method_assign_selector(SFObjCMethod_t *_Nonnull method, SE
 }
 
 typedef uint32_t SFObjRefcount_t;
+typedef struct SFObjColdState SFObjColdState_t;
 
 typedef struct SFGroupState {
     struct SFObjHeader *_Nullable root;
@@ -137,8 +138,65 @@ enum {
     SF_OBJ_FLAG_NONE = 0U,
     SF_OBJ_FLAG_IMMORTAL = 1U << 0U,
     SF_OBJ_FLAG_EMBEDDED = 1U << 1U,
+    SF_OBJ_FLAG_HAS_COLD = 1U << 2U,
+    SF_OBJ_FLAG_INLINE_VALUE = 1U << 3U,
 };
 
+#if SF_RUNTIME_COMPACT_HEADERS
+enum {
+    SF_OBJ_CLASS_FLAG_NONE = 0U,
+    SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE = 1U << 0U,
+    SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS = 1U << 1U,
+    SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT = 1U << 2U,
+    SF_OBJ_CLASS_FLAG_FAST_OBJECT = 1U << 3U,
+    SF_OBJ_CLASS_FLAG_FAST_OBJECT_COMPAT = 1U << 4U,
+};
+
+typedef struct SFInlineValueHeader {
+#if SF_RUNTIME_VALIDATION
+    uint64_t magic;
+#endif
+    SFObjRefcount_t refcount;
+    uint32_t state;
+    uint32_t flags;
+    uint32_t alloc_size;
+    uint32_t reserved;
+    uint32_t class_flags;
+    uintptr_t tagged_parent;
+} SFInlineValueHeader_t;
+
+struct SFObjColdState {
+#if SF_RUNTIME_VALIDATION
+    struct SFObjHeader *_Nullable live_next;
+#endif
+    SFAllocator_t *_Nullable allocator;
+    id _Nullable parent;
+    struct SFObjHeader *_Nullable group_root;
+    struct SFObjHeader *_Nullable group_next;
+#if SF_RUNTIME_THREADSAFE || !SF_RUNTIME_INLINE_GROUP_STATE
+    SFGroupState_t *_Nullable group;
+#else
+    struct SFObjHeader *_Nullable inline_group_head;
+    size_t inline_group_live_count;
+    uint32_t inline_group_dead;
+    uint32_t inline_group_reserved;
+#endif
+};
+
+typedef struct SFObjHeader {
+#if SF_RUNTIME_VALIDATION
+    uint64_t magic;
+#endif
+    SFObjRefcount_t refcount;
+    uint32_t state;
+    uint32_t flags;
+    uint32_t alloc_size;
+    uint32_t reserved;
+    uint32_t class_flags;
+    uint32_t aux_flags;
+    SFObjColdState_t *_Nullable cold;
+} SFObjHeader_t;
+#else
 typedef struct SFObjHeader {
 #if SF_RUNTIME_VALIDATION
     uint64_t magic;
@@ -154,6 +212,7 @@ typedef struct SFObjHeader {
     SFGroupState_t *_Nullable group;
     struct SFObjHeader *_Nullable group_next;
 } SFObjHeader_t;
+#endif
 
 #define SF_OBJ_HEADER_MAGIC UINT64_C(0x53464f424a484452)
 #define SF_OBJ_STATE_DISPOSED UINT32_C(0)

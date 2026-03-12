@@ -245,7 +245,7 @@ function main()
         raise("run-runtime-coverage is only supported on Linux hosts.")
     end
 
-    local llvm_profdata = task_helpers.find_required_tool("llvm-profdata", "llvm-profdata not found")
+    local llvm_profdata = task_helpers.llvm_profdata_program()
     local llvm_cov = task_helpers.find_required_tool("llvm-cov", "llvm-cov not found")
     local outdir = option.get("outdir") or path.join("build", "cov-matrix")
     local cov_flags = "-fprofile-instr-generate -fcoverage-mapping"
@@ -275,6 +275,7 @@ function main()
             "--mxflags=" .. cov_flags,
             "--ldflags=-fprofile-instr-generate",
         }
+        task_helpers.append_runtime_toolchain_args(configure_args)
 
         for _, value in ipairs(entry.options) do
             table.insert(configure_args, value)
@@ -312,7 +313,7 @@ function main()
     end
     table.insert(merge_args, "-o")
     table.insert(merge_args, merged_profdata)
-    os.execv(llvm_profdata.program, merge_args)
+    os.execv(llvm_profdata, merge_args)
 
     local summary = _export_coverage(llvm_cov, binaries, merged_profdata, true)
     local export_data = _export_coverage(llvm_cov, binaries, merged_profdata, false)
