@@ -19,6 +19,16 @@ static size_t test_align_up(size_t value, size_t align)
     return (value + mask) & ~mask;
 }
 
+static size_t embedded_value_storage_size(Class cls)
+{
+    size_t instance_size = class_getInstanceSize(cls);
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    return test_align_up(sizeof(SFInlineValueHeader_t) + instance_size, sizeof(void *));
+#else
+    return test_align_up(sizeof(SFObjHeader_t) + instance_size, sizeof(void *));
+#endif
+}
+
 #if SF_RUNTIME_THREADSAFE
 static void *parent_thread_main(void *arg)
 {
@@ -48,7 +58,7 @@ static int case_value_parent_layout_hidden_storage(void)
 
     size_t holder_size = class_getInstanceSize(holder_cls);
     size_t visible_min = class_getInstanceSize(object_cls) + (2U * sizeof(void *));
-    size_t slot_min = test_align_up(sizeof(SFObjHeader_t) + class_getInstanceSize(value_cls), sizeof(void *));
+    size_t slot_min = embedded_value_storage_size(value_cls);
     if (holder_size < visible_min + slot_min) {
         return 0;
     }
@@ -85,9 +95,7 @@ static int case_value_parent_alloc_embeds_in_parent(void)
     uintptr_t holder_begin = (uintptr_t)(void *)holder_hdr;
     uintptr_t holder_end = holder_begin + sf_object_allocation_size_for_object(holder);
     uintptr_t child_begin = (uintptr_t)(void *)child_hdr;
-    uintptr_t child_end = child_begin + test_align_up(sizeof(SFObjHeader_t) +
-                                                      class_getInstanceSize((Class)objc_getClass("InlineValueSub")),
-                                                      sizeof(void *));
+    uintptr_t child_end = child_begin + embedded_value_storage_size((Class)objc_getClass("InlineValueSub"));
     int ok = holder_hdr != NULL and
              child_hdr != NULL and
              ctx.alloc_calls == 1 and
@@ -103,6 +111,31 @@ static int case_value_parent_alloc_embeds_in_parent(void)
     objc_storeStrong((id *)&holder->_value, nil);
     objc_release(holder);
     return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
+}
+
+static int case_value_parent_nontrivial_inline_rejected(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained NonTrivialHolder *holder = SFW_NEW(NonTrivialHolder);
+    if (holder == nil) {
+        return 0;
+    }
+
+    id child = sf_alloc_object_with_parent((Class)objc_getClass("NonTrivialInlineValue"), holder);
+    int ok = 0;
+
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    ok = child == nil and holder->_value == nil;
+#else
+    ok = child != nil and holder->_value == child and ((NonTrivialInlineValue *)child).parent == holder;
+    if (child != nil) {
+        objc_storeStrong((id *)&holder->_value, nil);
+    }
+#endif
+
+    objc_release(holder);
+    return ok;
 }
 
 static int case_value_parent_duplicate_slots_reuse(void)
@@ -434,6 +467,32 @@ static int case_parent_alloc_with_nil_parent(void)
     return ok;
 }
 
+static int case_parent_fast_object_rejected(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
+    id child = nil;
+    int ok = 0;
+
+    if (root == nil) {
+        return 0;
+    }
+
+    child = sf_alloc_object_with_parent((Class)objc_getClass("PlainFastObject"), root);
+#if SF_RUNTIME_FAST_OBJECTS
+    ok = child == nil;
+#else
+    ok = child != nil and ((Object *)child).parent == root;
+    if (child != nil) {
+        objc_release(child);
+    }
+#endif
+
+    objc_release(root);
+    return ok;
+}
+
 static int case_parent_dead_parent_rejects_new_child(void)
 {
     sf_test_reset_common_state();
@@ -511,6 +570,7 @@ static int case_parent_concurrent_alloc_release(void)
 static const SFTestCase g_parent_cases[] = {
     {"value_parent_layout_hidden_storage", case_value_parent_layout_hidden_storage},
     {"value_parent_alloc_embeds_in_parent", case_value_parent_alloc_embeds_in_parent},
+    {"value_parent_nontrivial_inline_rejected", case_value_parent_nontrivial_inline_rejected},
     {"value_parent_duplicate_slots_reuse", case_value_parent_duplicate_slots_reuse},
     {"value_parent_child_expires_with_parent", case_value_parent_child_expires_with_parent},
     {"value_parent_standalone_heap_alloc", case_value_parent_standalone_heap_alloc},
@@ -523,6 +583,7 @@ static const SFTestCase g_parent_cases[] = {
     {"parent_group_frees_on_last_release", case_parent_group_frees_on_last_release},
     {"parent_nested_allocation_same_root", case_parent_nested_allocation_same_root},
     {"parent_alloc_with_nil_parent", case_parent_alloc_with_nil_parent},
+    {"parent_fast_object_rejected", case_parent_fast_object_rejected},
     {"parent_dead_parent_rejects_new_child", case_parent_dead_parent_rejects_new_child},
     {"parent_concurrent_alloc_release", case_parent_concurrent_alloc_release},
 };

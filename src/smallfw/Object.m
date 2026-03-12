@@ -48,7 +48,13 @@
     hdr->state = SF_OBJ_STATE_LIVE;
     hdr->flags = SF_OBJ_FLAG_IMMORTAL;
     hdr->alloc_size = (uint32_t)required;
+#if SF_RUNTIME_COMPACT_HEADERS
+    hdr->class_flags = sf_class_cached_object_flags((Class)self);
+    hdr->aux_flags = 0U;
+    hdr->cold = NULL;
+#else
     hdr->allocator = sf_default_allocator();
+#endif
 
     obj = (id)(void *)((uintptr_t)storage + sizeof(SFObjHeader_t));
     *(Class *)obj = (Class)self;
@@ -186,5 +192,9 @@
 @implementation ValueObject
 
 
+
+@end
+
+@implementation FastObject
 
 @end

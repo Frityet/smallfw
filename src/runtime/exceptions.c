@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unwind.h>
-#if defined(_WIN32) and not defined(_WIN32_WINNT)
+#if defined(_WIN32) && !defined(_WIN32_WINNT)
 #define _WIN32_WINNT 0x0600
 #endif
 #if defined(_WIN32)
@@ -130,7 +130,7 @@ void sf_exception_capture_metadata(id obj)
     if (meta != NULL) {
         meta->count = count;
         if (count > 0)
-            memcpy((void *)meta->frames, frames, count * sizeof(frames[0]));
+            memcpy((void *)meta->frames, (const void *)frames, count * sizeof(frames[0]));
     }
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
 }

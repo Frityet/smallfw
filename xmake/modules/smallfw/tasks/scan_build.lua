@@ -5,8 +5,8 @@ function main()
     local analyzer = task_helpers.find_required_tool("scan-build",
         "scan-build not found. Install clang-analyzer first.")
     local outdir = option.get("outdir") or path.join("build", "scan-build")
-    local clang = task_helpers.find_required_program("clang", "clang not found")
-    local clangxx = task_helpers.find_required_program("clang++", "clang++ not found")
+    local clang = task_helpers.clang_program()
+    local clangxx = task_helpers.clangxx_program()
 
     os.rm(outdir)
     os.mkdir(outdir)

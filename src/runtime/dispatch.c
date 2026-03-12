@@ -8,7 +8,7 @@
 #pragma clang diagnostic ignored "-Wpre-c11-compat"
 #endif
 
-#if defined(__clang__) or defined(__GNUC__)
+#if defined(__clang__) || defined(__GNUC__)
 #define SF_ALWAYS_INLINE inline __attribute__((always_inline))
 #else
 #define SF_ALWAYS_INLINE inline
@@ -16,9 +16,9 @@
 
 SFDispatchEntry_t g_dispatch_cache[SF_DISPATCH_CACHE_SIZE];
 #if SF_RUNTIME_THREADSAFE
-__thread SFDispatchEntry_t g_dispatch_l0;
+__thread SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
 #else
-SFDispatchEntry_t g_dispatch_l0;
+SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
 #endif
 
 #if SF_RUNTIME_THREADSAFE
@@ -84,12 +84,16 @@ int sf_dispatch_imp_is_nil(IMP imp)
     return imp == (IMP)sf_dispatch_nil_imp;
 }
 
-static size_t cache_index_for(Class cls, SEL op)
+static size_t cache_base_index_for(Class cls, SEL op)
 {
     uintptr_t cls_bits = ((uintptr_t)cls) >> 4U;
     uintptr_t sel_bits = ((uintptr_t)op) >> 4U;
     uintptr_t mixed = cls_bits ^ sel_bits ^ (sel_bits >> 9U) ^ (cls_bits >> 11U);
+#if SF_DISPATCH_CACHE_2WAY
+    return (size_t)(mixed & ((SF_DISPATCH_CACHE_SIZE / 2U) - 1U)) * 2U;
+#else
     return (size_t)(mixed & (SF_DISPATCH_CACHE_SIZE - 1U));
+#endif
 }
 
 static SF_ALWAYS_INLINE int entry_match_inline(const SFDispatchEntry_t *entry, Class cls, SEL op, IMP *out_imp)
@@ -118,6 +122,95 @@ static SF_ALWAYS_INLINE void entry_store(SFDispatchEntry_t *entry, Class cls, SE
     entry->sel = op;
     entry->imp = imp;
     entry->reserved = 0;
+}
+
+static SF_ALWAYS_INLINE int imp_is_fast_cacheable(IMP imp)
+{
+    if (imp == NULL) {
+        return 0;
+    }
+#if SF_DISPATCH_CACHE_NEGATIVE
+    return 1;
+#else
+    return not sf_dispatch_imp_is_nil(imp);
+#endif
+}
+
+static SF_ALWAYS_INLINE void l0_store(Class cls, SEL op, IMP imp)
+{
+#if SF_DISPATCH_L0_DUAL
+    if (g_dispatch_l0[0].cls == cls and g_dispatch_l0[0].sel == op) {
+        entry_store(&g_dispatch_l0[0], cls, op, imp);
+        return;
+    }
+    if (g_dispatch_l0[1].cls == cls and g_dispatch_l0[1].sel == op) {
+        SFDispatchEntry_t previous = g_dispatch_l0[0];
+        entry_store(&g_dispatch_l0[0], cls, op, imp);
+        g_dispatch_l0[1] = previous;
+        return;
+    }
+    g_dispatch_l0[1] = g_dispatch_l0[0];
+    entry_store(&g_dispatch_l0[0], cls, op, imp);
+#else
+    entry_store(&g_dispatch_l0[0], cls, op, imp);
+#endif
+}
+
+static SF_ALWAYS_INLINE int l0_lookup(Class cls, SEL op, IMP *out_imp)
+{
+    if (entry_match_inline(&g_dispatch_l0[0], cls, op, out_imp) and imp_is_fast_cacheable(*out_imp)) {
+        return 1;
+    }
+#if SF_DISPATCH_L0_DUAL
+    if (entry_match_inline(&g_dispatch_l0[1], cls, op, out_imp) and imp_is_fast_cacheable(*out_imp)) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
+static SF_ALWAYS_INLINE int global_cache_lookup(size_t base_index, Class cls, SEL op, IMP *out_imp)
+{
+    if (entry_match_inline(&g_dispatch_cache[base_index], cls, op, out_imp) and imp_is_fast_cacheable(*out_imp)) {
+        return 1;
+    }
+#if SF_DISPATCH_CACHE_2WAY
+    if (entry_match_inline(&g_dispatch_cache[base_index + 1U], cls, op, out_imp) and
+        imp_is_fast_cacheable(*out_imp)) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
+static SF_ALWAYS_INLINE void global_cache_store(size_t base_index, Class cls, SEL op, IMP imp)
+{
+#if SF_DISPATCH_CACHE_2WAY
+    SFDispatchEntry_t *way0 = &g_dispatch_cache[base_index];
+    SFDispatchEntry_t *way1 = &g_dispatch_cache[base_index + 1U];
+
+    if (way0->cls == cls and way0->sel == op) {
+        entry_store(way0, cls, op, imp);
+        return;
+    }
+    if (way1->cls == cls and way1->sel == op) {
+        entry_store(way1, cls, op, imp);
+        return;
+    }
+    if (way0->imp == NULL) {
+        entry_store(way0, cls, op, imp);
+        return;
+    }
+    if (way1->imp == NULL) {
+        entry_store(way1, cls, op, imp);
+        return;
+    }
+
+    *way1 = *way0;
+    entry_store(way0, cls, op, imp);
+#else
+    entry_store(&g_dispatch_cache[base_index], cls, op, imp);
+#endif
 }
 
 static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op)
@@ -166,8 +259,8 @@ IMP sf_lookup_imp_in_class(Class cls, SEL op)
 IMP sf_lookup_imp_miss(Class cls, SEL op)
 {
     IMP imp = NULL;
-    SFDispatchEntry_t *entry = NULL;
-    size_t index = 0;
+    size_t base_index = 0;
+    int should_cache = 0;
 
     SF_STATS_INC(g_cache_misses);
     SF_STATS_INC(g_method_walks);
@@ -177,17 +270,21 @@ IMP sf_lookup_imp_miss(Class cls, SEL op)
         imp = (IMP)sf_dispatch_nil_imp;
     }
 
-    index = cache_index_for(cls, op);
-    entry = &g_dispatch_cache[index];
+    should_cache = imp_is_fast_cacheable(imp);
+    if (not should_cache) {
+        return imp;
+    }
+
+    base_index = cache_base_index_for(cls, op);
 
 #if SF_RUNTIME_THREADSAFE
     sf_runtime_rwlock_wrlock(&g_dispatch_cache_lock);
 #endif
-    entry_store(entry, cls, op, imp);
+    global_cache_store(base_index, cls, op, imp);
 #if SF_RUNTIME_THREADSAFE
     sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
 #endif
-    entry_store(&g_dispatch_l0, cls, op, imp);
+    l0_store(cls, op, imp);
 
     return imp;
 }
@@ -195,25 +292,23 @@ IMP sf_lookup_imp_miss(Class cls, SEL op)
 static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op)
 {
     IMP imp = NULL;
-    SFDispatchEntry_t *entry = NULL;
-    size_t index = 0;
+    size_t base_index = 0;
 
-    if (entry_match_inline(&g_dispatch_l0, cls, op, &imp)) {
+    if (l0_lookup(cls, op, &imp)) {
         SF_STATS_INC(g_cache_hits);
         return imp;
     }
 
-    index = cache_index_for(cls, op);
-    entry = &g_dispatch_cache[index];
+    base_index = cache_base_index_for(cls, op);
 
 #if SF_RUNTIME_THREADSAFE
     sf_runtime_rwlock_rdlock(&g_dispatch_cache_lock);
 #endif
-    if (entry_match_inline(entry, cls, op, &imp)) {
+    if (global_cache_lookup(base_index, cls, op, &imp)) {
 #if SF_RUNTIME_THREADSAFE
         sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
 #endif
-        entry_store(&g_dispatch_l0, cls, op, imp);
+        l0_store(cls, op, imp);
         SF_STATS_INC(g_cache_hits);
         return imp;
     }
@@ -385,13 +480,30 @@ void sf_dispatch_reset_stats(void)
     sf_runtime_rwlock_unlock(&g_dispatch_cache_lock);
 #endif
 
-    entry_store(&g_dispatch_l0, NULL, NULL, NULL);
+    for (i = 0; i < SF_DISPATCH_L0_SIZE; ++i) {
+        entry_store(&g_dispatch_l0[i], NULL, NULL, NULL);
+    }
 
 #if SF_DISPATCH_STATS
     SF_STATS_STORE(g_cache_hits, UINT64_C(0));
     SF_STATS_STORE(g_cache_misses, UINT64_C(0));
     SF_STATS_STORE(g_method_walks, UINT64_C(0));
 #endif
+}
+
+size_t sf_runtime_test_dispatch_cache_base_index(Class cls, SEL op)
+{
+    return cache_base_index_for(cls, op);
+}
+
+const SFDispatchEntry_t *sf_runtime_test_dispatch_cache_entry(size_t index)
+{
+    return index < SF_DISPATCH_CACHE_SIZE ? &g_dispatch_cache[index] : NULL;
+}
+
+const SFDispatchEntry_t *sf_runtime_test_dispatch_l0_entry(size_t index)
+{
+    return index < SF_DISPATCH_L0_SIZE ? &g_dispatch_l0[index] : NULL;
 }
 
 #if defined(__clang__)

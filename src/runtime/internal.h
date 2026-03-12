@@ -16,12 +16,13 @@ typedef struct SFDispatchEntry {
 } SFDispatchEntry_t;
 
 enum { SF_DISPATCH_CACHE_SIZE = 4096U };
+enum { SF_DISPATCH_L0_SIZE = 2U };
 
 extern SFDispatchEntry_t g_dispatch_cache[SF_DISPATCH_CACHE_SIZE];
 #if SF_RUNTIME_THREADSAFE
-extern __thread SFDispatchEntry_t g_dispatch_l0;
+extern __thread SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
 #else
-extern SFDispatchEntry_t g_dispatch_l0;
+extern SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
 #endif
 
 IMP sf_lookup_imp(id _Nullable receiver, SEL _Nullable op);
@@ -43,6 +44,8 @@ IMP _Nullable sf_class_cached_init_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_cxx_destruct_imp(Class _Nullable cls);
 const uint32_t *_Nullable sf_class_cached_object_ivar_offsets(Class _Nullable cls, size_t *_Nullable count_out);
 int sf_class_has_trivial_release(Class _Nullable cls);
+uint32_t sf_class_cached_object_flags(Class _Nullable cls);
+int sf_class_is_constant_string(Class _Nullable cls);
 size_t sf_class_instance_size_fast(Class _Nullable cls);
 #if SF_RUNTIME_TAGGED_POINTERS
 extern Class _Nullable g_tagged_pointer_slot_classes[8];
@@ -63,6 +66,10 @@ void sf_object_dispose(id _Nullable obj);
 id _Nullable sf_alloc_object_with_parent(Class _Nullable cls, id _Nullable parent);
 SFAllocator_t *_Nullable sf_header_allocator(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_allocator(SFObjHeader_t *_Nullable hdr, SFAllocator_t *_Nullable allocator);
+id _Nullable sf_header_object(SFObjHeader_t *_Nullable hdr);
+int sf_header_is_inline_value_prefix(SFObjHeader_t *_Nullable hdr);
+SFObjHeader_t *_Nullable sf_header_live_next(SFObjHeader_t *_Nullable hdr);
+void sf_header_set_live_next(SFObjHeader_t *_Nullable hdr, SFObjHeader_t *_Nullable next);
 id _Nullable sf_header_parent(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_parent(SFObjHeader_t *_Nullable hdr, id _Nullable parent);
 SFObjHeader_t *_Nullable sf_header_group_root(SFObjHeader_t *_Nullable hdr);
@@ -73,6 +80,7 @@ SFObjHeader_t *_Nullable sf_header_group_head(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_group_head(SFObjHeader_t *_Nullable hdr, SFObjHeader_t *_Nullable group_head);
 size_t sf_header_group_live_count(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_group_live_count(SFObjHeader_t *_Nullable hdr, size_t count);
+int sf_header_group_dead(SFObjHeader_t *_Nullable hdr);
 int sf_header_grouped(SFObjHeader_t *_Nullable hdr);
 int sf_header_init_group_root(SFObjHeader_t *_Nullable hdr);
 SFRuntimeMutex_t *_Nullable sf_header_group_lock(SFObjHeader_t *_Nullable hdr);
@@ -100,6 +108,9 @@ char sf_runtime_test_dispatch_primary_type_code(const char *_Nonnull p);
 size_t sf_runtime_test_dispatch_collect_explicit_arg_codes(SEL _Nullable op, char *_Nonnull out_codes, int *_Nullable unsupported_sig);
 size_t sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(SEL _Nullable op, char *_Nonnull out_codes, int *_Nullable unsupported_sig);
 uintptr_t sf_runtime_test_dispatch_read_word_arg(int code, ...);
+size_t sf_runtime_test_dispatch_cache_base_index(Class _Nullable cls, SEL _Nullable op);
+const SFDispatchEntry_t *_Nullable sf_runtime_test_dispatch_cache_entry(size_t index);
+const SFDispatchEntry_t *_Nullable sf_runtime_test_dispatch_l0_entry(size_t index);
 
 #if SF_RUNTIME_EXCEPTIONS
 typedef struct SFRuntimeTestLandingInfo {

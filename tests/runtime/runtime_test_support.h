@@ -22,6 +22,13 @@ typedef struct SFTestCase {
     SFTestFn fn;
 } SFTestCase;
 
+typedef const SFTestCase *_Nullable (*_Nonnull SFTestSuiteFn)(size_t *_Nullable count);
+
+typedef struct SFTestSuite {
+    const char *_Nonnull name;
+    SFTestSuiteFn fn;
+} SFTestSuite;
+
 typedef struct SFTestAllocatorCtx {
     int alloc_calls;
     int free_calls;
@@ -91,6 +98,30 @@ extern int g_counter_deallocs;
 @end
 
 @interface AllocTracked : Object
+@end
+
+@interface PlainFastObject : FastObject
+@end
+
+@interface InvalidFastObject : FastObject {
+  @public
+    Object *_child;
+}
+@end
+
+@interface TrackedFastObject : FastObject
+@end
+
+@interface NonTrivialInlineValue : ValueObject {
+  @public
+    Object *_ref;
+}
+@end
+
+@interface NonTrivialHolder : Object {
+  @public
+    NonTrivialInlineValue *_value;
+}
 @end
 
 @interface HotDispatch : Object

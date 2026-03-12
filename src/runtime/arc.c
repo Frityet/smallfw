@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__clang__) or defined(__GNUC__)
+#if defined(__clang__) || defined(__GNUC__)
 #define SF_LIKELY(x) __builtin_expect(!!(x), 1)
 #else
 #define SF_LIKELY(x) (x)
@@ -23,9 +23,28 @@ static __thread SFAutoreleaseState_t g_autorelease_state;
 static __thread id g_last_header_obj;
 static __thread SFObjHeader_t *g_last_header_ptr;
 static __thread size_t g_pool_fallback_token;
-static Class g_nsconstantstring_class;
-static Class g_nxconstantstring_class;
-static int g_constant_string_classes_initialized;
+
+#if SF_RUNTIME_COMPACT_HEADERS
+static inline uint32_t header_class_flags(SFObjHeader_t *hdr)
+{
+    return hdr != NULL ? hdr->class_flags : 0U;
+}
+
+static inline int header_has_trivial_release(SFObjHeader_t *hdr)
+{
+    return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE) != 0U;
+}
+
+static inline int header_has_object_ivars(SFObjHeader_t *hdr)
+{
+    return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS) != 0U;
+}
+
+static inline int header_has_cxx_destruct(SFObjHeader_t *hdr)
+{
+    return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT) != 0U;
+}
+#endif
 
 static inline int sf_object_bypasses_heap_arc(id obj)
 {
@@ -39,12 +58,7 @@ static inline int sf_object_bypasses_heap_arc(id obj)
     }
 
     cls = sf_object_class(obj);
-    if (not g_constant_string_classes_initialized) {
-        g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
-        g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
-        g_constant_string_classes_initialized = 1;
-    }
-    return cls != NULL and (cls == g_nsconstantstring_class or cls == g_nxconstantstring_class);
+    return sf_class_is_constant_string(cls);
 }
 
 void sf_runtime_test_reset_autorelease_state(void)
@@ -217,24 +231,39 @@ static void clear_object_ivars(id obj, Class cls)
                 SEL dealloc_sel = sf_cached_selector_dealloc();
                 static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
                 static SEL cxx_destruct_sel;
+                int has_object_ivars = 1;
+                int has_cxx_destruct = 1;
 
+#if SF_RUNTIME_COMPACT_HEADERS
+                has_object_ivars = header_has_object_ivars(old_hdr);
+                has_cxx_destruct = header_has_cxx_destruct(old_hdr);
+                if (header_has_trivial_release(old_hdr)) {
+                    sf_object_dispose(old);
+                    continue;
+                }
+#else
                 if (sf_class_has_trivial_release(old_cls)) {
                     sf_object_dispose(old);
                     continue;
                 }
+#endif
 
                 IMP imp = sf_class_cached_dealloc_imp(old_cls);
                 if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
                     (void)imp(old, dealloc_sel);
                 }
-                clear_object_ivars(old, old_cls);
-                if (cxx_destruct_sel == NULL) {
-                    cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+                if (has_object_ivars) {
+                    clear_object_ivars(old, old_cls);
                 }
-                if (cxx_destruct_sel != NULL) {
-                    IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(old_cls);
-                    if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
-                        (void)cxx_destruct_imp(old, cxx_destruct_sel);
+                if (has_cxx_destruct) {
+                    if (cxx_destruct_sel == NULL) {
+                        cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+                    }
+                    if (cxx_destruct_sel != NULL) {
+                        IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(old_cls);
+                        if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
+                            (void)cxx_destruct_imp(old, cxx_destruct_sel);
+                        }
                     }
                 }
                 sf_object_dispose(old);
@@ -336,6 +365,8 @@ static void release_object_now(id obj)
 {
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     Class cls = NULL;
+    int has_object_ivars = 1;
+    int has_cxx_destruct = 1;
     if (hdr == NULL) {
         return;
     }
@@ -375,24 +406,39 @@ static void release_object_now(id obj)
     static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
     static SEL cxx_destruct_sel;
 
+#if SF_RUNTIME_COMPACT_HEADERS
+    has_object_ivars = header_has_object_ivars(hdr);
+    has_cxx_destruct = header_has_cxx_destruct(hdr);
+    if (header_has_trivial_release(hdr)) {
+        sf_object_dispose(obj);
+        return;
+    }
+#endif
+
     cls = sf_object_class(obj);
+#if !SF_RUNTIME_COMPACT_HEADERS
     if (sf_class_has_trivial_release(cls)) {
         sf_object_dispose(obj);
         return;
     }
+#endif
 
     IMP imp = sf_class_cached_dealloc_imp(cls);
     if (imp != NULL and not sf_dispatch_imp_is_nil(imp) and dealloc_sel != NULL) {
         (void)imp(obj, dealloc_sel);
     }
-    clear_object_ivars(obj, cls);
-    if (cxx_destruct_sel == NULL) {
-        cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+    if (has_object_ivars) {
+        clear_object_ivars(obj, cls);
     }
-    if (cxx_destruct_sel != NULL) {
-        IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(cls);
-        if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
-            (void)cxx_destruct_imp(obj, cxx_destruct_sel);
+    if (has_cxx_destruct) {
+        if (cxx_destruct_sel == NULL) {
+            cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+        }
+        if (cxx_destruct_sel != NULL) {
+            IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(cls);
+            if (cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(cxx_destruct_imp)) {
+                (void)cxx_destruct_imp(obj, cxx_destruct_sel);
+            }
         }
     }
     sf_object_dispose(obj);

@@ -43,6 +43,14 @@ typedef struct SFSelectorEntry {
     struct SFSelectorEntry *next;
 } SFSelectorEntry_t;
 
+#if SF_RUNTIME_VALIDATION && SF_RUNTIME_INLINE_VALUE_STORAGE
+typedef struct SFInlineLiveEntry {
+    id obj;
+    SFObjHeader_t *hdr;
+    struct SFInlineLiveEntry *next;
+} SFInlineLiveEntry_t;
+#endif
+
 enum { SF_CLASS_MAP_CAPACITY = 2048 };
 enum { SF_CLASS_META_CAPACITY = 4096 };
 enum { SF_LIVE_OBJECT_BUCKETS = 8192U };
@@ -58,12 +66,18 @@ static SFRuntimeRwlock_t g_class_map_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
 #if SF_RUNTIME_VALIDATION
 static SFRuntimeRwlock_t g_live_object_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
 static SFObjHeader_t *g_live_object_buckets[SF_LIVE_OBJECT_BUCKETS];
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+static SFInlineLiveEntry_t *g_inline_live_buckets[SF_LIVE_OBJECT_BUCKETS];
+#endif
 #endif
 static SFSelectorEntry_t *g_selector_table[SF_SELECTOR_BUCKETS];
 static SFRuntimeRwlock_t g_selector_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
 
 static Class g_object_class;
 static Class g_value_object_class;
+static Class g_fast_object_class;
+static Class g_nsconstantstring_class;
+static Class g_nxconstantstring_class;
 static SEL g_dealloc_sel;
 static SEL g_alloc_sel;
 static SEL g_init_sel;
@@ -79,6 +93,8 @@ static IMP g_object_dealloc_imp;
 enum {
     SF_CLASS_META_FLAG_HAS_OBJECT_IVARS = 1U << 0U,
     SF_CLASS_META_FLAG_TRIVIAL_RELEASE = 1U << 1U,
+    SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT = 1U << 2U,
+    SF_CLASS_META_FLAG_FAST_OBJECT_CLASS = 1U << 3U,
 };
 
 #if SF_RUNTIME_TAGGED_POINTERS
@@ -98,6 +114,93 @@ static void sf_cache_class_meta(Class cls);
 static SFObjCClass_t *class_map_lookup_unlocked(const char *name);
 static IMP sf_lookup_method_imp_exact(Class cls, SEL sel);
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls);
+static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super);
+static size_t align_up(size_t value, size_t align);
+
+#if SF_RUNTIME_COMPACT_HEADERS
+static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
+{
+    uint32_t flags = SF_OBJ_CLASS_FLAG_NONE;
+    if (meta == NULL) {
+        return flags;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U) {
+        flags |= SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
+        flags |= SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS;
+    }
+    if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
+        flags |= SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) != 0U) {
+        flags |= SF_OBJ_CLASS_FLAG_FAST_OBJECT_COMPAT;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) != 0U) {
+        flags |= SF_OBJ_CLASS_FLAG_FAST_OBJECT;
+    }
+    return flags;
+}
+#endif
+
+static int sf_class_is_fast_object_unlocked(Class cls)
+{
+    if (cls == NULL) {
+        return 0;
+    }
+    if (g_fast_object_class == NULL) {
+        g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
+    }
+    if (g_fast_object_class == NULL) {
+        return 0;
+    }
+    return sf_class_is_subclass_of_unlocked(cls, g_fast_object_class);
+}
+
+static int sf_class_supports_inline_value_storage_unlocked(Class cls)
+{
+    SFClassMetaEntry_t *meta = NULL;
+
+    if (cls == NULL) {
+        return 0;
+    }
+#if !SF_RUNTIME_INLINE_VALUE_STORAGE
+    return 1;
+#else
+    meta = sf_class_meta_for(cls);
+    if (meta == NULL) {
+        return 0;
+    }
+    return (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
+           (meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U;
+#endif
+}
+
+static int sf_class_rejects_fast_object_allocation_unlocked(Class cls)
+{
+#if !SF_RUNTIME_FAST_OBJECTS
+    (void)cls;
+    return 0;
+#else
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    if (meta == NULL) {
+        return 0;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) == 0U) {
+        return 0;
+    }
+    return (meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) == 0U;
+#endif
+}
+
+static size_t sf_embedded_value_storage_size(size_t value_size)
+{
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    return align_up(sizeof(SFInlineValueHeader_t) + value_size, sizeof(void *));
+#else
+    return align_up(sizeof(SFObjHeader_t) + value_size, sizeof(void *));
+#endif
+}
 
 static uint64_t hash_cstr(const char *s)
 {
@@ -355,7 +458,7 @@ static void layout_active_pop(SFObjCClass_t *cls)
     }
     for (size_t i = g_layout_active_count; i > 0; --i) {
         if (g_layout_active_stack[i - 1U] == cls) {
-            memmove(&g_layout_active_stack[i - 1U], &g_layout_active_stack[i],
+            memmove((void *)&g_layout_active_stack[i - 1U], &g_layout_active_stack[i],
                     (g_layout_active_count - i) * sizeof(g_layout_active_stack[0]));
             g_layout_active_count -= 1U;
             return;
@@ -668,6 +771,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
                 if (sf_extract_object_class_name(ivar->type, class_name, sizeof(class_name))) {
                     Class value_cls = (Class)class_map_lookup_unlocked(class_name);
                     if (value_cls != NULL and sf_class_is_value_object_unlocked(value_cls) and
+                        sf_class_supports_inline_value_storage_unlocked(value_cls) and
                         not layout_active_contains((SFObjCClass_t *)value_cls)) {
                         if (local_slots == NULL) {
                             local_slots = (SFValueSlot_t *)sf_runtime_test_calloc((size_t)list->count,
@@ -679,7 +783,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
                             }
                         }
                         size_t value_size = sf_fix_class_layout((SFObjCClass_t *)value_cls);
-                        size_t slot_size = align_up(sizeof(SFObjHeader_t) + value_size, sizeof(void *));
+                        size_t slot_size = sf_embedded_value_storage_size(value_size);
                         if (slot_size <= UINT32_MAX) {
                             local_slots[local_slot_count].declared_cls = value_cls;
                             local_slots[local_slot_count].owner_offset = (uint32_t)adjusted_offset;
@@ -882,6 +986,9 @@ void sf_finalize_registered_classes(void)
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
     g_object_class = (Class)class_map_lookup_unlocked("Object");
     g_value_object_class = (Class)class_map_lookup_unlocked("ValueObject");
+    g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
+    g_nsconstantstring_class = (Class)class_map_lookup_unlocked("NSConstantString");
+    g_nxconstantstring_class = (Class)class_map_lookup_unlocked("NXConstantString");
     g_object_dealloc_imp = sf_object_dealloc_imp_unlocked();
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         SFClassEntry_t *slot = &g_class_map[i];
@@ -997,6 +1104,8 @@ size_t sf_class_instance_size_fast(Class cls)
 
 int sf_object_is_heap(id obj)
 {
+    SFObjHeader_t *hdr = NULL;
+
     if (obj == NULL) {
         return 0;
     }
@@ -1005,12 +1114,8 @@ int sf_object_is_heap(id obj)
         return 0;
     }
 #endif
-#if SF_RUNTIME_VALIDATION
-    return sf_header_from_object(obj) != NULL;
-#else
-    SFObjHeader_t *hdr = ((SFObjHeader_t *)obj) - 1;
-    return hdr->state == SF_OBJ_STATE_LIVE or (hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U;
-#endif
+    hdr = sf_header_from_object(obj);
+    return hdr != NULL and (hdr->state == SF_OBJ_STATE_LIVE or (hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U);
 }
 
 Class sf_object_class(id obj)
@@ -1032,11 +1137,24 @@ void sf_register_live_object_header(SFObjHeader_t *hdr)
         return;
     }
 #if SF_RUNTIME_VALIDATION
-    id obj = (id)(hdr + 1);
+    id obj = sf_header_object(hdr);
     size_t bucket = live_object_bucket_index(obj);
 
     sf_runtime_rwlock_wrlock(&g_live_object_lock);
-    hdr->live_next = g_live_object_buckets[bucket];
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    if (sf_header_is_inline_value_prefix(hdr)) {
+        SFInlineLiveEntry_t *entry = (SFInlineLiveEntry_t *)sf_runtime_test_calloc(1U, sizeof(*entry));
+        if (entry != NULL) {
+            entry->obj = obj;
+            entry->hdr = hdr;
+            entry->next = g_inline_live_buckets[bucket];
+            g_inline_live_buckets[bucket] = entry;
+        }
+        sf_runtime_rwlock_unlock(&g_live_object_lock);
+        return;
+    }
+#endif
+    sf_header_set_live_next(hdr, g_live_object_buckets[bucket]);
     g_live_object_buckets[bucket] = hdr;
     sf_runtime_rwlock_unlock(&g_live_object_lock);
 #else
@@ -1050,18 +1168,46 @@ void sf_unregister_live_object_header(SFObjHeader_t *hdr)
         return;
     }
 #if SF_RUNTIME_VALIDATION
-    id obj = (id)(hdr + 1);
+    id obj = sf_header_object(hdr);
     size_t bucket = live_object_bucket_index(obj);
 
     sf_runtime_rwlock_wrlock(&g_live_object_lock);
-    SFObjHeader_t **slot = &g_live_object_buckets[bucket];
-    while (*slot != NULL) {
-        if (*slot == hdr) {
-            *slot = hdr->live_next;
-            hdr->live_next = NULL;
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    if (sf_header_is_inline_value_prefix(hdr)) {
+        SFInlineLiveEntry_t *current = g_inline_live_buckets[bucket];
+        SFInlineLiveEntry_t *prev = NULL;
+        while (current != NULL) {
+            if (current->hdr == hdr) {
+                if (prev == NULL) {
+                    g_inline_live_buckets[bucket] = current->next;
+                } else {
+                    prev->next = current->next;
+                }
+                free(current);
+                break;
+            }
+            prev = current;
+            current = current->next;
+        }
+        sf_runtime_rwlock_unlock(&g_live_object_lock);
+        return;
+    }
+#endif
+    SFObjHeader_t *current = g_live_object_buckets[bucket];
+    SFObjHeader_t *prev = NULL;
+    while (current != NULL) {
+        if (current == hdr) {
+            SFObjHeader_t *next = sf_header_live_next(hdr);
+            if (prev == NULL) {
+                g_live_object_buckets[bucket] = next;
+            } else {
+                sf_header_set_live_next(prev, next);
+            }
+            sf_header_set_live_next(hdr, NULL);
             break;
         }
-        slot = &(*slot)->live_next;
+        prev = current;
+        current = sf_header_live_next(current);
     }
     sf_runtime_rwlock_unlock(&g_live_object_lock);
 #else
@@ -1089,208 +1235,33 @@ SFObjHeader_t *sf_header_from_object(id obj)
             sf_runtime_rwlock_unlock(&g_live_object_lock);
             return hdr;
         }
-        hdr = hdr->live_next;
+        hdr = sf_header_live_next(hdr);
     }
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    SFInlineLiveEntry_t *inline_entry = g_inline_live_buckets[bucket];
+    while (inline_entry != NULL) {
+        if (inline_entry->obj == obj) {
+            sf_runtime_rwlock_unlock(&g_live_object_lock);
+            return inline_entry->hdr;
+        }
+        inline_entry = inline_entry->next;
+    }
+#endif
     sf_runtime_rwlock_unlock(&g_live_object_lock);
     return NULL;
 #else
+#if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
+    uintptr_t tagged_parent = *((uintptr_t *)(void *)((unsigned char *)(void *)obj - sizeof(uintptr_t)));
+    if ((tagged_parent & (uintptr_t)1U) != 0U) {
+        SFInlineValueHeader_t *inline_hdr =
+            (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
+        if ((inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U) {
+            return (SFObjHeader_t *)(void *)inline_hdr;
+        }
+    }
+#endif
     return ((SFObjHeader_t *)obj) - 1;
 #endif
-}
-
-static SFGroupState_t *sf_create_group_state(SFObjHeader_t *root)
-{
-    SFGroupState_t *group = (SFGroupState_t *)sf_runtime_test_calloc(1, sizeof(*group));
-    if (group == NULL) {
-        return NULL;
-    }
-    group->root = root;
-    group->head = root;
-    group->group_live_count = 1;
-    group->dead = 0;
-    sf_runtime_mutex_init(&group->group_lock);
-    return group;
-}
-
-SFAllocator_t *sf_header_allocator(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return NULL;
-    }
-    return hdr->allocator;
-}
-
-int sf_header_set_allocator(SFObjHeader_t *hdr, SFAllocator_t *allocator)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    hdr->allocator = allocator;
-    return 1;
-}
-
-id sf_header_parent(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return NULL;
-    }
-    return hdr->parent;
-}
-
-int sf_header_set_parent(SFObjHeader_t *hdr, id parent)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    hdr->parent = parent;
-    return 1;
-}
-
-SFObjHeader_t *sf_header_group_root(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return NULL;
-    }
-    if (hdr->group != NULL and hdr->group->root != NULL) {
-        return hdr->group->root;
-    }
-    return hdr;
-}
-
-int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    if (group_root == NULL) {
-        hdr->group = NULL;
-        return 1;
-    }
-    if (not sf_header_init_group_root(group_root)) {
-        return 0;
-    }
-    hdr->group = group_root->group;
-    return hdr->group != NULL;
-}
-
-SFObjHeader_t *sf_header_group_next(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return NULL;
-    }
-    return hdr->group_next;
-}
-
-int sf_header_set_group_next(SFObjHeader_t *hdr, SFObjHeader_t *group_next)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    hdr->group_next = group_next;
-    return 1;
-}
-
-SFObjHeader_t *sf_header_group_head(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return NULL;
-    }
-    if (hdr->group != NULL and hdr->group->head != NULL) {
-        return hdr->group->head;
-    }
-    return hdr;
-}
-
-int sf_header_set_group_head(SFObjHeader_t *hdr, SFObjHeader_t *group_head)
-{
-    SFObjHeader_t *root = sf_header_group_root(hdr);
-    if (root == NULL) {
-        return 0;
-    }
-    if (group_head == NULL and root->group == NULL) {
-        return 1;
-    }
-    if (not sf_header_init_group_root(root)) {
-        return 0;
-    }
-    root->group->head = group_head;
-    return 1;
-}
-
-size_t sf_header_group_live_count(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    if (hdr->group != NULL) {
-        return hdr->group->group_live_count;
-    }
-    return (hdr->state == SF_OBJ_STATE_LIVE) ? (size_t)1 : (size_t)0;
-}
-
-int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
-{
-    SFObjHeader_t *root = sf_header_group_root(hdr);
-    if (root == NULL) {
-        return 0;
-    }
-    if (count <= (size_t)1 and root->group == NULL) {
-        return 1;
-    }
-    if (not sf_header_init_group_root(root)) {
-        return 0;
-    }
-    root->group->group_live_count = count;
-    root->group->dead = (count == 0) ? 1U : 0U;
-    return 1;
-}
-
-int sf_header_grouped(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    return hdr->group != NULL;
-}
-
-int sf_header_init_group_root(SFObjHeader_t *hdr)
-{
-    if (hdr == NULL) {
-        return 0;
-    }
-    if (hdr->group != NULL) {
-        return 1;
-    }
-    hdr->group = sf_create_group_state(hdr);
-    hdr->group_next = NULL;
-    if (hdr->group == NULL) {
-        return 0;
-    }
-    return 1;
-}
-
-SFRuntimeMutex_t *sf_header_group_lock(SFObjHeader_t *hdr)
-{
-    SFObjHeader_t *root = sf_header_group_root(hdr);
-    if (root == NULL or root->group == NULL) {
-        return NULL;
-    }
-    return &root->group->group_lock;
-}
-
-void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock)
-{
-    if (hdr == NULL) {
-        return;
-    }
-    SFGroupState_t *group = hdr->group;
-    hdr->group = NULL;
-    hdr->parent = NULL;
-    hdr->group_next = NULL;
-    if (destroy_group_lock and group != NULL and group->root == hdr) {
-        sf_runtime_mutex_destroy(&group->group_lock);
-        free(group);
-    }
 }
 
 size_t sf_object_allocation_size_for_object(id obj)
@@ -1319,19 +1290,32 @@ static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFA
     SFObjHeader_t *hdr = (SFObjHeader_t *)raw;
 #if SF_RUNTIME_VALIDATION
     hdr->magic = SF_OBJ_HEADER_MAGIC;
+#if !SF_RUNTIME_COMPACT_HEADERS
     hdr->live_next = NULL;
+#endif
 #endif
     hdr->refcount = 1;
     hdr->state = SF_OBJ_STATE_LIVE;
     hdr->flags = SF_OBJ_FLAG_NONE;
     hdr->alloc_size = (uint32_t)total_size;
+#if SF_RUNTIME_COMPACT_HEADERS
+    hdr->class_flags = 0U;
+    hdr->aux_flags = 0U;
+    hdr->cold = NULL;
+    (void)sf_header_set_allocator(hdr, allocator);
+#else
     hdr->allocator = allocator;
+#endif
     return hdr;
 }
 
 static id sf_finish_object_alloc(Class cls, SFObjHeader_t *hdr)
 {
-    id obj = (id)(hdr + 1);
+#if SF_RUNTIME_COMPACT_HEADERS
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    hdr->class_flags = sf_class_meta_to_object_flags(meta);
+#endif
+    id obj = sf_header_object(hdr);
     *(Class *)obj = cls;
     return obj;
 }
@@ -1355,10 +1339,17 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
     size_t slot_count = 0;
     const SFValueSlot_t *slots = sf_value_slots_for_class(sf_object_class(parent), &slot_count);
     size_t required = 0U;
+    int use_inline_prefix = 0;
     if (slots == NULL or slot_count == 0) {
         return NULL;
     }
-    required = align_up(sizeof(SFObjHeader_t) + sf_class_instance_size_fast(cls), sizeof(void *));
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+    if (not sf_class_supports_inline_value_storage_unlocked(cls)) {
+        return NULL;
+    }
+    use_inline_prefix = 1;
+#endif
+    required = sf_embedded_value_storage_size(sf_class_instance_size_fast(cls));
 
     unsigned char *parent_bytes = (unsigned char *)(void *)parent;
     for (size_t i = 0; i < slot_count; ++i) {
@@ -1377,10 +1368,29 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
             continue;
         }
 
-        hdr = sf_init_allocated_header((void *)hdr, (size_t)slot->storage_size, allocator);
-        hdr->flags |= SF_OBJ_FLAG_EMBEDDED;
-        hdr->reserved = slot->owner_offset;
-        hdr->parent = parent;
+        if (use_inline_prefix) {
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+            SFInlineValueHeader_t *inline_hdr = (SFInlineValueHeader_t *)(void *)hdr;
+            memset(inline_hdr, 0, sizeof(*inline_hdr));
+#if SF_RUNTIME_VALIDATION
+            inline_hdr->magic = SF_OBJ_HEADER_MAGIC;
+#endif
+            inline_hdr->refcount = 1U;
+            inline_hdr->state = SF_OBJ_STATE_LIVE;
+            inline_hdr->flags = SF_OBJ_FLAG_EMBEDDED | SF_OBJ_FLAG_INLINE_VALUE;
+            inline_hdr->alloc_size = slot->storage_size;
+            inline_hdr->reserved = slot->owner_offset;
+            inline_hdr->class_flags = sf_class_meta_to_object_flags(sf_class_meta_for(cls));
+            inline_hdr->tagged_parent = ((uintptr_t)parent) | (uintptr_t)1U;
+#endif
+        } else {
+            hdr = sf_init_allocated_header((void *)hdr, (size_t)slot->storage_size, allocator);
+            hdr->flags |= SF_OBJ_FLAG_EMBEDDED;
+            hdr->reserved = slot->owner_offset;
+            if (not sf_header_set_parent(hdr, parent)) {
+                return NULL;
+            }
+        }
 
         id obj = sf_finish_object_alloc(cls, hdr);
         sf_register_live_object_header(hdr);
@@ -1396,6 +1406,11 @@ id sf_alloc_object(Class cls, SFAllocator_t *allocator)
     size_t align = 0;
     size_t total_size = sf_object_total_size(cls, &align);
 
+#if SF_RUNTIME_FAST_OBJECTS
+    if (sf_class_rejects_fast_object_allocation_unlocked(cls)) {
+        return NULL;
+    }
+#endif
     SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
     void *raw = use_allocator->alloc(use_allocator->ctx, total_size, align);
     if (raw == NULL) {
@@ -1419,12 +1434,21 @@ id sf_alloc_object_with_parent(Class cls, id parent)
     }
 
     if (sf_class_is_value_object_unlocked(cls)) {
-        SFAllocator_t *use_allocator = parent_hdr->allocator ? parent_hdr->allocator : sf_default_allocator();
+        SFAllocator_t *use_allocator = sf_header_allocator(parent_hdr);
+        if (use_allocator == NULL) {
+            use_allocator = sf_default_allocator();
+        }
         if (parent_hdr->state != SF_OBJ_STATE_LIVE) {
             return NULL;
         }
         return sf_alloc_embedded_value_object(cls, parent, use_allocator);
     }
+
+#if SF_RUNTIME_FAST_OBJECTS
+    if (sf_class_is_fast_object_unlocked(cls)) {
+        return NULL;
+    }
+#endif
 
     SFObjHeader_t *root = sf_header_group_root(parent_hdr);
     size_t align = 0;
@@ -1434,15 +1458,22 @@ id sf_alloc_object_with_parent(Class cls, id parent)
     if (not sf_header_init_group_root(root)) {
         return NULL;
     }
-    if (root->group == NULL) {
+    if (not sf_header_grouped(root)) {
         return NULL;
     }
 
-    SFAllocator_t *use_allocator = root->allocator ? root->allocator : sf_default_allocator();
-    SFRuntimeMutex_t *group_lock = &root->group->group_lock;
+    SFAllocator_t *use_allocator = sf_header_allocator(root);
+    if (use_allocator == NULL) {
+        use_allocator = sf_default_allocator();
+    }
+    SFRuntimeMutex_t *group_lock = sf_header_group_lock(root);
+    if (group_lock == NULL) {
+        return NULL;
+    }
 
     sf_runtime_mutex_lock(group_lock);
-    if (parent_hdr->state != SF_OBJ_STATE_LIVE or root->group->dead != 0U or root->group->group_live_count == 0U) {
+    if (parent_hdr->state != SF_OBJ_STATE_LIVE or sf_header_group_dead(root) or
+        sf_header_group_live_count(root) == 0U) {
         sf_runtime_mutex_unlock(group_lock);
         return NULL;
     }
@@ -1454,11 +1485,12 @@ id sf_alloc_object_with_parent(Class cls, id parent)
     }
 
     SFObjHeader_t *hdr = sf_init_allocated_header(raw, total_size, use_allocator);
-    hdr->parent = parent;
-    hdr->group = root->group;
-    hdr->group_next = root->group->head;
-    root->group->head = hdr;
-    root->group->group_live_count += 1U;
+    if (not sf_header_set_parent(hdr, parent) or not sf_header_set_group_root(hdr, root) or not sf_header_set_group_next(hdr, sf_header_group_head(root)) or not sf_header_set_group_head(root, hdr) or not sf_header_set_group_live_count(root, sf_header_group_live_count(root) + 1U)) {
+        sf_runtime_mutex_unlock(group_lock);
+        sf_header_destroy_sidecar(hdr, 0);
+        use_allocator->free(use_allocator->ctx, raw, total_size, align);
+        return NULL;
+    }
     sf_runtime_mutex_unlock(group_lock);
     sf_register_live_object_header(hdr);
     return sf_finish_object_alloc(cls, hdr);
@@ -1521,8 +1553,7 @@ static int sf_class_meta_entry_stale(const SFClassMetaEntry_t *entry, Class cls)
     if (entry == NULL or entry->cls != cls or c == NULL) {
         return 1;
     }
-    return entry->name != c->name or entry->methods != c->methods or entry->superclass != c->superclass or
-           entry->ivars != c->ivars;
+    return entry->name != c->name or entry->methods != c->methods or entry->superclass != c->superclass or entry->ivars != c->ivars;
 }
 
 static void sf_cache_class_meta(Class cls)
@@ -1568,8 +1599,7 @@ static void sf_cache_class_meta(Class cls)
     slot->dealloc_imp = (g_dealloc_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_dealloc_sel) : NULL;
     slot->alloc_imp = (g_alloc_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_alloc_sel) : NULL;
     slot->init_imp = (g_init_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_init_sel) : NULL;
-    slot->cxx_destruct_imp =
-        (g_cxx_destruct_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_cxx_destruct_sel) : NULL;
+    slot->cxx_destruct_imp = (g_cxx_destruct_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_cxx_destruct_sel) : NULL;
     slot->flags = 0U;
     slot->strong_ivar_count = (offsets != NULL) ? (uint32_t)copied : 0U;
     slot->strong_ivar_offsets = offsets;
@@ -1582,6 +1612,15 @@ static void sf_cache_class_meta(Class cls)
     if (total_count == 0U and (slot->cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(slot->cxx_destruct_imp)) and
         (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp or sf_dispatch_imp_is_nil(slot->dealloc_imp))) {
         slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
+    }
+
+    if (sf_class_is_fast_object_unlocked(cls)) {
+        slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_CLASS;
+        if ((slot->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
+            (slot->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U and
+            not sf_class_is_value_object_unlocked(cls)) {
+            slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT;
+        }
     }
 }
 
@@ -1656,6 +1695,40 @@ int sf_class_has_trivial_release(Class cls)
     return (meta != NULL and (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U);
 }
 
+uint32_t sf_class_cached_object_flags(Class cls)
+{
+#if SF_RUNTIME_COMPACT_HEADERS
+    return sf_class_meta_to_object_flags(sf_class_meta_for(cls));
+#else
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    uint32_t flags = 0U;
+    if (meta == NULL) {
+        return 0U;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U) {
+        flags |= 1U << 0U;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
+        flags |= 1U << 1U;
+    }
+    if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
+        flags |= 1U << 2U;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) != 0U) {
+        flags |= 1U << 3U;
+    }
+    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) != 0U) {
+        flags |= 1U << 4U;
+    }
+    return flags;
+#endif
+}
+
+int sf_class_is_constant_string(Class cls)
+{
+    return cls != NULL and (cls == g_nsconstantstring_class or cls == g_nxconstantstring_class);
+}
+
 void sf_register_builtin_class_cache(void)
 {
     static struct sf_objc_selector dealloc_sel_data = {"dealloc", "v16@0:8"};
@@ -1671,9 +1744,10 @@ void sf_register_builtin_class_cache(void)
     g_cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
     g_object_class = (Class)sf_class_from_name("Object");
     g_value_object_class = (Class)sf_class_from_name("ValueObject");
-    g_object_dealloc_imp = (g_object_class != NULL and g_dealloc_sel != NULL)
-                               ? sf_lookup_method_imp_exact(g_object_class, g_dealloc_sel)
-                               : NULL;
+    g_fast_object_class = (Class)sf_class_from_name("FastObject");
+    g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
+    g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
+    g_object_dealloc_imp = (g_object_class != NULL and g_dealloc_sel != NULL) ? sf_lookup_method_imp_exact(g_object_class, g_dealloc_sel) : NULL;
 }
 
 Class sf_cached_class_object(void)
@@ -1685,10 +1759,12 @@ const char *sf_class_name_of_object(id obj)
 {
     Class cls = sf_object_class(obj);
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
+    const char *name = NULL;
     if (c == NULL or c->name == NULL) {
         return "(null)";
     }
-    return c->name;
+    name = c->name;
+    return name != NULL ? name : "(null)";
 }
 
 int sf_is_tagged_pointer(id obj)

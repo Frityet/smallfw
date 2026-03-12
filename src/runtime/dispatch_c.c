@@ -44,7 +44,7 @@ typedef struct SFCTypeLayout {
     const char *end;
 } SFCTypeLayout_t;
 
-#if defined(__x86_64__) and not defined(_WIN32)
+#if defined(__x86_64__) && !defined(_WIN32)
 typedef struct SFCSysVVaList {
     unsigned int gp_offset;
     unsigned int fp_offset;
@@ -740,7 +740,7 @@ static uintptr_t read_word_arg(va_list *ap, char code)
 
 static uintptr_t read_struct_bytes_arg(va_list *ap, size_t size)
 {
-#if defined(__x86_64__) and not defined(_WIN32)
+#if defined(__x86_64__) && !defined(_WIN32)
     SFCSysVVaList_t *sysv = (SFCSysVVaList_t *)(void *)ap;
     void *ptr = sysv->overflow_arg_area;
     size_t rounded = align_up_size(size, sizeof(uint64_t));
