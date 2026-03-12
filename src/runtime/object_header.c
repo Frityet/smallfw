@@ -224,6 +224,69 @@ id sf_header_object(SFObjHeader_t *hdr)
 {
     return hdr != NULL ? (id)(void *)(hdr + 1) : NULL;
 }
+
+#if SF_RUNTIME_THREADSAFE
+static SFGroupState_t *sf_header_group_state_atomic(SFObjHeader_t *hdr)
+{
+    return hdr != NULL ? __atomic_load_n(&hdr->group, __ATOMIC_ACQUIRE) : NULL;
+}
+
+static void sf_header_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    if (hdr != NULL) {
+        __atomic_store_n(&hdr->group, group, __ATOMIC_RELEASE);
+    }
+}
+
+static SFGroupState_t *sf_header_exchange_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    return hdr != NULL ? __atomic_exchange_n(&hdr->group, group, __ATOMIC_ACQ_REL) : NULL;
+}
+
+static int sf_header_try_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    SFGroupState_t *expected = NULL;
+
+    if (hdr == NULL) {
+        return 0;
+    }
+    return __atomic_compare_exchange_n(&hdr->group, &expected, group, 0, __ATOMIC_RELEASE,
+                                       __ATOMIC_ACQUIRE);
+}
+#else
+static SFGroupState_t *sf_header_group_state_atomic(SFObjHeader_t *hdr)
+{
+    return hdr != NULL ? hdr->group : NULL;
+}
+
+static void sf_header_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    if (hdr != NULL) {
+        hdr->group = group;
+    }
+}
+
+static SFGroupState_t *sf_header_exchange_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    SFGroupState_t *old = NULL;
+
+    if (hdr == NULL) {
+        return NULL;
+    }
+    old = hdr->group;
+    hdr->group = group;
+    return old;
+}
+
+static int sf_header_try_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
+{
+    if (hdr == NULL or hdr->group != NULL) {
+        return 0;
+    }
+    hdr->group = group;
+    return 1;
+}
+#endif
 #endif
 
 static SFGroupState_t *sf_create_group_state(SFObjHeader_t *root)
@@ -349,8 +412,9 @@ SFObjHeader_t *sf_header_group_root(SFObjHeader_t *hdr)
 #if SF_RUNTIME_COMPACT_HEADERS
     return sf_header_group_root_local(hdr);
 #else
-    if (hdr->group != NULL and hdr->group->root != NULL) {
-        return hdr->group->root;
+    SFGroupState_t *group = sf_header_group_state_atomic(hdr);
+    if (group != NULL and group->root != NULL) {
+        return group->root;
     }
     return hdr;
 #endif
@@ -390,14 +454,14 @@ int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root)
     return 1;
 #else
     if (group_root == NULL) {
-        hdr->group = NULL;
+        sf_header_set_group_state_atomic(hdr, NULL);
         return 1;
     }
     if (not sf_header_init_group_root(group_root)) {
         return 0;
     }
-    hdr->group = group_root->group;
-    return hdr->group != NULL;
+    sf_header_set_group_state_atomic(hdr, sf_header_group_state_atomic(group_root));
+    return sf_header_group_state_atomic(hdr) != NULL;
 #endif
 }
 
@@ -445,8 +509,9 @@ SFObjHeader_t *sf_header_group_head(SFObjHeader_t *hdr)
 #endif
     return sf_header_group_root_local(hdr);
 #else
-    if (hdr->group != NULL and hdr->group->head != NULL) {
-        return hdr->group->head;
+    SFGroupState_t *group = sf_header_group_state_atomic(hdr);
+    if (group != NULL and group->head != NULL) {
+        return group->head;
     }
     return hdr;
 #endif
@@ -492,13 +557,19 @@ int sf_header_set_group_head(SFObjHeader_t *hdr, SFObjHeader_t *group_head)
     return 1;
 #endif
 #else
-    if (group_head == NULL and root->group == NULL) {
+    SFGroupState_t *group = NULL;
+
+    if (group_head == NULL and sf_header_group_state_atomic(root) == NULL) {
         return 1;
     }
     if (not sf_header_init_group_root(root)) {
         return 0;
     }
-    root->group->head = group_head;
+    group = sf_header_group_state_atomic(root);
+    if (group == NULL) {
+        return 0;
+    }
+    group->head = group_head;
     return 1;
 #endif
 }
@@ -522,8 +593,9 @@ size_t sf_header_group_live_count(SFObjHeader_t *hdr)
 #endif
     return (hdr->state == SF_OBJ_STATE_LIVE) ? (size_t)1 : (size_t)0;
 #else
-    if (hdr->group != NULL) {
-        return hdr->group->group_live_count;
+    SFGroupState_t *group = sf_header_group_state_atomic(hdr);
+    if (group != NULL) {
+        return group->group_live_count;
     }
     return (hdr->state == SF_OBJ_STATE_LIVE) ? (size_t)1 : (size_t)0;
 #endif
@@ -575,14 +647,20 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
     return 1;
 #endif
 #else
-    if (count <= (size_t)1 and root->group == NULL) {
+    SFGroupState_t *group = NULL;
+
+    if (count <= (size_t)1 and sf_header_group_state_atomic(root) == NULL) {
         return 1;
     }
     if (not sf_header_init_group_root(root)) {
         return 0;
     }
-    root->group->group_live_count = count;
-    root->group->dead = (count == 0) ? 1U : 0U;
+    group = sf_header_group_state_atomic(root);
+    if (group == NULL) {
+        return 0;
+    }
+    group->group_live_count = count;
+    group->dead = (count == 0) ? 1U : 0U;
     return 1;
 #endif
 }
@@ -603,7 +681,8 @@ int sf_header_group_dead(SFObjHeader_t *hdr)
     return cold != NULL and cold->inline_group_dead != 0U;
 #endif
 #else
-    return root->group != NULL and root->group->dead != 0U;
+    SFGroupState_t *group = sf_header_group_state_atomic(root);
+    return group != NULL and group->dead != 0U;
 #endif
 }
 
@@ -628,7 +707,7 @@ int sf_header_grouped(SFObjHeader_t *hdr)
            (cold->inline_group_live_count != 0U or cold->inline_group_head != NULL);
 #endif
 #else
-    return hdr->group != NULL;
+    return sf_header_group_state_atomic(hdr) != NULL;
 #endif
 }
 
@@ -671,12 +750,22 @@ int sf_header_init_group_root(SFObjHeader_t *hdr)
     return 1;
 #endif
 #else
-    if (hdr->group != NULL) {
+    SFGroupState_t *group = NULL;
+
+    if (sf_header_group_state_atomic(hdr) != NULL) {
         return 1;
     }
-    hdr->group = sf_create_group_state(hdr);
+    group = sf_create_group_state(hdr);
+    if (group == NULL) {
+        return 0;
+    }
     hdr->group_next = NULL;
-    return hdr->group != NULL;
+    if (sf_header_try_set_group_state_atomic(hdr, group)) {
+        return 1;
+    }
+    sf_runtime_mutex_destroy(&group->group_lock);
+    free(group);
+    return sf_header_group_state_atomic(hdr) != NULL;
 #endif
 }
 
@@ -704,10 +793,11 @@ SFRuntimeMutex_t *sf_header_group_lock(SFObjHeader_t *hdr)
     return (SFRuntimeMutex_t *)&cold->inline_group_reserved;
 #endif
 #else
-    if (root->group == NULL) {
+    SFGroupState_t *group = sf_header_group_state_atomic(root);
+    if (group == NULL) {
         return NULL;
     }
-    return &root->group->group_lock;
+    return &group->group_lock;
 #endif
 }
 
@@ -737,8 +827,7 @@ void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock)
     hdr->flags &= ~(uint32_t)SF_OBJ_FLAG_HAS_COLD;
     free(cold);
 #else
-    SFGroupState_t *group = hdr->group;
-    hdr->group = NULL;
+    SFGroupState_t *group = sf_header_exchange_group_state_atomic(hdr, NULL);
     hdr->parent = NULL;
     hdr->group_next = NULL;
     if (destroy_group_lock and group != NULL and group->root == hdr) {
