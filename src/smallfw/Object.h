@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "runtime/objc/runtime_exports.h"
 #include "runtime/sf_allocator.h"
 
 #ifndef SF_RUNTIME_TAGGED_POINTERS
@@ -19,6 +20,7 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly) SFAllocator_t *allocator;
 @property(nonatomic, readonly, nullable) Object *parent;
 
++ (SFClassOptions_t)options;
 + (instancetype)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
 + (instancetype)allocWithParent:(Object *)parent;
 + (instancetype _Nullable)allocInPlace:(void *_Nullable)storage size:(size_t)size;
@@ -45,17 +47,6 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly) size_t exceptionBacktraceCount;
 
 - (const void *_Nullable)exceptionBacktraceFrameAtIndex:(size_t)index;
-@end
-
-// Parent-allocated ValueObjects are embedded into the owning object's hidden inline storage.
-// Their lifetime is bound to that owner slot: clearing the slot or destroying the parent
-// invalidates the embedded ValueObject, and retain/release do not extend that lifetime.
-@interface ValueObject : Object
-
-@end
-
-@interface FastObject : Object
-
 @end
 
 #pragma clang assume_nonnull end

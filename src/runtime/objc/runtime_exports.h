@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <unwind.h>
 
@@ -57,6 +58,12 @@ typedef struct sf_objc_object *id;
 #ifndef IMP
 typedef id _Nullable (*_Nullable IMP)(id _Nullable, SEL _Nullable, ...);
 #endif
+
+typedef struct SFClassOptions {
+    bool inline_value;
+    bool fast_object;
+    bool trivial_release;
+} SFClassOptions_t;
 
 typedef struct sf_objc_method *Method;
 typedef struct sf_objc_ivar *Ivar;

@@ -43,8 +43,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | Dispatch / behavior | `release` | `off` | `off` | `dispatch-cache-2way=y` | ok | - | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | Dispatch / behavior | `release` | `off` | `off` | `dispatch-cache-2way=y`, `dispatch-cache-negative=y` | ok | - | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y` | ok | - | Uses the compact runtime object header layout. |
-| `release-fast-objects` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y`, `runtime-fast-objects=y` | ok | - | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y`, `runtime-inline-value-storage=y` | ok | - | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y`, `runtime-fast-objects=y` | ok | - | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y`, `runtime-inline-value-storage=y` | ok | - | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | Layout / ABI | `release` | `off` | `off` | `runtime-compact-headers=y`, `runtime-inline-group-state=y` | ok | - | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | Instrumentation | `release` | `off` | `off` | `analysis-symbols=y` | ok | - | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | Instrumentation | `release` | `off` | `off` | `runtime-sanitize=y` | ok | - | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -68,11 +68,11 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | 13 | `release-native-tuning` | Whole-program | 0.96x | `dispatch_monomorphic_hot` (1.00x) | `parent_group_cycle` (0.88x) | Enables -march=native and -mtune=native. |
 | 14 | `release-dispatch-l0-dual` | Dispatch / behavior | 0.96x | `alloc_init_release_plain` (1.00x) | `dispatch_monomorphic_hot` (0.88x) | Enables the dual-entry L0 dispatch cache. |
 | 15 | `release-compact-headers` | Layout / ABI | 0.96x | `dispatch_monomorphic_hot` (1.02x) | `parent_group_cycle` (0.75x) | Uses the compact runtime object header layout. |
-| 16 | `release-fast-objects` | Layout / ABI | 0.94x | `dispatch_monomorphic_hot` (1.00x) | `parent_group_cycle` (0.75x) | Enables FastObject paths and the compact-header prerequisite. |
+| 16 | `release-fast-objects` | Layout / ABI | 0.94x | `dispatch_monomorphic_hot` (1.00x) | `parent_group_cycle` (0.75x) | Enables fast-object class-option paths and the compact-header prerequisite. |
 | 17 | `release-forwarding` | Dispatch / behavior | 0.93x | `arc_retain_release_round_robin` (1.02x) | `arc_store_strong_cycle` (0.79x) | Enables forwarding and runtime selector resolution. |
 | 18 | `release-inline-group-state` | Layout / ABI | 0.91x | `dispatch_nil_receiver_hot` (0.99x) | `arc_retain_release_round_robin` (0.64x) | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | 19 | `release-dispatch-stats` | Dispatch / behavior | 0.91x | `arc_retain_release_round_robin` (1.01x) | `dispatch_polymorphic_hot` (0.55x) | Enables dispatch cache statistics counters. |
-| 20 | `release-inline-value-storage` | Layout / ABI | 0.90x | `dispatch_monomorphic_hot` (1.01x) | `parent_group_cycle` (0.57x) | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| 20 | `release-inline-value-storage` | Layout / ABI | 0.90x | `dispatch_monomorphic_hot` (1.01x) | `parent_group_cycle` (0.57x) | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | 21 | `release-dispatch-cache-2way` | Dispatch / behavior | 0.89x | `dispatch_nil_receiver_hot` (1.00x) | `dispatch_polymorphic_hot` (0.52x) | Enables a 2-way dispatch cache. |
 | 22 | `release-tagged-pointers` | Dispatch / behavior | 0.87x | `dispatch_nil_receiver_hot` (0.99x) | `arc_retain_release_round_robin` (0.59x) | Enables tagged pointer support. |
 | 23 | `release-dispatch-cache-negative` | Dispatch / behavior | 0.87x | `arc_store_strong_cycle` (0.99x) | `dispatch_polymorphic_hot` (0.63x) | Enables negative cache entries and its 2-way cache prerequisite. |
@@ -135,8 +135,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 5.861 ns | 0.92x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 5.699 ns | 0.95x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 5.298 ns | 1.02x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 5.381 ns | 1.00x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 5.340 ns | 1.01x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 5.381 ns | 1.00x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 5.340 ns | 1.01x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 5.492 ns | 0.98x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 5.401 ns | 1.00x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 45.272 ns | 0.12x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -167,8 +167,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 11.357 ns | 0.52x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 9.455 ns | 0.63x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 5.960 ns | 0.99x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 6.055 ns | 0.98x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 5.968 ns | 0.99x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 6.055 ns | 0.98x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 5.968 ns | 0.99x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 6.040 ns | 0.98x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 6.054 ns | 0.98x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 52.923 ns | 0.11x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -199,8 +199,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 0.436 ns | 1.00x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 0.634 ns | 0.69x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 0.439 ns | 0.99x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 0.442 ns | 0.98x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 0.455 ns | 0.96x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 0.442 ns | 0.98x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 0.455 ns | 0.96x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 0.440 ns | 0.99x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 0.441 ns | 0.99x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 1.083 ns | 0.40x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -231,8 +231,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 7.045 ns | 0.98x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 7.054 ns | 0.98x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 7.029 ns | 0.98x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 7.079 ns | 0.98x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 7.146 ns | 0.97x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 7.079 ns | 0.98x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 7.146 ns | 0.97x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 7.109 ns | 0.97x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 6.940 ns | 1.00x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 39.849 ns | 0.17x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -263,8 +263,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 10.115 ns | 0.94x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 11.216 ns | 0.85x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 9.503 ns | 1.00x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 9.495 ns | 1.00x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 9.929 ns | 0.95x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 9.495 ns | 1.00x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 9.929 ns | 0.95x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 14.867 ns | 0.64x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 9.641 ns | 0.98x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 70.144 ns | 0.14x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -295,8 +295,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 15.089 ns | 0.99x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 15.012 ns | 0.99x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 14.885 ns | 1.00x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 15.422 ns | 0.97x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 15.996 ns | 0.93x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 15.422 ns | 0.97x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 15.996 ns | 0.93x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 15.214 ns | 0.98x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 15.091 ns | 0.99x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 58.551 ns | 0.25x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -327,8 +327,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 39.812 ns | 0.97x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 39.875 ns | 0.97x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 41.150 ns | 0.94x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 41.942 ns | 0.92x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 41.965 ns | 0.92x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 41.942 ns | 0.92x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 41.965 ns | 0.92x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 40.502 ns | 0.96x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 39.049 ns | 0.99x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 419.776 ns | 0.09x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
@@ -359,8 +359,8 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=2 --warmups=1 -
 | `release-dispatch-cache-2way` | 125.821 ns | 0.94x | Dispatch / behavior | Enables a 2-way dispatch cache. |
 | `release-dispatch-cache-negative` | 119.574 ns | 0.99x | Dispatch / behavior | Enables negative cache entries and its 2-way cache prerequisite. |
 | `release-compact-headers` | 157.854 ns | 0.75x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | 159.007 ns | 0.75x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
-| `release-inline-value-storage` | 208.288 ns | 0.57x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| `release-fast-objects` | 159.007 ns | 0.75x | Layout / ABI | Enables fast-object class-option paths and the compact-header prerequisite. |
+| `release-inline-value-storage` | 208.288 ns | 0.57x | Layout / ABI | Enables compact inline-value prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | 142.204 ns | 0.83x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | 120.743 ns | 0.98x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
 | `release-sanitize` | 1374.956 ns | 0.09x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |

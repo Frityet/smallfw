@@ -281,6 +281,32 @@ static int case_loader_fast_object_constraints(void)
     return ok;
 }
 
+static int case_loader_trivial_release_options(void)
+{
+    sf_test_reset_common_state();
+
+    Class plain_cls = (Class)objc_getClass("PlainTrivialObject");
+    Class invalid_cls = (Class)objc_getClass("InvalidTrivialObject");
+    id plain = nil;
+    id invalid = nil;
+
+    if (plain_cls == Nil or invalid_cls == Nil) {
+        return 0;
+    }
+
+    plain = sf_alloc_object(plain_cls, sf_default_allocator());
+    invalid = sf_alloc_object(invalid_cls, sf_default_allocator());
+    if (plain == nil) {
+        return 0;
+    }
+
+    int ok = sf_class_has_trivial_release(plain_cls) and
+             not sf_class_has_trivial_release(invalid_cls) and
+             invalid == nil;
+    objc_release(plain);
+    return ok and g_counter_deallocs == 0;
+}
+
 static int case_loader_manual_registration(void)
 {
     static int initialized = 0;
@@ -871,6 +897,7 @@ static const SFTestCase g_loader_cases[] = {
     {"loader_header_validation", case_loader_header_validation},
     {"loader_header_size_modes", case_loader_header_size_modes},
     {"loader_fast_object_constraints", case_loader_fast_object_constraints},
+    {"loader_trivial_release_options", case_loader_trivial_release_options},
     {"loader_manual_registration", case_loader_manual_registration},
     {"loader_class_size_synthetic", case_loader_class_size_synthetic},
     {"loader_hash_helpers", case_loader_hash_helpers},

@@ -13,6 +13,7 @@ typedef struct SFClassMetaEntry {
     Class cls;
     const char *name;
     SFObjCMethodList_t *methods;
+    SFObjCMethodList_t *meta_methods;
     SFObjCClass_t *superclass;
     void *ivars;
     IMP dealloc_imp;
@@ -22,6 +23,8 @@ typedef struct SFClassMetaEntry {
     uint32_t flags;
     uint32_t strong_ivar_count;
     uint32_t *strong_ivar_offsets;
+    SFClassOptions_t declared_options;
+    SFClassOptions_t effective_options;
 } SFClassMetaEntry_t;
 
 typedef struct SFValueSlot {
@@ -74,8 +77,6 @@ static SFSelectorEntry_t *g_selector_table[SF_SELECTOR_BUCKETS];
 static SFRuntimeRwlock_t g_selector_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
 
 static Class g_object_class;
-static Class g_value_object_class;
-static Class g_fast_object_class;
 static Class g_nsconstantstring_class;
 static Class g_nxconstantstring_class;
 static SEL g_dealloc_sel;
@@ -83,6 +84,7 @@ static SEL g_alloc_sel;
 static SEL g_init_sel;
 static SEL g_forwarding_target_sel;
 static SEL g_cxx_destruct_sel;
+static SEL g_options_sel;
 #if SF_RUNTIME_TAGGED_POINTERS
 static SEL g_tagged_pointer_slot_sel;
 Class _Nullable g_tagged_pointer_slot_classes[8];
@@ -95,6 +97,8 @@ enum {
     SF_CLASS_META_FLAG_TRIVIAL_RELEASE = 1U << 1U,
     SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT = 1U << 2U,
     SF_CLASS_META_FLAG_FAST_OBJECT_CLASS = 1U << 3U,
+    SF_CLASS_META_FLAG_INLINE_VALUE = 1U << 4U,
+    SF_CLASS_META_FLAG_ALLOCATION_INVALID = 1U << 5U,
 };
 
 #if SF_RUNTIME_TAGGED_POINTERS
@@ -113,6 +117,7 @@ typedef struct SFObjCAliasEntry {
 static void sf_cache_class_meta(Class cls);
 static SFObjCClass_t *class_map_lookup_unlocked(const char *name);
 static IMP sf_lookup_method_imp_exact(Class cls, SEL sel);
+static IMP sf_lookup_method_imp_local(Class cls, SEL sel);
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls);
 static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super);
 static size_t align_up(size_t value, size_t align);
@@ -143,54 +148,22 @@ static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
 }
 #endif
 
+static int sf_class_has_inline_value_option_unlocked(Class cls)
+{
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    return meta != NULL and (meta->flags & SF_CLASS_META_FLAG_INLINE_VALUE) != 0U;
+}
+
 static int sf_class_is_fast_object_unlocked(Class cls)
 {
-    if (cls == NULL) {
-        return 0;
-    }
-    if (g_fast_object_class == NULL) {
-        g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
-    }
-    if (g_fast_object_class == NULL) {
-        return 0;
-    }
-    return sf_class_is_subclass_of_unlocked(cls, g_fast_object_class);
-}
-
-static int sf_class_supports_inline_value_storage_unlocked(Class cls)
-{
-    SFClassMetaEntry_t *meta = NULL;
-
-    if (cls == NULL) {
-        return 0;
-    }
-#if !SF_RUNTIME_INLINE_VALUE_STORAGE
-    return 1;
-#else
-    meta = sf_class_meta_for(cls);
-    if (meta == NULL) {
-        return 0;
-    }
-    return (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
-           (meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U;
-#endif
-}
-
-static int sf_class_rejects_fast_object_allocation_unlocked(Class cls)
-{
-#if !SF_RUNTIME_FAST_OBJECTS
-    (void)cls;
-    return 0;
-#else
     SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
-    if (meta == NULL) {
-        return 0;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) == 0U) {
-        return 0;
-    }
-    return (meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) == 0U;
-#endif
+    return meta != NULL and (meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) != 0U;
+}
+
+static int sf_class_allocation_invalid_unlocked(Class cls)
+{
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    return meta != NULL and (meta->flags & SF_CLASS_META_FLAG_ALLOCATION_INVALID) != 0U;
 }
 
 static size_t sf_embedded_value_storage_size(size_t value_size)
@@ -594,21 +567,6 @@ static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super)
     return 0;
 }
 
-static int sf_class_is_value_object_unlocked(Class cls)
-{
-    if (cls == NULL) {
-        return 0;
-    }
-    if (g_value_object_class == NULL) {
-        g_value_object_class = (Class)class_map_lookup_unlocked("ValueObject");
-    }
-    if (g_value_object_class == NULL) {
-        return 0;
-    }
-    return sf_class_is_subclass_of_unlocked(cls, g_value_object_class);
-}
-
-#if SF_RUNTIME_TAGGED_POINTERS
 static IMP sf_lookup_method_imp_local(Class cls, SEL sel)
 {
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
@@ -627,6 +585,7 @@ static IMP sf_lookup_method_imp_local(Class cls, SEL sel)
     return NULL;
 }
 
+#if SF_RUNTIME_TAGGED_POINTERS
 static void sf_reset_tagged_pointer_classes_unlocked(void)
 {
     memset(g_tagged_pointer_slot_classes, 0, sizeof(g_tagged_pointer_slot_classes));
@@ -642,7 +601,7 @@ static void sf_register_tagged_pointer_class_unlocked(SFObjCClass_t *cls, const 
         return;
     }
     if (g_object_class == NULL or not sf_class_is_subclass_of_unlocked((Class)cls, g_object_class) or
-        sf_class_is_value_object_unlocked((Class)cls)) {
+        sf_class_has_inline_value_option_unlocked((Class)cls)) {
         return;
     }
 
@@ -770,8 +729,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
                 char class_name[256];
                 if (sf_extract_object_class_name(ivar->type, class_name, sizeof(class_name))) {
                     Class value_cls = (Class)class_map_lookup_unlocked(class_name);
-                    if (value_cls != NULL and sf_class_is_value_object_unlocked(value_cls) and
-                        sf_class_supports_inline_value_storage_unlocked(value_cls) and
+                    if (value_cls != NULL and sf_class_has_inline_value_option_unlocked(value_cls) and
                         not layout_active_contains((SFObjCClass_t *)value_cls)) {
                         if (local_slots == NULL) {
                             local_slots = (SFValueSlot_t *)sf_runtime_test_calloc((size_t)list->count,
@@ -960,7 +918,7 @@ static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntr
 void sf_finalize_registered_classes(void)
 {
     if (g_dealloc_sel == NULL or g_alloc_sel == NULL or g_init_sel == NULL or g_forwarding_target_sel == NULL or
-        g_cxx_destruct_sel == NULL
+        g_cxx_destruct_sel == NULL or g_options_sel == NULL
 #if SF_RUNTIME_TAGGED_POINTERS
         or g_tagged_pointer_slot_sel == NULL
 #endif
@@ -970,6 +928,7 @@ void sf_finalize_registered_classes(void)
         static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
         static struct sf_objc_selector forwarding_target_sel_data = {"forwardingTargetForSelector:", "@24@0:8:16"};
         static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
+        static struct sf_objc_selector options_sel_data = {"options", NULL};
 #if SF_RUNTIME_TAGGED_POINTERS
         static struct sf_objc_selector tagged_pointer_slot_sel_data = {"taggedPointerSlot", NULL};
 #endif
@@ -978,6 +937,7 @@ void sf_finalize_registered_classes(void)
         g_init_sel = sf_intern_selector(&init_sel_data);
         g_forwarding_target_sel = sf_intern_selector(&forwarding_target_sel_data);
         g_cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+        g_options_sel = sf_intern_selector(&options_sel_data);
 #if SF_RUNTIME_TAGGED_POINTERS
         g_tagged_pointer_slot_sel = sf_intern_selector(&tagged_pointer_slot_sel_data);
 #endif
@@ -985,8 +945,6 @@ void sf_finalize_registered_classes(void)
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
     g_object_class = (Class)class_map_lookup_unlocked("Object");
-    g_value_object_class = (Class)class_map_lookup_unlocked("ValueObject");
-    g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
     g_nsconstantstring_class = (Class)class_map_lookup_unlocked("NSConstantString");
     g_nxconstantstring_class = (Class)class_map_lookup_unlocked("NXConstantString");
     g_object_dealloc_imp = sf_object_dealloc_imp_unlocked();
@@ -1340,13 +1298,10 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
     const SFValueSlot_t *slots = sf_value_slots_for_class(sf_object_class(parent), &slot_count);
     size_t required = 0U;
     int use_inline_prefix = 0;
-    if (slots == NULL or slot_count == 0) {
+    if (slots == NULL or slot_count == 0 or not sf_class_has_inline_value_option_unlocked(cls)) {
         return NULL;
     }
 #if SF_RUNTIME_INLINE_VALUE_STORAGE
-    if (not sf_class_supports_inline_value_storage_unlocked(cls)) {
-        return NULL;
-    }
     use_inline_prefix = 1;
 #endif
     required = sf_embedded_value_storage_size(sf_class_instance_size_fast(cls));
@@ -1406,11 +1361,9 @@ id sf_alloc_object(Class cls, SFAllocator_t *allocator)
     size_t align = 0;
     size_t total_size = sf_object_total_size(cls, &align);
 
-#if SF_RUNTIME_FAST_OBJECTS
-    if (sf_class_rejects_fast_object_allocation_unlocked(cls)) {
+    if (sf_class_allocation_invalid_unlocked(cls)) {
         return NULL;
     }
-#endif
     SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
     void *raw = use_allocator->alloc(use_allocator->ctx, total_size, align);
     if (raw == NULL) {
@@ -1424,6 +1377,9 @@ id sf_alloc_object(Class cls, SFAllocator_t *allocator)
 
 id sf_alloc_object_with_parent(Class cls, id parent)
 {
+    if (sf_class_allocation_invalid_unlocked(cls)) {
+        return NULL;
+    }
     if (parent == NULL) {
         return sf_alloc_object(cls, NULL);
     }
@@ -1433,7 +1389,7 @@ id sf_alloc_object_with_parent(Class cls, id parent)
         return NULL;
     }
 
-    if (sf_class_is_value_object_unlocked(cls)) {
+    if (sf_class_has_inline_value_option_unlocked(cls)) {
         SFAllocator_t *use_allocator = sf_header_allocator(parent_hdr);
         if (use_allocator == NULL) {
             use_allocator = sf_default_allocator();
@@ -1444,11 +1400,9 @@ id sf_alloc_object_with_parent(Class cls, id parent)
         return sf_alloc_embedded_value_object(cls, parent, use_allocator);
     }
 
-#if SF_RUNTIME_FAST_OBJECTS
     if (sf_class_is_fast_object_unlocked(cls)) {
         return NULL;
     }
-#endif
 
     SFObjHeader_t *root = sf_header_group_root(parent_hdr);
     size_t align = 0;
@@ -1547,13 +1501,31 @@ static IMP sf_lookup_method_imp_exact(Class cls, SEL sel)
     return NULL;
 }
 
+static SFClassOptions_t sf_lookup_declared_class_options(Class cls)
+{
+    SFObjCClass_t *c = (SFObjCClass_t *)cls;
+    IMP options_imp = NULL;
+
+    if (c == NULL or c->isa == NULL or g_options_sel == NULL) {
+        return (SFClassOptions_t){0};
+    }
+
+    options_imp = sf_lookup_method_imp_local((Class)c->isa, g_options_sel);
+    if (options_imp == NULL or sf_dispatch_imp_is_nil(options_imp)) {
+        return (SFClassOptions_t){0};
+    }
+
+    return ((SFClassOptions_t(*)(id, SEL))options_imp)((id)cls, g_options_sel);
+}
+
 static int sf_class_meta_entry_stale(const SFClassMetaEntry_t *entry, Class cls)
 {
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     if (entry == NULL or entry->cls != cls or c == NULL) {
         return 1;
     }
-    return entry->name != c->name or entry->methods != c->methods or entry->superclass != c->superclass or entry->ivars != c->ivars;
+    return entry->name != c->name or entry->methods != c->methods or entry->meta_methods != (c->isa != NULL ? c->isa->methods : NULL) or
+           entry->superclass != c->superclass or entry->ivars != c->ivars;
 }
 
 static void sf_cache_class_meta(Class cls)
@@ -1567,6 +1539,10 @@ static void sf_cache_class_meta(Class cls)
     uint32_t *offsets = NULL;
     size_t copied = 0U;
     IMP base_dealloc_imp = NULL;
+    SFClassOptions_t declared_options = {0};
+    SFClassOptions_t effective_options = {0};
+    int trivially_releasable = 0;
+    int invalid = 0;
     if (slot == NULL or c == NULL) {
         return;
     }
@@ -1594,6 +1570,7 @@ static void sf_cache_class_meta(Class cls)
     slot->cls = cls;
     slot->name = c->name;
     slot->methods = c->methods;
+    slot->meta_methods = (c->isa != NULL) ? c->isa->methods : NULL;
     slot->superclass = c->superclass;
     slot->ivars = c->ivars;
     slot->dealloc_imp = (g_dealloc_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_dealloc_sel) : NULL;
@@ -1603,24 +1580,56 @@ static void sf_cache_class_meta(Class cls)
     slot->flags = 0U;
     slot->strong_ivar_count = (offsets != NULL) ? (uint32_t)copied : 0U;
     slot->strong_ivar_offsets = offsets;
+    slot->declared_options = (SFClassOptions_t){0};
+    slot->effective_options = (SFClassOptions_t){0};
 
     if (total_count > 0U) {
         slot->flags |= SF_CLASS_META_FLAG_HAS_OBJECT_IVARS;
     }
 
     base_dealloc_imp = sf_object_dealloc_imp_unlocked();
-    if (total_count == 0U and (slot->cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(slot->cxx_destruct_imp)) and
-        (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp or sf_dispatch_imp_is_nil(slot->dealloc_imp))) {
-        slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
+    trivially_releasable = total_count == 0U and
+                           (slot->cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(slot->cxx_destruct_imp)) and
+                           (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp or
+                            sf_dispatch_imp_is_nil(slot->dealloc_imp));
+
+    declared_options = sf_lookup_declared_class_options(cls);
+#if SF_RUNTIME_FAST_OBJECTS
+    if (declared_options.fast_object) {
+        effective_options.fast_object = true;
+        effective_options.trivial_release = true;
+    }
+#endif
+    if (declared_options.inline_value) {
+        effective_options.inline_value = true;
+        effective_options.trivial_release = true;
+    }
+    if (declared_options.trivial_release) {
+        effective_options.trivial_release = true;
     }
 
-    if (sf_class_is_fast_object_unlocked(cls)) {
-        slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_CLASS;
-        if ((slot->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
-            (slot->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U and
-            not sf_class_is_value_object_unlocked(cls)) {
-            slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT;
-        }
+    if (effective_options.inline_value and effective_options.fast_object) {
+        invalid = 1;
+    }
+    if (effective_options.trivial_release and not trivially_releasable) {
+        invalid = 1;
+    }
+
+    slot->declared_options = declared_options;
+    if (invalid) {
+        slot->flags |= SF_CLASS_META_FLAG_ALLOCATION_INVALID;
+        return;
+    }
+    slot->effective_options = effective_options;
+
+    if (effective_options.inline_value) {
+        slot->flags |= SF_CLASS_META_FLAG_INLINE_VALUE;
+    }
+    if (effective_options.trivial_release) {
+        slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
+    }
+    if (effective_options.fast_object) {
+        slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_CLASS | SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT;
     }
 }
 
@@ -1736,15 +1745,15 @@ void sf_register_builtin_class_cache(void)
     static struct sf_objc_selector init_sel_data = {"init", "@16@0:8"};
     static struct sf_objc_selector forwarding_target_sel_data = {"forwardingTargetForSelector:", "@24@0:8:16"};
     static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
+    static struct sf_objc_selector options_sel_data = {"options", NULL};
 
     g_dealloc_sel = sf_intern_selector(&dealloc_sel_data);
     g_alloc_sel = sf_intern_selector(&alloc_sel_data);
     g_init_sel = sf_intern_selector(&init_sel_data);
     g_forwarding_target_sel = sf_intern_selector(&forwarding_target_sel_data);
     g_cxx_destruct_sel = sf_intern_selector(&cxx_destruct_sel_data);
+    g_options_sel = sf_intern_selector(&options_sel_data);
     g_object_class = (Class)sf_class_from_name("Object");
-    g_value_object_class = (Class)sf_class_from_name("ValueObject");
-    g_fast_object_class = (Class)sf_class_from_name("FastObject");
     g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
     g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
     g_object_dealloc_imp = (g_object_class != NULL and g_dealloc_sel != NULL) ? sf_lookup_method_imp_exact(g_object_class, g_dealloc_sel) : NULL;

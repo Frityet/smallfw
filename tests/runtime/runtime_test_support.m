@@ -79,12 +79,27 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 @end
 
 @implementation InlineValue
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.inline_value = true};
+}
 @end
 
 @implementation InlineValueSub
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.inline_value = true};
+}
+@end
+
+@implementation ImplicitInlineValueSub
 @end
 
 @implementation InlineLargeValueSub
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.inline_value = true};
+}
 @end
 
 @implementation InlineHolder
@@ -111,12 +126,28 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 @end
 
 @implementation PlainFastObject
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.fast_object = true};
+}
+@end
+
+@implementation ImplicitFastObjectSub
 @end
 
 @implementation InvalidFastObject
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.fast_object = true};
+}
 @end
 
 @implementation TrackedFastObject
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.fast_object = true};
+}
+
 - (void)dealloc
 {
     (void)__atomic_fetch_add(&g_counter_deallocs, 1, __ATOMIC_RELAXED);
@@ -124,9 +155,27 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 @end
 
 @implementation NonTrivialInlineValue
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.inline_value = true};
+}
 @end
 
 @implementation NonTrivialHolder
+@end
+
+@implementation PlainTrivialObject
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.trivial_release = true};
+}
+@end
+
+@implementation InvalidTrivialObject
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.trivial_release = true};
+}
 @end
 
 @implementation HotDispatch
@@ -310,6 +359,11 @@ static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
 @end
 
 @implementation TaggedValueProbe
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){.inline_value = true};
+}
+
 + (uintptr_t)taggedPointerSlot
 {
     return 4U;

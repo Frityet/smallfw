@@ -17,6 +17,11 @@
 
 @implementation Object
 
++ (SFClassOptions_t)options
+{
+    return (SFClassOptions_t){0};
+}
+
 + (instancetype)allocWithAllocator:(SFAllocator_t *)allocator
 {
     id obj = sf_alloc_object((Class)self, allocator);
@@ -171,26 +176,5 @@
     return (id)0;
 }
 #endif
-
-@end
-
-//the idea here is that if this class is used as a type for ivars, then the class that has it as an ivar should generate the storage for it
-//MyObject *myObj; //MyObject : ValueObject
-//MyObject2 *myObj2;
-//and this is whats generated:
-//MyObject *myObj = ...;
-//MyObject2 *myObj2 = ...;
-//uint8_t myObj_storage[alignup(sizeof(SFObjHeader_t) + sizeof(MyObject))];
-//but these aren't actual ivars.
-//This should be done when the class is registered, where the runtime should make it so the instancesize of this class
-//also accounts for the storage
-//then, in +(instancetype)allocWithParent: (Object *)parent;, if the class is a ValueObject then it should just alloc into the storage of the parent, and return a pointer to that storage as the instance of the ValueObject
-@implementation ValueObject
-
-
-
-@end
-
-@implementation FastObject
 
 @end

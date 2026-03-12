@@ -61,13 +61,16 @@ extern int g_counter_deallocs;
 @interface CounterObject : Object
 @end
 
-@interface InlineValue : ValueObject {
+@interface InlineValue : Object {
   @public
     int _payload;
 }
 @end
 
 @interface InlineValueSub : InlineValue
+@end
+
+@interface ImplicitInlineValueSub : InlineValue
 @end
 
 @interface InlineLargeValueSub : InlineValue {
@@ -100,19 +103,22 @@ extern int g_counter_deallocs;
 @interface AllocTracked : Object
 @end
 
-@interface PlainFastObject : FastObject
+@interface PlainFastObject : Object
 @end
 
-@interface InvalidFastObject : FastObject {
+@interface ImplicitFastObjectSub : PlainFastObject
+@end
+
+@interface InvalidFastObject : Object {
   @public
     Object *_child;
 }
 @end
 
-@interface TrackedFastObject : FastObject
+@interface TrackedFastObject : Object
 @end
 
-@interface NonTrivialInlineValue : ValueObject {
+@interface NonTrivialInlineValue : Object {
   @public
     Object *_ref;
 }
@@ -121,6 +127,15 @@ extern int g_counter_deallocs;
 @interface NonTrivialHolder : Object {
   @public
     NonTrivialInlineValue *_value;
+}
+@end
+
+@interface PlainTrivialObject : Object
+@end
+
+@interface InvalidTrivialObject : Object {
+  @public
+    Object *_child;
 }
 @end
 
@@ -174,7 +189,7 @@ extern int g_counter_deallocs;
 @interface TaggedInvalidSlotProbe : Object
 @end
 
-@interface TaggedValueProbe : ValueObject
+@interface TaggedValueProbe : Object
 @end
 #endif
 

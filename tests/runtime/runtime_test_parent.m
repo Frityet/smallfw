@@ -123,16 +123,7 @@ static int case_value_parent_nontrivial_inline_rejected(void)
     }
 
     id child = sf_alloc_object_with_parent((Class)objc_getClass("NonTrivialInlineValue"), holder);
-    int ok = 0;
-
-#if SF_RUNTIME_INLINE_VALUE_STORAGE
-    ok = child == nil and holder->_value == nil;
-#else
-    ok = child != nil and holder->_value == child and ((NonTrivialInlineValue *)child).parent == holder;
-    if (child != nil) {
-        objc_storeStrong((id *)&holder->_value, nil);
-    }
-#endif
+    int ok = child == nil and holder->_value == nil;
 
     objc_release(holder);
     return ok;
@@ -493,6 +484,74 @@ static int case_parent_fast_object_rejected(void)
     return ok;
 }
 
+static int case_parent_inline_value_options_are_class_local(void)
+{
+    sf_test_reset_common_state();
+
+    SFTestAllocatorCtx ctx = {0};
+    SFAllocator_t allocator = sf_test_make_counting_allocator(&ctx);
+
+    __unsafe_unretained CounterObject *root = [[CounterObject allocWithAllocator:&allocator] init];
+    __unsafe_unretained ImplicitInlineValueSub *child = [[ImplicitInlineValueSub allocWithParent:root] init];
+    if (root == nil or child == nil) {
+        objc_release(root);
+        return 0;
+    }
+
+    SFObjHeader_t *root_hdr = sf_header_from_object(root);
+    SFObjHeader_t *child_hdr = sf_header_from_object(child);
+    uintptr_t root_begin = (uintptr_t)(void *)root_hdr;
+    uintptr_t root_end = root_begin + sf_object_allocation_size_for_object(root);
+    uintptr_t child_begin = (uintptr_t)(void *)child_hdr;
+    int ok = root_hdr != NULL and
+             child_hdr != NULL and
+             ctx.alloc_calls == 2 and
+             child.parent == root and
+             sf_header_group_root(child_hdr) == root_hdr and
+             (child_begin < root_begin or child_begin >= root_end);
+
+    objc_release(child);
+    objc_release(root);
+    return ok and ctx.free_calls == 2 and ctx.active_blocks == 0;
+}
+
+static int case_parent_fast_object_options_are_class_local(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
+    id child = nil;
+
+    if (root == nil) {
+        return 0;
+    }
+
+    child = sf_alloc_object_with_parent((Class)objc_getClass("ImplicitFastObjectSub"), root);
+    int ok = child != nil and ((Object *)child).parent == root;
+
+    if (child != nil) {
+        objc_release(child);
+    }
+    objc_release(root);
+    return ok;
+}
+
+static int case_parent_invalid_trivial_release_rejected(void)
+{
+    sf_test_reset_common_state();
+
+    __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
+    id child = nil;
+
+    if (root == nil) {
+        return 0;
+    }
+
+    child = sf_alloc_object_with_parent((Class)objc_getClass("InvalidTrivialObject"), root);
+    objc_release(root);
+    return child == nil;
+}
+
 static int case_parent_dead_parent_rejects_new_child(void)
 {
     sf_test_reset_common_state();
@@ -584,6 +643,9 @@ static const SFTestCase g_parent_cases[] = {
     {"parent_nested_allocation_same_root", case_parent_nested_allocation_same_root},
     {"parent_alloc_with_nil_parent", case_parent_alloc_with_nil_parent},
     {"parent_fast_object_rejected", case_parent_fast_object_rejected},
+    {"parent_inline_value_options_are_class_local", case_parent_inline_value_options_are_class_local},
+    {"parent_fast_object_options_are_class_local", case_parent_fast_object_options_are_class_local},
+    {"parent_invalid_trivial_release_rejected", case_parent_invalid_trivial_release_rejected},
     {"parent_dead_parent_rejects_new_child", case_parent_dead_parent_rejects_new_child},
     {"parent_concurrent_alloc_release", case_parent_concurrent_alloc_release},
 };
