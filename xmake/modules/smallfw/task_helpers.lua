@@ -4,6 +4,7 @@ import("lib.detect.find_program")
 import("lib.detect.find_tool")
 
 local runtime_config_keys = {
+    "analysis-symbols",
     "runtime-threadsafe",
     "dispatch-backend",
     "dispatch-stats",
@@ -15,6 +16,7 @@ local runtime_config_keys = {
     "runtime-sanitize",
     "runtime-native-tuning",
     "runtime-thinlto",
+    "runtime-full-lto",
     "dispatch-l0-dual",
     "dispatch-cache-2way",
     "dispatch-cache-negative",
@@ -309,6 +311,10 @@ function runtime_thinlto_supported()
     return clang_major ~= nil and lld_major ~= nil and clang_major == lld_major
 end
 
+function runtime_full_lto_supported()
+    return runtime_thinlto_supported()
+end
+
 function collect_configure_args(extra_args, defaults)
     defaults = defaults or {}
     local args = {"f", "--yes"}
@@ -328,6 +334,8 @@ function collect_configure_args(extra_args, defaults)
         local raw_value = option.get(key)
         local value = config_value_string(raw_value)
         if key == "runtime-thinlto" and value == "y" and not runtime_thinlto_supported() then
+            value = "n"
+        elseif key == "runtime-full-lto" and value == "y" and not runtime_full_lto_supported() then
             value = "n"
         end
         if value ~= nil and value ~= "" then

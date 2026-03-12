@@ -59,9 +59,11 @@ local function _append_compile_and_link_flags(args, compile_flags, link_flags)
 end
 
 local function _configure_args(builddir, pgo_mode, profdata)
-    local args = task_helpers.collect_configure_args({
-        "--analysis-symbols=y",
-    }, {
+    local extra_args = {}
+    if option.get("analysis-symbols") == nil or option.get("analysis-symbols") == "" then
+        table.insert(extra_args, "--analysis-symbols=y")
+    end
+    local args = task_helpers.collect_configure_args(extra_args, {
         mode = _string_option("mode", "release"),
         plat = _string_option("plat", "linux"),
         arch = _string_option("arch", "x86_64"),
@@ -414,12 +416,16 @@ end
 local function _write_metadata(filename, run_dir, builddir, binary, case_name, iters, samples, warmups,
                                pgo_mode, bolt_mode, artifacts)
     local options = task_helpers.collect_runtime_option_values({
+        ["analysis-symbols"] = task_helpers.config_value_string(option.get("analysis-symbols")),
         mode = _string_option("mode", "release"),
         plat = _string_option("plat", "linux"),
         arch = _string_option("arch", "x86_64"),
         pgo = pgo_mode,
         bolt = bolt_mode,
     })
+    if options["analysis-symbols"] == nil then
+        options["analysis-symbols"] = "y"
+    end
 
     local metadata = {
         generated_at_utc = os.date("!%Y-%m-%dT%H:%M:%SZ"),

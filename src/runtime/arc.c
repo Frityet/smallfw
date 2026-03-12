@@ -6,8 +6,10 @@
 
 #if defined(__clang__) || defined(__GNUC__)
 #define SF_LIKELY(x) __builtin_expect(!!(x), 1)
+#define SF_ARC_RUNTIME_ENTRY __attribute__((used))
 #else
 #define SF_LIKELY(x) (x)
+#define SF_ARC_RUNTIME_ENTRY
 #endif
 
 typedef struct SFAutoreleaseState {
@@ -444,7 +446,7 @@ static void release_object_now(id obj)
     sf_object_dispose(obj);
 }
 
-id objc_retain(id obj)
+SF_ARC_RUNTIME_ENTRY id objc_retain(id obj)
 {
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     if (hdr != NULL) {
@@ -466,7 +468,7 @@ id objc_retain(id obj)
     return obj;
 }
 
-void objc_release(id obj)
+SF_ARC_RUNTIME_ENTRY void objc_release(id obj)
 {
     release_object_now(obj);
 }
@@ -486,7 +488,7 @@ id sf_autorelease(id obj)
     return obj;
 }
 
-void *objc_autoreleasePoolPush(void)
+SF_ARC_RUNTIME_ENTRY void *objc_autoreleasePoolPush(void)
 {
     size_t marker = g_autorelease_state.count;
     size_t *token = NULL;
@@ -505,7 +507,7 @@ void *objc_autoreleasePoolPush(void)
     return (void *)&g_pool_fallback_token;
 }
 
-void objc_autoreleasePoolPop(void *pool)
+SF_ARC_RUNTIME_ENTRY void objc_autoreleasePoolPop(void *pool)
 {
     size_t marker = g_autorelease_state.count;
     if (pool == (void *)&g_pool_fallback_token) {
@@ -530,27 +532,27 @@ void objc_autoreleasePoolPop(void *pool)
     }
 }
 
-id objc_retainAutorelease(id obj)
+SF_ARC_RUNTIME_ENTRY id objc_retainAutorelease(id obj)
 {
     return sf_autorelease(objc_retain(obj));
 }
 
-id objc_retainAutoreleasedReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id objc_retainAutoreleasedReturnValue(id obj)
 {
     return objc_retain(obj);
 }
 
-id objc_autoreleaseReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id objc_autoreleaseReturnValue(id obj)
 {
     return sf_autorelease(obj);
 }
 
-id objc_retainAutoreleaseReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id objc_retainAutoreleaseReturnValue(id obj)
 {
     return sf_autorelease(objc_retain(obj));
 }
 
-void objc_storeStrong(id *dst, id value)
+SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id *dst, id value)
 {
     id old = *dst;
     if (old == value) {

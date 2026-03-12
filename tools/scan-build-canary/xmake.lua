@@ -1,0 +1,6 @@
+target("scan-build-canary")
+    set_default(false)
+    set_group("tools/analyzer")
+    set_kind("binary")
+    set_languages("c17")
+    add_files("main.c")

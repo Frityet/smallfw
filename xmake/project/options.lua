@@ -13,19 +13,6 @@ function smallfw.add_runtime_boolean_option(name, description, category)
     option_end()
 end
 
-local function runtime_tool_major(tool_name, program)
-    local opt = {version = true}
-    if program ~= nil then
-        opt.program = program
-    end
-
-    local tool = find_tool(tool_name, opt)
-    if tool == nil or tool.version == nil then
-        return nil
-    end
-    return tonumber((tool.version or ""):match("^(%d+)"))
-end
-
 option("runtime-threadsafe")
     set_default(false)
     set_showmenu(true)
@@ -113,6 +100,57 @@ smallfw.add_runtime_boolean_option("runtime-thinlto",
                                    "runtime/perf")
 option("runtime-thinlto")
     after_check(function (option)
+        import("lib.detect.find_tool")
+
+        local function runtime_tool_major(tool_name, program)
+            local opt = {version = true}
+            if program ~= nil then
+                opt.program = program
+            end
+
+            local tool = find_tool(tool_name, opt)
+            if tool == nil or tool.version == nil then
+                return nil
+            end
+            return tonumber((tool.version or ""):match("^(%d+)"))
+        end
+
+        if not option:enabled() then
+            return
+        end
+        if not is_plat("linux") or not is_arch("x86_64") then
+            option:enable(false)
+            return
+        end
+
+        local clang_major = runtime_tool_major("clang")
+        local lld_major = runtime_tool_major("ld.lld")
+        if clang_major == nil or lld_major == nil or clang_major ~= lld_major then
+            option:enable(false)
+        end
+    end)
+option_end()
+
+smallfw.add_runtime_boolean_option("runtime-full-lto",
+                                   "Enable full LTO for runtime targets.",
+                                   "runtime/perf")
+option("runtime-full-lto")
+    after_check(function (option)
+        import("lib.detect.find_tool")
+
+        local function runtime_tool_major(tool_name, program)
+            local opt = {version = true}
+            if program ~= nil then
+                opt.program = program
+            end
+
+            local tool = find_tool(tool_name, opt)
+            if tool == nil or tool.version == nil then
+                return nil
+            end
+            return tonumber((tool.version or ""):match("^(%d+)"))
+        end
+
         if not option:enabled() then
             return
         end
@@ -221,6 +259,7 @@ smallfw.runtime_build_options = {
     "runtime-sanitize",
     "runtime-native-tuning",
     "runtime-thinlto",
+    "runtime-full-lto",
     "dispatch-l0-dual",
     "dispatch-cache-2way",
     "dispatch-cache-negative",

@@ -1,7 +1,4 @@
-target("smallfw-runtime")
-    set_group("runtime")
-    smallfw.configure_runtime_library_target()
-
+local function add_runtime_implementation_files()
     add_files(
         "allocator.c",
         "arc.c",
@@ -37,3 +34,21 @@ target("smallfw-runtime")
     end
 
     add_files("../smallfw/**.m", {mflags = {"-fno-objc-arc"}})
+end
+
+target("smallfw-runtime-objects")
+    set_default(false)
+    set_group("runtime/internal")
+    set_kind("object")
+    add_options(smallfw.runtime_build_options)
+    add_includedirs(smallfw.project_path("src"), {public = true})
+    smallfw.add_common_runtime_flags()
+    smallfw.add_runtime_mode_defines()
+    smallfw.add_analysis_symbol_settings()
+    smallfw.add_runtime_sanitizer_settings()
+    add_runtime_implementation_files()
+
+target("smallfw-runtime")
+    set_group("runtime")
+    smallfw.configure_runtime_library_target()
+    add_runtime_implementation_files()

@@ -24,8 +24,6 @@
     if (obj == NULL) {
         [AllocationFailedException raiseForAllocationFailure];
     }
-#else
-    return (id)obj;
 #endif
     return (id)obj;
 }
@@ -81,8 +79,6 @@
     if (obj == NULL) {
         [AllocationFailedException raiseForAllocationFailure];
     }
-#else
-    return (id)obj;
 #endif
     return (id)obj;
 }

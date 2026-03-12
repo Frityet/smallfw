@@ -58,9 +58,11 @@ local function _profile_compile_flags(profiler)
 end
 
 local function _configure_args(builddir, profiler, pgo_mode, profdata)
-    local args = task_helpers.collect_configure_args({
-        "--analysis-symbols=y",
-    }, {
+    local extra_args = {}
+    if option.get("analysis-symbols") == nil or option.get("analysis-symbols") == "" then
+        table.insert(extra_args, "--analysis-symbols=y")
+    end
+    local args = task_helpers.collect_configure_args(extra_args, {
         mode = _string_option("mode", "debug"),
         plat = _string_option("plat", "linux"),
         arch = _string_option("arch", "x86_64"),

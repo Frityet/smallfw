@@ -16,6 +16,25 @@ function smallfw.runtime_dispatch_backend()
     return get_config("dispatch-backend") or "asm"
 end
 
+function smallfw.runtime_lto_mode()
+    local thin = has_config("runtime-thinlto")
+    local full = has_config("runtime-full-lto")
+    if thin then
+        return "thin"
+    end
+    if full then
+        return "full"
+    end
+    return nil
+end
+
+function smallfw.runtime_binary_dependency()
+    if smallfw.runtime_lto_mode() == "full" then
+        return "smallfw-runtime-objects"
+    end
+    return "smallfw-runtime"
+end
+
 function smallfw.add_common_runtime_flags()
     set_warnings("everything", "error")
 
@@ -61,9 +80,10 @@ function smallfw.add_common_runtime_flags()
     if has_config("runtime-native-tuning") and is_plat("linux") and is_arch("x86_64") then
         add_objc_flags("-march=native", "-mtune=native")
     end
-    if has_config("runtime-thinlto") then
-        add_objc_flags("-flto=thin")
-        add_ldflags("-flto=thin", "-fuse-ld=lld", {force = true})
+    local lto_mode = smallfw.runtime_lto_mode()
+    if lto_mode ~= nil then
+        add_objc_flags("-flto=" .. lto_mode)
+        add_ldflags("-flto=" .. lto_mode, "-fuse-ld=lld", {force = true})
     end
     if is_plat("linux") or is_plat("mingw") then
         add_objc_flags("-ffunction-sections", "-fdata-sections")
@@ -253,7 +273,7 @@ function smallfw.configure_runtime_binary_target(opt)
     end
 
     add_options(smallfw.runtime_build_options)
-    for _, dep in ipairs(opt.deps or {"smallfw-runtime"}) do
+    for _, dep in ipairs(opt.deps or {smallfw.runtime_binary_dependency()}) do
         add_deps(dep)
     end
     for _, includedir in ipairs(opt.includedirs or {smallfw.project_path("src")}) do
