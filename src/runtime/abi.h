@@ -134,7 +134,7 @@ typedef struct SFGroupState {
     SFRuntimeMutex_t group_lock;
 } SFGroupState_t;
 
-enum {
+enum SFObjFlags {
     SF_OBJ_FLAG_NONE = 0U,
     SF_OBJ_FLAG_IMMORTAL = 1U << 0U,
     SF_OBJ_FLAG_EMBEDDED = 1U << 1U,
@@ -143,7 +143,7 @@ enum {
 };
 
 #if SF_RUNTIME_COMPACT_HEADERS
-enum {
+enum SFObjClassFlags {
     SF_OBJ_CLASS_FLAG_NONE = 0U,
     SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE = 1U << 0U,
     SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS = 1U << 1U,
@@ -215,8 +215,10 @@ typedef struct SFObjHeader {
 #endif
 
 #define SF_OBJ_HEADER_MAGIC UINT64_C(0x53464f424a484452)
-#define SF_OBJ_STATE_DISPOSED UINT32_C(0)
-#define SF_OBJ_STATE_LIVE UINT32_C(1)
+enum SFObjState {
+    SF_OBJ_STATE_DISPOSED = 0U,
+    SF_OBJ_STATE_LIVE = 1U,
+};
 
 SFObjCClass_t *_Nullable sf_class_from_name(const char *_Nullable name);
 void sf_register_classes(SFObjCClass_t *_Nullable *_Nullable start,
