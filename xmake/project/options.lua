@@ -20,6 +20,14 @@ option("runtime-threadsafe")
     set_description("Enable synchronized runtime internals")
 option_end()
 
+option("objc-runtime")
+    set_default("gnustep-2.3")
+    set_showmenu(true)
+    set_category("runtime/core")
+    set_values("gnustep-2.3", "objfw-1.5")
+    set_description("Select the Objective-C runtime ABI/compiler mode")
+option_end()
+
 option("dispatch-backend")
     set_default("asm")
     set_showmenu(true)
@@ -248,6 +256,7 @@ option_end()
 
 smallfw.runtime_build_options = {
     "runtime-threadsafe",
+    "objc-runtime",
     "dispatch-backend",
     "dispatch-stats",
     "runtime-exceptions",

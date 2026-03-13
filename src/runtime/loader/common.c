@@ -1,4 +1,5 @@
 #include "runtime/internal.h"
+#include "runtime/loader/common.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -105,17 +106,12 @@ enum {
 };
 #endif
 
-typedef struct SFObjCAliasEntry {
-    const char *alias_name;
-    Class *class_ref;
-} SFObjCAliasEntry_t;
-
 static void sf_cache_class_meta(Class cls);
-static SFObjCClass_t *class_map_lookup_unlocked(const char *name);
 static IMP sf_lookup_method_imp_exact(Class cls, SEL sel);
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls);
 static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super);
 static size_t align_up(size_t value, size_t align);
+static void sf_reset_class_caches_unlocked(void);
 
 #if SF_RUNTIME_COMPACT_HEADERS
 static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
@@ -149,7 +145,7 @@ static int sf_class_is_fast_object_unlocked(Class cls)
         return 0;
     }
     if (g_fast_object_class == NULL) {
-        g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
+        g_fast_object_class = (Class)sf_loader_class_lookup_unlocked("FastObject");
     }
     if (g_fast_object_class == NULL) {
         return 0;
@@ -262,7 +258,7 @@ static char *copy_cstr_nullable(const char *value)
     return copy;
 }
 
-static SEL intern_selector_name_types(const char *name, const char *types)
+SEL sf_loader_intern_selector_name_types(const char *name, const char *types)
 {
     if (name == NULL or name[0] == '\0') {
         return NULL;
@@ -326,7 +322,7 @@ SEL sf_intern_selector(SEL sel)
         return NULL;
     }
 
-    SEL interned = intern_selector_name_types(sel->name, sel->types);
+    SEL interned = sf_loader_intern_selector_name_types(sel->name, sel->types);
     if (interned == NULL) {
         return sel;
     }
@@ -336,7 +332,7 @@ SEL sf_intern_selector(SEL sel)
     return interned;
 }
 
-static void register_selector_region(void *start, void *stop)
+void sf_loader_register_selector_region(void *start, void *stop)
 {
     if (start == NULL or stop == NULL or stop <= start) {
         return;
@@ -348,6 +344,20 @@ static void register_selector_region(void *start, void *stop)
         (void)sf_intern_selector(sel);
         ++sel;
     }
+}
+
+static void sf_reset_class_caches_unlocked(void)
+{
+    memset(g_layout_fixed_map, 0, sizeof(g_layout_fixed_map));
+    memset(g_layout_active_stack, 0, sizeof(g_layout_active_stack));
+    memset(g_value_slot_map, 0, sizeof(g_value_slot_map));
+    g_layout_active_count = 0U;
+
+    for (size_t i = 0; i < SF_CLASS_META_CAPACITY; ++i) {
+        free(g_class_meta[i].strong_ivar_offsets);
+        memset(&g_class_meta[i], 0, sizeof(g_class_meta[i]));
+    }
+    g_object_dealloc_imp = NULL;
 }
 
 static SFClassMetaEntry_t *class_meta_slot_for(Class cls)
@@ -600,7 +610,7 @@ static int sf_class_is_value_object_unlocked(Class cls)
         return 0;
     }
     if (g_value_object_class == NULL) {
-        g_value_object_class = (Class)class_map_lookup_unlocked("ValueObject");
+        g_value_object_class = (Class)sf_loader_class_lookup_unlocked("ValueObject");
     }
     if (g_value_object_class == NULL) {
         return 0;
@@ -689,7 +699,7 @@ static void sf_rebuild_tagged_pointer_class_map_unlocked(void)
 static IMP sf_object_dealloc_imp_unlocked(void)
 {
     if (g_object_class == NULL) {
-        g_object_class = (Class)class_map_lookup_unlocked("Object");
+        g_object_class = (Class)sf_loader_class_lookup_unlocked("Object");
     }
     if (g_object_dealloc_imp == NULL and g_object_class != NULL and g_dealloc_sel != NULL) {
         g_object_dealloc_imp = sf_lookup_method_imp_exact(g_object_class, g_dealloc_sel);
@@ -745,16 +755,27 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
         for (uintptr_t i = 0; i < list->count; ++i) {
             SFObjCIvar_t *ivar = (SFObjCIvar_t *)(void *)cursor;
             int32_t adjusted_offset = 0;
+            int32_t local_offset = 0;
+            int has_local_offset = 0;
             int skip_size = 0;
             if (ivar->offset != NULL) {
-                int64_t off = (int64_t)(*ivar->offset) + (int64_t)super_size;
+                int64_t off = 0;
+                has_local_offset = sf_loader_local_ivar_offset_unlocked(cls, (size_t)i, &local_offset);
+                if (has_local_offset) {
+                    off = (int64_t)local_offset + (int64_t)super_size;
+                } else {
+                    off = (int64_t)(*ivar->offset) + (int64_t)super_size;
+                }
                 if (off < 0) {
                     off = 0;
                 } else if (off > INT32_MAX) {
                     off = INT32_MAX;
                 }
-                *ivar->offset = (int32_t)off;
-                adjusted_offset = *ivar->offset;
+                adjusted_offset = (int32_t)off;
+                if (has_local_offset) {
+                    sf_loader_sync_ivar_offset_unlocked(cls, (size_t)i, adjusted_offset);
+                }
+                *ivar->offset = adjusted_offset;
                 if (adjusted_offset == INT32_MAX) {
                     skip_size = 1;
                 }
@@ -769,7 +790,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
             if (not disable_local_slots and ivar->offset != NULL and adjusted_offset != INT32_MAX) {
                 char class_name[256];
                 if (sf_extract_object_class_name(ivar->type, class_name, sizeof(class_name))) {
-                    Class value_cls = (Class)class_map_lookup_unlocked(class_name);
+                    Class value_cls = (Class)sf_loader_class_lookup_unlocked(class_name);
                     if (value_cls != NULL and sf_class_is_value_object_unlocked(value_cls) and
                         sf_class_supports_inline_value_storage_unlocked(value_cls) and
                         not layout_active_contains((SFObjCClass_t *)value_cls)) {
@@ -893,8 +914,11 @@ static void class_map_insert_unlocked(const char *name, SFObjCClass_t *cls)
     }
 }
 
-static SFObjCClass_t *class_map_lookup_unlocked(const char *name)
+SFObjCClass_t *sf_loader_class_lookup_unlocked(const char *name)
 {
+    if (name == NULL) {
+        return NULL;
+    }
     uint64_t h = hash_cstr(name);
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         size_t idx = (size_t)((h + i) % SF_CLASS_MAP_CAPACITY);
@@ -916,7 +940,7 @@ SFObjCClass_t *sf_class_from_name(const char *name)
     }
 
     sf_runtime_rwlock_rdlock(&g_class_map_lock);
-    SFObjCClass_t *result = class_map_lookup_unlocked(name);
+    SFObjCClass_t *result = sf_loader_class_lookup_unlocked(name);
     sf_runtime_rwlock_unlock(&g_class_map_lock);
     return result;
 }
@@ -938,7 +962,7 @@ void sf_register_classes(SFObjCClass_t **start, SFObjCClass_t **stop)
     sf_runtime_rwlock_unlock(&g_class_map_lock);
 }
 
-static void sf_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntry_t *stop)
+void sf_loader_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntry_t *stop)
 {
     if (start == NULL or stop == NULL or stop <= start)
         return;
@@ -984,11 +1008,13 @@ void sf_finalize_registered_classes(void)
     }
 
     sf_runtime_rwlock_wrlock(&g_class_map_lock);
-    g_object_class = (Class)class_map_lookup_unlocked("Object");
-    g_value_object_class = (Class)class_map_lookup_unlocked("ValueObject");
-    g_fast_object_class = (Class)class_map_lookup_unlocked("FastObject");
-    g_nsconstantstring_class = (Class)class_map_lookup_unlocked("NSConstantString");
-    g_nxconstantstring_class = (Class)class_map_lookup_unlocked("NXConstantString");
+    sf_loader_prepare_registered_classes_unlocked();
+    sf_reset_class_caches_unlocked();
+    g_object_class = (Class)sf_loader_class_lookup_unlocked("Object");
+    g_value_object_class = (Class)sf_loader_class_lookup_unlocked("ValueObject");
+    g_fast_object_class = (Class)sf_loader_class_lookup_unlocked("FastObject");
+    g_nsconstantstring_class = (Class)sf_loader_class_lookup_unlocked("NSConstantString");
+    g_nxconstantstring_class = (Class)sf_loader_class_lookup_unlocked("NXConstantString");
     g_object_dealloc_imp = sf_object_dealloc_imp_unlocked();
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         SFClassEntry_t *slot = &g_class_map[i];
@@ -1013,19 +1039,6 @@ void sf_finalize_registered_classes(void)
     sf_runtime_rwlock_unlock(&g_class_map_lock);
 
     sf_register_builtin_class_cache();
-}
-
-void __objc_load(void *init_ptr)
-{
-    SFObjCInit_t *init = (SFObjCInit_t *)init_ptr;
-    if (init == NULL) {
-        return;
-    }
-    register_selector_region(init->selectors_start, init->selectors_stop);
-    sf_register_classes((SFObjCClass_t **)init->classes_start, (SFObjCClass_t **)init->classes_stop);
-    sf_register_class_aliases((SFObjCAliasEntry_t *)init->aliases_start,
-                              (SFObjCAliasEntry_t *)init->aliases_stop);
-    sf_finalize_registered_classes();
 }
 
 Class objc_lookup_class(const char *name)
@@ -2130,7 +2143,7 @@ const char *sel_getName(SEL sel)
 
 SEL sel_registerName(const char *name)
 {
-    return intern_selector_name_types(name, NULL);
+    return sf_loader_intern_selector_name_types(name, NULL);
 }
 
 int sel_isEqual(SEL lhs, SEL rhs)

@@ -79,6 +79,7 @@ SmallFW is EXTREMLEY configurable!
         --dispatch-cache-2way=[y|n]             Use a 2-way set-associative dispatch cache.
 
         --runtime-threadsafe=[y|n]              Enable synchronized runtime internals
+        --objc-runtime=OBJC-RUNTIME            Select Objective-C runtime ABI/compiler mode (default: gnustep-2.3)
         --dispatch-backend=DISPATCH-BACKEND     Select objc_msgSend backend (default: asm)
         --runtime-forwarding=[y|n]              Enable message forwarding and runtime selector resolution support
         --runtime-validation=[y|n]              Enable defensive runtime object validation (recommended for debug/tests, disable for fastest

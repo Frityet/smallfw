@@ -24,6 +24,19 @@ local CASE_TITLES = {
     parent_group_cycle = "parent_group_cycle",
 }
 
+local ABI_ENTRIES = {
+    {
+        id = "gnustep-2.3",
+        slug = "gnustep",
+        label = "GNUstep ABI",
+    },
+    {
+        id = "objfw-1.5",
+        slug = "objfw",
+        label = "ObjFW ABI",
+    },
+}
+
 local VARIANTS = {
     {
         id = "debug-default",
@@ -244,6 +257,7 @@ local VARIANTS = {
 
 local DISPLAY_OPTION_ORDER = {
     "analysis-symbols",
+    "objc-runtime",
     "runtime-threadsafe",
     "dispatch-backend",
     "dispatch-stats",
@@ -340,8 +354,59 @@ local function _table_clone(src)
     return dst
 end
 
+local function _selected_abis()
+    local selected = _string_option("objc-runtimes", "both")
+    if selected == "both" then
+        return ABI_ENTRIES
+    end
+
+    for _, abi in ipairs(ABI_ENTRIES) do
+        if abi.id == selected then
+            return {abi}
+        end
+    end
+
+    raise("option --objc-runtimes must be one of: both, gnustep-2.3, objfw-1.5")
+end
+
+local function _find_abi_entry(abi_entries, abi_id)
+    for _, abi in ipairs(abi_entries or {}) do
+        if abi.id == abi_id then
+            return abi
+        end
+    end
+    return nil
+end
+
+local function _expanded_variants(abi_entries)
+    local expanded = {}
+    for _, variant in ipairs(VARIANTS) do
+        for _, abi in ipairs(abi_entries or {}) do
+            local concrete = _table_clone(variant)
+            concrete.base_id = variant.id
+            concrete.id = variant.id .. "-" .. abi.slug
+            concrete.objc_runtime = abi.id
+            concrete.abi_slug = abi.slug
+            concrete.abi_label = abi.label
+            table.insert(expanded, concrete)
+        end
+    end
+    return expanded
+end
+
+local function _selected_abis_value(abi_entries)
+    if #(abi_entries or {}) == #ABI_ENTRIES then
+        return "both"
+    end
+    local abi = abi_entries and abi_entries[1] or nil
+    return abi and abi.id or "both"
+end
+
 local function _effective_options(variant)
-    local options = {["analysis-symbols"] = "n"}
+    local options = {
+        ["analysis-symbols"] = "n",
+        ["objc-runtime"] = variant.objc_runtime or "gnustep-2.3",
+    }
     if (variant.bolt or "off") == "on" then
         options["analysis-symbols"] = "y"
     end
@@ -460,6 +525,13 @@ local function _geomean(values)
     return math.exp(sum / #values)
 end
 
+local function _first_value(tbl)
+    for _, value in pairs(tbl or {}) do
+        return value
+    end
+    return nil
+end
+
 local function _bench_command_args(rootdir, samples, warmups, variant)
     local args = {
         "run-runtime-bench",
@@ -497,11 +569,15 @@ local function _run_variant(rootdir, samples, warmups, variant)
 
     return {
         id = variant.id,
+        base_id = variant.base_id or variant.id,
         category = variant.category,
         note = variant.note,
         mode = variant.mode or "release",
         pgo = variant.pgo or "off",
         bolt = variant.bolt or "off",
+        objc_runtime = variant.objc_runtime or "gnustep-2.3",
+        abi_label = variant.abi_label or (variant.objc_runtime or "gnustep-2.3"),
+        abi_slug = variant.abi_slug or (variant.objc_runtime or "gnustep-2.3"),
         options = _effective_options(variant),
         changed_options = _visible_changed_options(variant),
         run_dir = path.absolute(run_dir),
@@ -511,57 +587,131 @@ local function _run_variant(rootdir, samples, warmups, variant)
     }
 end
 
-local function _derive_relative_metrics(results_by_id)
-    local baseline = assert(results_by_id["release-default"], "release-default baseline is required")
+local function _derive_relative_metrics(results_by_id, variants, abi_entries)
+    local baselines_by_runtime = {}
     local fastest_by_case = {}
-    local ordered_results = {}
-    for _, variant in ipairs(VARIANTS) do
+    local ordered_by_speed = {}
+
+    for _, abi in ipairs(abi_entries or {}) do
+        ordered_by_speed[abi.id] = {}
+    end
+
+    for _, variant in ipairs(variants or {}) do
+        local result = results_by_id[variant.id]
+        if result ~= nil and result.base_id == "release-default" then
+            baselines_by_runtime[result.objc_runtime] = result
+        end
+    end
+
+    for _, abi in ipairs(abi_entries or {}) do
+        assert(baselines_by_runtime[abi.id] ~= nil,
+            string.format("the %s release-default baseline failed, so the matrix cannot be rendered", abi.id))
+    end
+
+    for _, variant in ipairs(variants or {}) do
         local result = results_by_id[variant.id]
         if result ~= nil then
-            table.insert(ordered_results, result)
+            local baseline = baselines_by_runtime[result.objc_runtime]
+            local speedups = {}
+            local best = nil
+            local worst = nil
+
+            for _, case_name in ipairs(CASE_ORDER) do
+                local baseline_case = baseline.cases[case_name]
+                local current_case = result.cases[case_name]
+                local speedup = baseline_case.mean_ns_per / current_case.mean_ns_per
+                current_case.speedup_vs_baseline = speedup
+                table.insert(speedups, speedup)
+
+                if best == nil or speedup > best.speedup then
+                    best = {case = case_name, speedup = speedup}
+                end
+                if worst == nil or speedup < worst.speedup then
+                    worst = {case = case_name, speedup = speedup}
+                end
+
+                local fastest = fastest_by_case[case_name]
+                if fastest == nil or current_case.mean_ns_per < fastest.mean_ns_per then
+                    fastest_by_case[case_name] = {
+                        variant = result.base_id,
+                        run_id = result.id,
+                        abi = result.objc_runtime,
+                        abi_label = result.abi_label,
+                        mean_ns_per = current_case.mean_ns_per,
+                        speedup = speedup,
+                    }
+                end
+            end
+
+            result.geomean_speedup = _geomean(speedups)
+            result.best_case = best
+            result.worst_case = worst
+            table.insert(ordered_by_speed[result.objc_runtime], result)
         end
     end
 
-    for _, result in ipairs(ordered_results) do
-        local speedups = {}
-        local best = nil
-        local worst = nil
-        for _, case_name in ipairs(CASE_ORDER) do
-            local baseline_case = baseline.cases[case_name]
-            local current_case = result.cases[case_name]
-            local speedup = baseline_case.mean_ns_per / current_case.mean_ns_per
-            current_case.speedup_vs_baseline = speedup
-            table.insert(speedups, speedup)
-
-            if best == nil or speedup > best.speedup then
-                best = {case = case_name, speedup = speedup}
+    for _, abi in ipairs(abi_entries or {}) do
+        table.sort(ordered_by_speed[abi.id], function (a, b)
+            if a.geomean_speedup == b.geomean_speedup then
+                return a.id < b.id
             end
-            if worst == nil or speedup < worst.speedup then
-                worst = {case = case_name, speedup = speedup}
-            end
-
-            local fastest = fastest_by_case[case_name]
-            if fastest == nil or current_case.mean_ns_per < fastest.mean_ns_per then
-                fastest_by_case[case_name] = {
-                    variant = result.id,
-                    mean_ns_per = current_case.mean_ns_per,
-                    speedup = speedup,
-                }
-            end
-        end
-        result.geomean_speedup = _geomean(speedups)
-        result.best_case = best
-        result.worst_case = worst
+            return a.geomean_speedup > b.geomean_speedup
+        end)
     end
 
-    table.sort(ordered_results, function (a, b)
-        if a.geomean_speedup == b.geomean_speedup then
-            return a.id < b.id
+    return baselines_by_runtime, fastest_by_case, ordered_by_speed
+end
+
+local function _derive_abi_comparisons(results_by_id, abi_entries)
+    local comparisons = {}
+    local gnustep = _find_abi_entry(abi_entries, "gnustep-2.3")
+    local objfw = _find_abi_entry(abi_entries, "objfw-1.5")
+    if gnustep == nil or objfw == nil then
+        return comparisons
+    end
+
+    for _, variant in ipairs(VARIANTS) do
+        local gnustep_result = results_by_id[variant.id .. "-" .. gnustep.slug]
+        local objfw_result = results_by_id[variant.id .. "-" .. objfw.slug]
+        if gnustep_result ~= nil and objfw_result ~= nil then
+            local objfw_speedups = {}
+            local best = nil
+            local worst = nil
+
+            for _, case_name in ipairs(CASE_ORDER) do
+                local gnustep_case = gnustep_result.cases[case_name]
+                local objfw_case = objfw_result.cases[case_name]
+                local speedup = gnustep_case.mean_ns_per / objfw_case.mean_ns_per
+                table.insert(objfw_speedups, speedup)
+
+                if best == nil or speedup > best.speedup then
+                    best = {case = case_name, speedup = speedup}
+                end
+                if worst == nil or speedup < worst.speedup then
+                    worst = {case = case_name, speedup = speedup}
+                end
+            end
+
+            table.insert(comparisons, {
+                base_id = variant.id,
+                note = variant.note,
+                gnustep = gnustep_result,
+                objfw = objfw_result,
+                objfw_geomean_speedup = _geomean(objfw_speedups),
+                best_case = best,
+                worst_case = worst,
+            })
         end
-        return a.geomean_speedup > b.geomean_speedup
+    end
+
+    table.sort(comparisons, function (a, b)
+        if a.objfw_geomean_speedup == b.objfw_geomean_speedup then
+            return a.base_id < b.base_id
+        end
+        return a.objfw_geomean_speedup > b.objfw_geomean_speedup
     end)
 
-    return baseline, fastest_by_case, ordered_results
+    return comparisons
 end
 
 local function _markdown_header(lines, level, text)
@@ -582,24 +732,32 @@ local function _append_table(lines, headers, rows)
     table.insert(lines, "")
 end
 
-local function _render_markdown(doc_path, outroot, samples, warmups, generated_at_utc, host_metadata, results_by_id,
-                                ordered_by_speed, fastest_by_case, failures)
+local function _render_markdown(doc_path, outroot, samples, warmups, generated_at_utc, host_metadata, variants,
+                                abi_entries, results_by_id, ordered_by_speed, fastest_by_case, abi_comparisons,
+                                failures)
     local lines = {}
-    local baseline = results_by_id["release-default"]
     local failures_by_id = _failure_by_id(failures)
+    local selected_abis = _selected_abis_value(abi_entries)
 
     _markdown_header(lines, 1, "Runtime Performance Matrix")
     table.insert(lines,
-        "This document is generated from measured `xmake run-runtime-bench` runs on the current host. The matrix uses `analysis-symbols=n` by default so release rows reflect a shipping-style binary unless a row explicitly says otherwise.")
+        "This document is generated from measured `xmake run-runtime-bench` runs on the current host. The matrix compares the selected Objective-C runtime ABIs and uses `analysis-symbols=n` by default so release rows reflect a shipping-style binary unless a row explicitly says otherwise.")
+    table.insert(lines,
+        "Relative speedups are computed against the matching `release-default` baseline inside the same ABI.")
     table.insert(lines, "")
     table.insert(lines, string.format("Generated at: `%s`", generated_at_utc))
-    table.insert(lines, string.format("Regenerate with: `xmake run-runtime-performance-matrix --samples=%d --warmups=%d --outdir=%s --doc=%s`",
-        samples, warmups, outroot, doc_path))
+    table.insert(lines, string.format("Regenerate with: `xmake run-runtime-performance-matrix --samples=%d --warmups=%d --objc-runtimes=%s --outdir=%s --doc=%s`",
+        samples, warmups, selected_abis, outroot, doc_path))
     table.insert(lines, "")
 
     _markdown_header(lines, 2, "Environment")
     table.insert(lines, string.format("- Host: `%s`", host_metadata.host.host or os.host()))
     table.insert(lines, string.format("- Architecture: `%s`", host_metadata.host.arch or os.arch()))
+    local abi_labels = {}
+    for _, abi in ipairs(abi_entries or {}) do
+        table.insert(abi_labels, string.format("`%s`", abi.id))
+    end
+    table.insert(lines, string.format("- Objective-C runtimes benchmarked: %s", table.concat(abi_labels, ", ")))
     if host_metadata.host.uname ~= nil then
         table.insert(lines, string.format("- `uname -srvm`: `%s`", host_metadata.host.uname))
     end
@@ -616,12 +774,13 @@ local function _render_markdown(doc_path, outroot, samples, warmups, generated_a
 
     _markdown_header(lines, 2, "Variant Definitions")
     local variant_rows = {}
-    for _, variant in ipairs(VARIANTS) do
+    for _, variant in ipairs(variants or {}) do
         local result = results_by_id[variant.id]
         local failure = failures_by_id[variant.id]
         local options = result and result.changed_options or _visible_changed_options(variant)
         table.insert(variant_rows, {
-            "`" .. variant.id .. "`",
+            "`" .. (variant.base_id or variant.id) .. "`",
+            "`" .. (variant.objc_runtime or "gnustep-2.3") .. "`",
             variant.category,
             "`" .. tostring(variant.mode or "release") .. "`",
             "`" .. tostring(variant.pgo or "off") .. "`",
@@ -632,22 +791,47 @@ local function _render_markdown(doc_path, outroot, samples, warmups, generated_a
             variant.note,
         })
     end
-    _append_table(lines, {"Variant", "Category", "Mode", "PGO", "BOLT", "Changed Options", "Status", "Failure", "Notes"}, variant_rows)
+    _append_table(lines, {"Variant", "ABI", "Category", "Mode", "PGO", "BOLT", "Changed Options", "Status", "Failure", "Notes"}, variant_rows)
 
     _markdown_header(lines, 2, "Leaderboard")
-    local leaderboard_rows = {}
-    for rank, result in ipairs(ordered_by_speed) do
-        table.insert(leaderboard_rows, {
-            tostring(rank),
-            "`" .. result.id .. "`",
-            result.category,
-            _format_speedup(result.geomean_speedup),
-            string.format("`%s` (%s)", result.best_case.case, _format_speedup(result.best_case.speedup)),
-            string.format("`%s` (%s)", result.worst_case.case, _format_speedup(result.worst_case.speedup)),
-            result.note,
-        })
+    for _, abi in ipairs(abi_entries or {}) do
+        _markdown_header(lines, 3, abi.label)
+        local leaderboard_rows = {}
+        for rank, result in ipairs(ordered_by_speed[abi.id] or {}) do
+            table.insert(leaderboard_rows, {
+                tostring(rank),
+                "`" .. result.base_id .. "`",
+                result.category,
+                _format_speedup(result.geomean_speedup),
+                string.format("`%s` (%s)", result.best_case.case, _format_speedup(result.best_case.speedup)),
+                string.format("`%s` (%s)", result.worst_case.case, _format_speedup(result.worst_case.speedup)),
+                result.note,
+            })
+        end
+        _append_table(lines, {"Rank", "Variant", "Category", "Geo Mean vs ABI `release-default`", "Best Case", "Worst Case", "Notes"}, leaderboard_rows)
     end
-    _append_table(lines, {"Rank", "Variant", "Category", "Geo Mean vs `release-default`", "Best Case", "Worst Case", "Notes"}, leaderboard_rows)
+
+    if #abi_comparisons > 0 then
+        _markdown_header(lines, 2, "ObjFW vs GNUstep")
+        local abi_rows = {}
+        for _, comparison in ipairs(abi_comparisons) do
+            local winner = "tie"
+            if comparison.objfw_geomean_speedup > 1.01 then
+                winner = "ObjFW ABI"
+            elseif comparison.objfw_geomean_speedup < 0.99 then
+                winner = "GNUstep ABI"
+            end
+            table.insert(abi_rows, {
+                "`" .. comparison.base_id .. "`",
+                _format_speedup(comparison.objfw_geomean_speedup),
+                winner,
+                string.format("`%s` (%s)", comparison.best_case.case, _format_speedup(comparison.best_case.speedup)),
+                string.format("`%s` (%s)", comparison.worst_case.case, _format_speedup(comparison.worst_case.speedup)),
+                comparison.note,
+            })
+        end
+        _append_table(lines, {"Variant", "ObjFW vs GNUstep", "Winner", "Best ObjFW Case", "Worst ObjFW Case", "Notes"}, abi_rows)
+    end
 
     _markdown_header(lines, 2, "Fastest Variant Per Benchmark")
     local fastest_rows = {}
@@ -656,40 +840,49 @@ local function _render_markdown(doc_path, outroot, samples, warmups, generated_a
         table.insert(fastest_rows, {
             "`" .. CASE_TITLES[case_name] .. "`",
             "`" .. fastest.variant .. "`",
+            fastest.abi_label,
             _format_ns(fastest.mean_ns_per),
             _format_speedup(fastest.speedup),
         })
     end
-    _append_table(lines, {"Benchmark", "Fastest Variant", "Mean", "Speedup vs `release-default`"}, fastest_rows)
+    _append_table(lines, {"Benchmark", "Fastest Variant", "ABI", "Mean", "Speedup vs ABI `release-default`"}, fastest_rows)
 
-    if results_by_id["release-default"] ~= nil and results_by_id["release-dispatch-c"] ~= nil then
+    local gnustep = _find_abi_entry(abi_entries, "gnustep-2.3")
+    local objfw = _find_abi_entry(abi_entries, "objfw-1.5")
+    if gnustep ~= nil or objfw ~= nil then
         _markdown_header(lines, 2, "ASM vs C Backend")
         local asm_rows = {}
-        local asm_result = results_by_id["release-default"]
-        local c_result = results_by_id["release-dispatch-c"]
-        for _, case_name in ipairs(CASE_ORDER) do
-            local asm_case = asm_result.cases[case_name]
-            local c_case = c_result.cases[case_name]
-            table.insert(asm_rows, {
-                "`" .. CASE_TITLES[case_name] .. "`",
-                _format_ns(asm_case.mean_ns_per),
-                _format_ns(c_case.mean_ns_per),
-                _format_speedup(c_case.mean_ns_per / asm_case.mean_ns_per),
-            })
+        for _, abi in ipairs(abi_entries or {}) do
+            local asm_result = results_by_id["release-default-" .. abi.slug]
+            local c_result = results_by_id["release-dispatch-c-" .. abi.slug]
+            if asm_result ~= nil and c_result ~= nil then
+                for _, case_name in ipairs(CASE_ORDER) do
+                    local asm_case = asm_result.cases[case_name]
+                    local c_case = c_result.cases[case_name]
+                    table.insert(asm_rows, {
+                        abi.label,
+                        "`" .. CASE_TITLES[case_name] .. "`",
+                        _format_ns(asm_case.mean_ns_per),
+                        _format_ns(c_case.mean_ns_per),
+                        _format_speedup(c_case.mean_ns_per / asm_case.mean_ns_per),
+                    })
+                end
+            end
         end
-        _append_table(lines, {"Benchmark", "ASM Mean", "C Mean", "ASM Advantage"}, asm_rows)
+        _append_table(lines, {"ABI", "Benchmark", "ASM Mean", "C Mean", "ASM Advantage"}, asm_rows)
     end
 
     _markdown_header(lines, 2, "Per-Benchmark Results")
     for _, case_name in ipairs(CASE_ORDER) do
         _markdown_header(lines, 3, CASE_TITLES[case_name])
         local rows = {}
-        for _, variant in ipairs(VARIANTS) do
+        for _, variant in ipairs(variants or {}) do
             local result = results_by_id[variant.id]
             if result ~= nil then
                 local case_result = result.cases[case_name]
                 table.insert(rows, {
-                    "`" .. result.id .. "`",
+                    "`" .. result.base_id .. "`",
+                    result.abi_label,
                     _format_ns(case_result.mean_ns_per),
                     _format_speedup(case_result.speedup_vs_baseline),
                     result.category,
@@ -697,7 +890,7 @@ local function _render_markdown(doc_path, outroot, samples, warmups, generated_a
                 })
             end
         end
-        _append_table(lines, {"Variant", "Mean", "Speedup vs `release-default`", "Category", "Notes"}, rows)
+        _append_table(lines, {"Variant", "ABI", "Mean", "Speedup vs ABI `release-default`", "Category", "Notes"}, rows)
     end
 
     if #failures > 0 then
@@ -709,7 +902,12 @@ local function _render_markdown(doc_path, outroot, samples, warmups, generated_a
     end
 
     _markdown_header(lines, 2, "Baseline Reference")
-    table.insert(lines, string.format("`release-default` artifacts: `%s`", baseline.run_dir))
+    for _, abi in ipairs(abi_entries or {}) do
+        local baseline = results_by_id["release-default-" .. abi.slug]
+        if baseline ~= nil then
+            table.insert(lines, string.format("- `%s`: `%s`", abi.id, baseline.run_dir))
+        end
+    end
     table.insert(lines, "")
 
     return table.concat(lines, "\n")
@@ -722,6 +920,8 @@ function main()
     local warmups = _nonnegative_integer_option("warmups", 0)
     local outroot = _string_option("outdir", path.join("build", "runtime-analysis", "performance-matrix"))
     local doc_path = _string_option("doc", path.join("docs", "PERFORMANCE.md"))
+    local abi_entries = _selected_abis()
+    local variants = _expanded_variants(abi_entries)
 
     os.mkdir(outroot)
     os.mkdir(path.join(outroot, "runs"))
@@ -730,8 +930,8 @@ function main()
     local results_by_id = {}
     local failures = {}
 
-    for index, variant in ipairs(VARIANTS) do
-        print(string.format("[%d/%d] %s", index, #VARIANTS, variant.id))
+    for index, variant in ipairs(variants) do
+        print(string.format("[%d/%d] %s (%s)", index, #variants, variant.base_id, variant.abi_label))
         local ok, result, errs = try {
             function ()
                 return true, _run_variant(outroot, samples, warmups, variant)
@@ -747,25 +947,38 @@ function main()
         else
             table.insert(failures, {
                 id = variant.id,
+                base_id = variant.base_id,
+                objc_runtime = variant.objc_runtime,
                 error = _single_line(tostring(errs or _variant_failure_message(outroot, variant))) or "unknown error",
             })
         end
     end
 
-    assert(results_by_id["release-default"] ~= nil, "the release-default baseline failed, so the matrix cannot be rendered")
-
-    local baseline, fastest_by_case, ordered_by_speed = _derive_relative_metrics(results_by_id)
+    local baselines_by_runtime, fastest_by_case, ordered_by_speed =
+        _derive_relative_metrics(results_by_id, variants, abi_entries)
+    local abi_comparisons = _derive_abi_comparisons(results_by_id, abi_entries)
     local generated_at_utc = os.date("!%Y-%m-%dT%H:%M:%SZ")
-    local host_metadata = baseline.metadata or {}
+    local first_baseline = _first_value(baselines_by_runtime)
+    local host_metadata = (first_baseline and first_baseline.metadata) or {}
     local matrix_json = {
         generated_at_utc = generated_at_utc,
         outroot = path.absolute(outroot),
         samples = samples,
         warmups = warmups,
+        selected_abis = _selected_abis_value(abi_entries),
+        abis = {},
+        abi_comparisons = {},
         variants = {},
         failures = failures,
     }
-    for _, variant in ipairs(VARIANTS) do
+    for _, abi in ipairs(abi_entries) do
+        table.insert(matrix_json.abis, {
+            id = abi.id,
+            slug = abi.slug,
+            label = abi.label,
+        })
+    end
+    for _, variant in ipairs(variants) do
         local result = results_by_id[variant.id]
         if result ~= nil then
             local cases = {}
@@ -783,6 +996,9 @@ function main()
             end
             table.insert(matrix_json.variants, {
                 id = result.id,
+                base_id = result.base_id,
+                objc_runtime = result.objc_runtime,
+                abi_label = result.abi_label,
                 category = result.category,
                 note = result.note,
                 mode = result.mode,
@@ -797,10 +1013,21 @@ function main()
             })
         end
     end
+    for _, comparison in ipairs(abi_comparisons) do
+        table.insert(matrix_json.abi_comparisons, {
+            base_id = comparison.base_id,
+            note = comparison.note,
+            gnustep_run_id = comparison.gnustep.id,
+            objfw_run_id = comparison.objfw.id,
+            objfw_geomean_speedup = comparison.objfw_geomean_speedup,
+            best_case = comparison.best_case,
+            worst_case = comparison.worst_case,
+        })
+    end
 
     io.writefile(path.join(outroot, "matrix.json"), json.encode(matrix_json))
     io.writefile(doc_path, _render_markdown(doc_path, outroot, samples, warmups, generated_at_utc, host_metadata,
-        results_by_id, ordered_by_speed, fastest_by_case, failures))
+        variants, abi_entries, results_by_id, ordered_by_speed, fastest_by_case, abi_comparisons, failures))
 
     print(string.format("Generated %s", path.absolute(doc_path)))
     print(string.format("Wrote %s", path.absolute(path.join(outroot, "matrix.json"))))

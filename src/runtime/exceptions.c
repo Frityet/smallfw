@@ -26,6 +26,7 @@ typedef struct SFException {
     id object;
     uint32_t catch_depth;
     uint32_t reserved;
+    struct SFException *next_active;
 } SFException_t;
 
 typedef struct SFExceptionMetadata {
@@ -47,9 +48,12 @@ typedef struct SFBacktraceCapture {
 #if not defined(_WIN32)
 static __thread SFException_t *g_catch_stack[32];
 static __thread size_t g_catch_stack_size;
+static __thread SFException_t *g_gnu_current_exception;
 #endif
 static SFRuntimeMutex_t g_exception_metadata_lock = SF_RUNTIME_MUTEX_INITIALIZER;
 static SFExceptionMetadata_t *g_exception_metadata;
+static SFRuntimeMutex_t g_exception_active_lock = SF_RUNTIME_MUTEX_INITIALIZER;
+static SFException_t *g_exception_active;
 
 static SFException_t *sf_exception_from_unwind(struct _Unwind_Exception *exception_object)
 {
@@ -57,6 +61,70 @@ static SFException_t *sf_exception_from_unwind(struct _Unwind_Exception *excepti
         return NULL;
     }
     return (SFException_t *)exception_object;
+}
+
+static void sf_exception_register_active(SFException_t *exc)
+{
+    if (exc == NULL) {
+        return;
+    }
+
+    sf_runtime_mutex_lock(&g_exception_active_lock);
+    exc->next_active = g_exception_active;
+    g_exception_active = exc;
+    sf_runtime_mutex_unlock(&g_exception_active_lock);
+}
+
+static void sf_exception_unregister_active(SFException_t *exc)
+{
+    if (exc == NULL) {
+        return;
+    }
+
+    sf_runtime_mutex_lock(&g_exception_active_lock);
+    SFException_t **slot = &g_exception_active;
+    while (*slot != NULL and *slot != exc) {
+        slot = &(*slot)->next_active;
+    }
+    if (*slot == exc) {
+        *slot = exc->next_active;
+        exc->next_active = NULL;
+    }
+    sf_runtime_mutex_unlock(&g_exception_active_lock);
+}
+
+static SFException_t *sf_exception_from_object(id obj)
+{
+    SFException_t *result = NULL;
+
+    if (obj == NULL) {
+        return NULL;
+    }
+
+    sf_runtime_mutex_lock(&g_exception_active_lock);
+    for (SFException_t *it = g_exception_active; it != NULL; it = it->next_active) {
+        if (it->object == obj) {
+            result = it;
+            break;
+        }
+    }
+    sf_runtime_mutex_unlock(&g_exception_active_lock);
+    return result;
+}
+
+static SFException_t *sf_exception_resolve(void *exception_or_object)
+{
+    SFException_t *exc = NULL;
+
+    if (exception_or_object == NULL) {
+        return NULL;
+    }
+
+    exc = sf_exception_from_unwind((struct _Unwind_Exception *)exception_or_object);
+    if (exc != NULL) {
+        return exc;
+    }
+    return sf_exception_from_object((id)exception_or_object);
 }
 
 #if not defined(_WIN32)
@@ -183,7 +251,11 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
 {
     (void)code;
     SFException_t *exc = (SFException_t *)exception_object;
-    if (exc->object != NULL) {
+    sf_exception_unregister_active(exc);
+    if (g_gnu_current_exception == exc) {
+        g_gnu_current_exception = NULL;
+    }
+    if (exc->object != NULL and SF_RUNTIME_OBJC_FRAMEWORK_OBJFW == 0) {
         objc_release(exc->object);
     }
     free(exc);
@@ -191,14 +263,24 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
 
 void objc_exception_throw(id obj)
 {
+    SFException_t *rethrow_exc = NULL;
+    if (g_gnu_current_exception != NULL and g_gnu_current_exception->object == obj) {
+        rethrow_exc = g_gnu_current_exception;
+    }
+    if (rethrow_exc != NULL) {
+        _Unwind_Resume_or_Rethrow(&rethrow_exc->unwind);
+        abort();
+    }
+
     SFException_t *exc = (SFException_t *)sf_runtime_test_calloc(1, sizeof(SFException_t));
     if (exc == NULL) {
         abort();
     }
-    exc->object = objc_retain(obj);
+    exc->object = (SF_RUNTIME_OBJC_FRAMEWORK_OBJFW != 0) ? obj : objc_retain(obj);
     sf_exception_capture_metadata(exc->object);
     exc->unwind.exception_class = SF_EXCEPTION_CLASS;
     exc->unwind.exception_cleanup = sf_exception_cleanup;
+    sf_exception_register_active(exc);
 
     _Unwind_Reason_Code rc = _Unwind_RaiseException(&exc->unwind);
     sf_exception_cleanup(rc, &exc->unwind);
@@ -207,12 +289,12 @@ void objc_exception_throw(id obj)
 
 id objc_begin_catch(void *exception)
 {
-    struct _Unwind_Exception *unwind = (struct _Unwind_Exception *)exception;
-    SFException_t *exc = sf_exception_from_unwind(unwind);
+    SFException_t *exc = sf_exception_resolve(exception);
     if (exc == NULL) {
         return (id)exception;
     }
     exc->catch_depth += 1;
+    g_gnu_current_exception = exc;
     if (g_catch_stack_size < (sizeof(g_catch_stack) / sizeof(g_catch_stack[0]))) {
         g_catch_stack[g_catch_stack_size++] = exc;
     }
@@ -225,6 +307,9 @@ void objc_end_catch(void)
         return;
     }
     SFException_t *exc = g_catch_stack[--g_catch_stack_size];
+    if (g_catch_stack_size == 0 or g_catch_stack[g_catch_stack_size - 1U] != exc) {
+        g_gnu_current_exception = (g_catch_stack_size > 0) ? g_catch_stack[g_catch_stack_size - 1U] : NULL;
+    }
     if (exc->catch_depth > 0) {
         exc->catch_depth -= 1;
     }
@@ -235,10 +320,16 @@ void objc_end_catch(void)
 
 void objc_exception_rethrow(void *exception)
 {
-    if (exception == NULL and g_catch_stack_size > 0) {
-        exception = &g_catch_stack[g_catch_stack_size - 1]->unwind;
+    SFException_t *exc = sf_exception_resolve(exception);
+    if (exc == NULL and g_catch_stack_size > 0) {
+        exc = g_catch_stack[g_catch_stack_size - 1];
     }
-    _Unwind_Resume_or_Rethrow((struct _Unwind_Exception *)exception);
+    if (exc == NULL) {
+        exc = g_gnu_current_exception;
+    }
+    if (exc != NULL) {
+        _Unwind_Resume_or_Rethrow(&exc->unwind);
+    }
     abort();
 }
 #endif
@@ -415,7 +506,7 @@ static int exception_matches_type(struct _Unwind_Exception *exception_object, co
         return 0;
     }
 
-    SFException_t *exc = sf_exception_from_unwind(exception_object);
+    SFException_t *exc = sf_exception_resolve(exception_object);
     if (exc == NULL) {
         return 0;
     }
@@ -597,10 +688,9 @@ _Unwind_Reason_Code sf_runtime_test_exception_personality_result(_Unwind_Action 
 }
 
 #if not defined(_WIN32)
-_Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
-                                                  uint64_t exception_class,
+static _Unwind_Reason_Code sf_objc_personality_v0(int version, _Unwind_Action actions, uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
-                                                  struct _Unwind_Context *context)
+                                                  struct _Unwind_Context *context, int returns_object)
 {
     (void)version;
     (void)exception_class;
@@ -614,23 +704,59 @@ _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action ac
         return decision;
     }
 
-    _Unwind_SetGR(context, __builtin_eh_return_data_regno(0), (uintptr_t)exception_object);
+    SFException_t *exc = sf_exception_resolve(exception_object);
+    uintptr_t exception_value = (uintptr_t)exception_object;
+    if (returns_object and exc != NULL) {
+        g_gnu_current_exception = exc;
+        exception_value = (uintptr_t)exc->object;
+    }
+    _Unwind_SetGR(context, __builtin_eh_return_data_regno(0), exception_value);
     _Unwind_SetGR(context, __builtin_eh_return_data_regno(1), (uintptr_t)info.selector);
     _Unwind_SetIP(context, info.landing_pad);
     return _URC_INSTALL_CONTEXT;
 }
-#else
+
 _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
                                                   struct _Unwind_Context *context)
+{
+    return sf_objc_personality_v0(version, actions, exception_class, exception_object, context, 0);
+}
+
+_Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions, uint64_t exception_class,
+                                              struct _Unwind_Exception *exception_object,
+                                              struct _Unwind_Context *context)
+{
+    return sf_objc_personality_v0(version, actions, exception_class, exception_object, context, 1);
+}
+#else
+static _Unwind_Reason_Code sf_objc_personality_v0(int version, _Unwind_Action actions, uint64_t exception_class,
+                                                  struct _Unwind_Exception *exception_object,
+                                                  struct _Unwind_Context *context, int returns_object)
 {
     (void)version;
     (void)actions;
     (void)exception_class;
     (void)exception_object;
     (void)context;
+    (void)returns_object;
     abort();
+}
+
+_Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action actions,
+                                                  uint64_t exception_class,
+                                                  struct _Unwind_Exception *exception_object,
+                                                  struct _Unwind_Context *context)
+{
+    return sf_objc_personality_v0(version, actions, exception_class, exception_object, context, 0);
+}
+
+_Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions, uint64_t exception_class,
+                                              struct _Unwind_Exception *exception_object,
+                                              struct _Unwind_Context *context)
+{
+    return sf_objc_personality_v0(version, actions, exception_class, exception_object, context, 1);
 }
 #endif
 
@@ -681,6 +807,18 @@ _Unwind_Reason_Code __gnustep_objc_personality_v0(int version, _Unwind_Action ac
                                                   uint64_t exception_class,
                                                   struct _Unwind_Exception *exception_object,
                                                   struct _Unwind_Context *context)
+{
+    (void)version;
+    (void)actions;
+    (void)exception_class;
+    (void)exception_object;
+    (void)context;
+    abort();
+}
+
+_Unwind_Reason_Code __gnu_objc_personality_v0(int version, _Unwind_Action actions, uint64_t exception_class,
+                                              struct _Unwind_Exception *exception_object,
+                                              struct _Unwind_Context *context)
 {
     (void)version;
     (void)actions;

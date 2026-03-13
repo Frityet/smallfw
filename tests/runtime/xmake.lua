@@ -98,12 +98,17 @@ local runtime_test_suite_specs = {
                 "loader_header_validation",
                 "loader_header_size_modes",
                 "loader_fast_object_constraints",
-                "loader_manual_registration",
                 "loader_class_size_synthetic",
+                "loader_abi_entrypoint_surface",
                 "loader_hash_helpers",
                 "loader_alloc_failure_paths",
                 "loader_class_name_live_object",
             }
+            if not smallfw.objc_runtime_is_objfw() then
+                table.insert(cases, "loader_manual_registration")
+            else
+                table.insert(cases, "loader_objfw_exec_class")
+            end
             if has_config("runtime-reflection") then
                 for _, case_name in ipairs({
                     "reflection_class_lookup",

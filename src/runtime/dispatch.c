@@ -319,6 +319,22 @@ static SF_ALWAYS_INLINE IMP lookup_cached_inline(Class cls, SEL op)
     return sf_lookup_imp_miss(cls, op);
 }
 
+IMP objc_msg_lookup(id receiver, SEL op)
+{
+    if (op != NULL) {
+        (void)sf_intern_selector(op);
+    }
+    return sf_lookup_imp(receiver, op);
+}
+
+IMP objc_msg_lookup_stret(id receiver, SEL op)
+{
+    if (op != NULL) {
+        (void)sf_intern_selector(op);
+    }
+    return sf_lookup_imp(receiver, op);
+}
+
 IMP sf_lookup_imp(id receiver, SEL op)
 {
     Class cls = NULL;
@@ -436,7 +452,13 @@ IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op)
     if (super_info == NULL or super_info->super_class == NULL or op == NULL) {
         return (IMP)sf_dispatch_nil_imp;
     }
+    (void)sf_intern_selector(op);
     return lookup_cached_inline(super_info->super_class, op);
+}
+
+IMP objc_msg_lookup_super_stret(struct sf_objc_super *super_info, SEL op)
+{
+    return objc_msg_lookup_super(super_info, op);
 }
 
 uint64_t sf_dispatch_cache_hits(void)

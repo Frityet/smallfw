@@ -403,7 +403,7 @@ static int classify_type_token(const char *token, SFCCallArgInfo_t *out_info)
     if (code == '{' or code == '(' or code == '[') {
         return classify_aggregate_token(token, out_info);
     }
-    return !(code == 'f' or code == 'd' or code == 'D');
+    return not (code == 'f' or code == 'd' or code == 'D');
 }
 
 static int collect_return_info(SEL op, SFCCallArgInfo_t *out_info)

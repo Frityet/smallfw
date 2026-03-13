@@ -3,10 +3,11 @@ local function define_runtime_performance_matrix_task(name)
         set_category("tool")
         set_menu {
             usage = "xmake " .. name .. " [options]",
-            description = "Run a broad runtime benchmark matrix and generate docs/PERFORMANCE.md from measured results.",
+            description = "Run a broad runtime benchmark matrix across the selected Objective-C ABIs and generate docs/PERFORMANCE.md from measured results.",
             options = {
                 {"s", "samples", "kv", "1", "Number of recorded samples per variant."},
                 {"w", "warmups", "kv", "0", "Number of warmup runs per variant."},
+                {nil, "objc-runtimes", "kv", "both", "Select which Objective-C ABIs to benchmark.", " - both", " - gnustep-2.3", " - objfw-1.5"},
                 {"O", "outdir", "kv", "build/runtime-analysis/performance-matrix", "Set the matrix artifact root."},
                 {"d", "doc", "kv", "docs/PERFORMANCE.md", "Set the generated markdown output path."},
             }

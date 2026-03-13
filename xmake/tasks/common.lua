@@ -11,6 +11,7 @@ function smallfw.runtime_config_menu_options(extra_options, defaults)
         {nil, "analysis-symbols", "kv", nil, "Override analysis-symbols.", " - y", " - n"},
         {},
         {nil, "runtime-threadsafe", "kv", nil, "Override runtime-threadsafe.", " - y", " - n"},
+        {nil, "objc-runtime", "kv", nil, "Override objc-runtime.", " - gnustep-2.3", " - objfw-1.5"},
         {nil, "dispatch-backend", "kv", nil, "Override dispatch-backend.", " - asm", " - c"},
         {nil, "dispatch-stats", "kv", nil, "Override dispatch-stats.", " - y", " - n"},
         {nil, "runtime-exceptions", "kv", nil, "Override runtime-exceptions.", " - y", " - n"},
