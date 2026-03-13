@@ -54,6 +54,8 @@ objc_msgSend:
 
     LEA RDI, [RSP]
     LEA RSI, [RSP + 0x8]
+    //regular miss
+    //TODO: test to see if splitting an XMM path and a regular path is faster
     CALL sf_resolve_message_dispatch
 
     MOV RDI, QWORD PTR [RSP]

@@ -78,48 +78,27 @@ local CURATED_VARIANTS = {
         category = "Whole-program",
         pgo = "use",
         bolt = "on",
-        options = {["analysis-symbols"] = "y"},
         note = "Default release stack with PGO and BOLT.",
     },
     {
-        id = "release-max-opt",
-        category = "Whole-program",
-        options = {
-            ["runtime-native-tuning"] = "y",
-            ["runtime-thinlto"] = "y",
-            ["runtime-compact-headers"] = "y",
-            ["runtime-inline-value-storage"] = "y",
-            ["runtime-inline-group-state"] = "y",
-        },
-        note = "Recommended tuned release stack without profile feedback.",
-    },
-    {
-        id = "release-max-opt-pgo",
+        id = "release-full-lto-pgo",
         category = "Whole-program",
         pgo = "use",
         options = {
-            ["runtime-native-tuning"] = "y",
-            ["runtime-thinlto"] = "y",
-            ["runtime-compact-headers"] = "y",
-            ["runtime-inline-value-storage"] = "y",
-            ["runtime-inline-group-state"] = "y",
+            ["runtime-full-lto"] = "y",
         },
-        note = "Recommended tuned release stack with PGO.",
+        note = "Measured best whole-program stack without native tuning.",
     },
     {
-        id = "release-max-opt-pgo-bolt",
+        id = "release-full-lto-native-pgo-bolt",
         category = "Whole-program",
         pgo = "use",
         bolt = "on",
         options = {
-            ["analysis-symbols"] = "y",
+            ["runtime-full-lto"] = "y",
             ["runtime-native-tuning"] = "y",
-            ["runtime-thinlto"] = "y",
-            ["runtime-compact-headers"] = "y",
-            ["runtime-inline-value-storage"] = "y",
-            ["runtime-inline-group-state"] = "y",
         },
-        note = "Recommended tuned release stack with PGO and BOLT.",
+        note = "Measured fastest release stack on Linux x86_64: full LTO, native tuning, PGO, and BOLT.",
     },
     {
         id = "release-dispatch-c",
@@ -539,9 +518,6 @@ local function _effective_options(variant)
         ["analysis-symbols"] = "n",
         ["objc-runtime"] = variant.objc_runtime or "gnustep-2.3",
     }
-    if (variant.bolt or "off") == "on" then
-        options["analysis-symbols"] = "y"
-    end
     for key, value in pairs(variant.options or {}) do
         options[key] = value
     end

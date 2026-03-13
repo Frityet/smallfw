@@ -179,6 +179,8 @@ static SFExceptionMetadata_t **find_exception_metadata_slot(id obj)
 
 void sf_exception_capture_metadata(id obj)
 {
+    SFObjHeader_t *hdr = NULL;
+
     if (obj == NULL)
         return;
 
@@ -201,6 +203,11 @@ void sf_exception_capture_metadata(id obj)
             memcpy((void *)meta->frames, (const void *)frames, count * sizeof(frames[0]));
     }
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
+
+    hdr = sf_header_from_object(obj);
+    if (hdr != NULL) {
+        sf_header_or_aux_flags(hdr, SF_OBJ_AUX_FLAG_HAS_EXCEPTION_METADATA);
+    }
 }
 
 size_t sf_exception_backtrace_count(id obj)
@@ -234,8 +241,14 @@ const void *sf_exception_backtrace_frame(id obj, size_t index)
 void sf_exception_clear_metadata(id obj)
 {
     SFExceptionMetadata_t *meta = NULL;
+    SFObjHeader_t *hdr = NULL;
     if (obj == NULL)
         return;
+
+    hdr = sf_header_from_object(obj);
+    if (hdr != NULL) {
+        sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_HAS_EXCEPTION_METADATA);
+    }
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t **slot = find_exception_metadata_slot(obj);

@@ -254,9 +254,38 @@ static int sf_header_try_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState
                                        __ATOMIC_ACQUIRE);
 }
 #else
+static int sf_header_uses_inline_group_state(SFObjHeader_t *hdr)
+{
+    return hdr != NULL and (((uintptr_t)hdr->group) & (uintptr_t)1U) != 0U;
+}
+
+static SFObjHeader_t *sf_header_inline_group_root(SFObjHeader_t *hdr)
+{
+    return sf_header_uses_inline_group_state(hdr)
+               ? (SFObjHeader_t *)(void *)(((uintptr_t)hdr->group) & ~(uintptr_t)1U)
+               : NULL;
+}
+
+static int sf_header_can_use_inline_group_root(SFObjHeader_t *hdr)
+{
+    return hdr != NULL and (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U;
+}
+
+static SFObjHeader_t *sf_header_inline_group_head(SFObjHeader_t *root)
+{
+    return root != NULL ? (SFObjHeader_t *)(void *)root->parent : NULL;
+}
+
+static void sf_header_set_inline_group_head(SFObjHeader_t *root, SFObjHeader_t *head)
+{
+    if (root != NULL) {
+        root->parent = (id)(void *)head;
+    }
+}
+
 static SFGroupState_t *sf_header_group_state_atomic(SFObjHeader_t *hdr)
 {
-    return hdr != NULL ? hdr->group : NULL;
+    return (hdr != NULL and not sf_header_uses_inline_group_state(hdr)) ? hdr->group : NULL;
 }
 
 static void sf_header_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
@@ -273,14 +302,14 @@ static SFGroupState_t *sf_header_exchange_group_state_atomic(SFObjHeader_t *hdr,
     if (hdr == NULL) {
         return NULL;
     }
-    old = hdr->group;
+    old = sf_header_group_state_atomic(hdr);
     hdr->group = group;
     return old;
 }
 
 static int sf_header_try_set_group_state_atomic(SFObjHeader_t *hdr, SFGroupState_t *group)
 {
-    if (hdr == NULL or hdr->group != NULL) {
+    if (hdr == NULL or hdr->group != NULL or sf_header_uses_inline_group_state(hdr)) {
         return 0;
     }
     hdr->group = group;
@@ -387,6 +416,10 @@ id sf_header_parent(SFObjHeader_t *hdr)
 #if SF_RUNTIME_COMPACT_HEADERS
     return sf_header_parent_local(hdr);
 #else
+    if (sf_header_uses_inline_group_state(hdr) and sf_header_inline_group_root(hdr) == hdr and
+        (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+        return NULL;
+    }
     return hdr->parent;
 #endif
 }
@@ -399,6 +432,10 @@ int sf_header_set_parent(SFObjHeader_t *hdr, id parent)
 #if SF_RUNTIME_COMPACT_HEADERS
     return sf_header_set_parent_local(hdr, parent);
 #else
+    if (sf_header_uses_inline_group_state(hdr) and sf_header_inline_group_root(hdr) == hdr and
+        (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+        return parent == NULL;
+    }
     hdr->parent = parent;
     return 1;
 #endif
@@ -412,6 +449,10 @@ SFObjHeader_t *sf_header_group_root(SFObjHeader_t *hdr)
 #if SF_RUNTIME_COMPACT_HEADERS
     return sf_header_group_root_local(hdr);
 #else
+    SFObjHeader_t *inline_root = sf_header_inline_group_root(hdr);
+    if (inline_root != NULL) {
+        return inline_root;
+    }
     SFGroupState_t *group = sf_header_group_state_atomic(hdr);
     if (group != NULL and group->root != NULL) {
         return group->root;
@@ -459,6 +500,10 @@ int sf_header_set_group_root(SFObjHeader_t *hdr, SFObjHeader_t *group_root)
     }
     if (not sf_header_init_group_root(group_root)) {
         return 0;
+    }
+    if (sf_header_uses_inline_group_state(group_root)) {
+        hdr->group = (SFGroupState_t *)(void *)((uintptr_t)group_root | (uintptr_t)1U);
+        return 1;
     }
     sf_header_set_group_state_atomic(hdr, sf_header_group_state_atomic(group_root));
     return sf_header_group_state_atomic(hdr) != NULL;
@@ -509,6 +554,11 @@ SFObjHeader_t *sf_header_group_head(SFObjHeader_t *hdr)
 #endif
     return sf_header_group_root_local(hdr);
 #else
+    SFObjHeader_t *root = sf_header_group_root(hdr);
+    if (root != NULL and sf_header_uses_inline_group_state(root)) {
+        SFObjHeader_t *head = sf_header_inline_group_head(root);
+        return head != NULL ? head : root;
+    }
     SFGroupState_t *group = sf_header_group_state_atomic(hdr);
     if (group != NULL and group->head != NULL) {
         return group->head;
@@ -559,6 +609,10 @@ int sf_header_set_group_head(SFObjHeader_t *hdr, SFObjHeader_t *group_head)
 #else
     SFGroupState_t *group = NULL;
 
+    if (sf_header_uses_inline_group_state(root)) {
+        sf_header_set_inline_group_head(root, group_head);
+        return 1;
+    }
     if (group_head == NULL and sf_header_group_state_atomic(root) == NULL) {
         return 1;
     }
@@ -593,6 +647,10 @@ size_t sf_header_group_live_count(SFObjHeader_t *hdr)
 #endif
     return (hdr->state == SF_OBJ_STATE_LIVE) ? (size_t)1 : (size_t)0;
 #else
+    SFObjHeader_t *root = sf_header_group_root(hdr);
+    if (root != NULL and sf_header_uses_inline_group_state(root)) {
+        return (size_t)root->reserved;
+    }
     SFGroupState_t *group = sf_header_group_state_atomic(hdr);
     if (group != NULL) {
         return group->group_live_count;
@@ -610,6 +668,11 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
 #if SF_RUNTIME_COMPACT_HEADERS
 #if SF_RUNTIME_THREADSAFE || !SF_RUNTIME_INLINE_GROUP_STATE
     if (count <= (size_t)1 and sf_header_group_state_local(root) == NULL) {
+        if (count == 0U) {
+            sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+        } else {
+            sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+        }
         return 1;
     }
     if (not sf_header_init_group_root(root)) {
@@ -621,17 +684,32 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
     }
     group->group_live_count = count;
     group->dead = (count == 0) ? 1U : 0U;
+    if (count == 0U) {
+        sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    } else {
+        sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    }
     return 1;
 #else
     if (count <= (size_t)1) {
         SFObjColdState_t *cold = sf_header_cold_state(root);
         if (cold == NULL) {
+            if (count == 0U) {
+                sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+            } else {
+                sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+            }
             return 1;
         }
         cold->inline_group_live_count = count;
         cold->inline_group_dead = (count == 0) ? 1U : 0U;
         if (count != 0U and cold->inline_group_head == NULL) {
             cold->inline_group_head = root;
+        }
+        if (count == 0U) {
+            sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+        } else {
+            sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
         }
         return 1;
     }
@@ -644,11 +722,28 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
     }
     cold->inline_group_live_count = count;
     cold->inline_group_dead = (count == 0) ? 1U : 0U;
+    if (count == 0U) {
+        sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    } else {
+        sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    }
     return 1;
 #endif
 #else
     SFGroupState_t *group = NULL;
 
+    if (sf_header_uses_inline_group_state(root)) {
+        root->reserved = (uint32_t)count;
+        if (count == 0U) {
+            sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+        } else {
+            sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+            if (sf_header_inline_group_head(root) == NULL) {
+                sf_header_set_inline_group_head(root, root);
+            }
+        }
+        return 1;
+    }
     if (count <= (size_t)1 and sf_header_group_state_atomic(root) == NULL) {
         return 1;
     }
@@ -661,6 +756,11 @@ int sf_header_set_group_live_count(SFObjHeader_t *hdr, size_t count)
     }
     group->group_live_count = count;
     group->dead = (count == 0) ? 1U : 0U;
+    if (count == 0U) {
+        sf_header_or_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    } else {
+        sf_header_clear_aux_flags(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    }
     return 1;
 #endif
 }
@@ -672,6 +772,9 @@ int sf_header_group_dead(SFObjHeader_t *hdr)
     if (root == NULL) {
         return 0;
     }
+    if (sf_header_has_aux_flag(root, SF_OBJ_AUX_FLAG_GROUP_DEAD)) {
+        return 1;
+    }
 #if SF_RUNTIME_COMPACT_HEADERS
 #if SF_RUNTIME_THREADSAFE || !SF_RUNTIME_INLINE_GROUP_STATE
     SFGroupState_t *group = sf_header_group_state_local(root);
@@ -681,6 +784,9 @@ int sf_header_group_dead(SFObjHeader_t *hdr)
     return cold != NULL and cold->inline_group_dead != 0U;
 #endif
 #else
+    if (sf_header_uses_inline_group_state(root)) {
+        return sf_header_has_aux_flag(root, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+    }
     SFGroupState_t *group = sf_header_group_state_atomic(root);
     return group != NULL and group->dead != 0U;
 #endif
@@ -707,7 +813,7 @@ int sf_header_grouped(SFObjHeader_t *hdr)
            (cold->inline_group_live_count != 0U or cold->inline_group_head != NULL);
 #endif
 #else
-    return sf_header_group_state_atomic(hdr) != NULL;
+    return sf_header_uses_inline_group_state(hdr) or sf_header_group_state_atomic(hdr) != NULL;
 #endif
 }
 
@@ -734,6 +840,7 @@ int sf_header_init_group_root(SFObjHeader_t *hdr)
         return 0;
     }
     (void)sf_header_set_group_next_local(hdr, NULL);
+    sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_GROUP_DEAD);
     return 1;
 #else
     SFObjColdState_t *cold = sf_header_ensure_cold_state(hdr);
@@ -747,12 +854,21 @@ int sf_header_init_group_root(SFObjHeader_t *hdr)
     cold->inline_group_live_count = 1U;
     cold->inline_group_dead = 0U;
     cold->group_next = NULL;
+    sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_GROUP_DEAD);
     return 1;
 #endif
 #else
     SFGroupState_t *group = NULL;
 
-    if (sf_header_group_state_atomic(hdr) != NULL) {
+    if (sf_header_uses_inline_group_state(hdr) or sf_header_group_state_atomic(hdr) != NULL) {
+        return 1;
+    }
+    if (sf_header_can_use_inline_group_root(hdr)) {
+        hdr->group = (SFGroupState_t *)(void *)((uintptr_t)hdr | (uintptr_t)1U);
+        sf_header_set_inline_group_head(hdr, hdr);
+        hdr->group_next = NULL;
+        hdr->reserved = 1U;
+        sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_GROUP_DEAD);
         return 1;
     }
     group = sf_create_group_state(hdr);
@@ -761,6 +877,7 @@ int sf_header_init_group_root(SFObjHeader_t *hdr)
     }
     hdr->group_next = NULL;
     if (sf_header_try_set_group_state_atomic(hdr, group)) {
+        sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_GROUP_DEAD);
         return 1;
     }
     sf_runtime_mutex_destroy(&group->group_lock);
@@ -793,6 +910,9 @@ SFRuntimeMutex_t *sf_header_group_lock(SFObjHeader_t *hdr)
     return (SFRuntimeMutex_t *)&cold->inline_group_reserved;
 #endif
 #else
+    if (sf_header_uses_inline_group_state(root)) {
+        return (SFRuntimeMutex_t *)&root->reserved;
+    }
     SFGroupState_t *group = sf_header_group_state_atomic(root);
     if (group == NULL) {
         return NULL;
@@ -827,6 +947,19 @@ void sf_header_destroy_sidecar(SFObjHeader_t *hdr, int destroy_group_lock)
     hdr->flags &= ~(uint32_t)SF_OBJ_FLAG_HAS_COLD;
     free(cold);
 #else
+    if (sf_header_uses_inline_group_state(hdr)) {
+        SFObjHeader_t *inline_root = sf_header_inline_group_root(hdr);
+        hdr->group = NULL;
+        hdr->group_next = NULL;
+        if (inline_root == hdr and (hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+            sf_header_set_inline_group_head(hdr, NULL);
+            hdr->reserved = 0U;
+            sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_GROUP_DEAD);
+        } else {
+            hdr->parent = NULL;
+        }
+        return;
+    }
     SFGroupState_t *group = sf_header_exchange_group_state_atomic(hdr, NULL);
     hdr->parent = NULL;
     hdr->group_next = NULL;

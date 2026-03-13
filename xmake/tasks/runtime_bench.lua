@@ -2,7 +2,7 @@ task("run-runtime-bench")
     set_category("tool")
     set_menu {
         usage = "xmake run-runtime-bench [options]",
-        description = "Build runtime-bench, run repeated benchmark samples, and record structured results. Recommended fastest combo: --runtime-native-tuning=y --runtime-thinlto=y --runtime-compact-headers=y --runtime-inline-value-storage=y --runtime-inline-group-state=y --pgo=use --bolt=on.",
+        description = "Build runtime-bench, run repeated benchmark samples, and record structured results. Recommended fastest combo: --runtime-full-lto=y --runtime-native-tuning=y --pgo=use --bolt=on.",
         options = smallfw.runtime_config_menu_options({
             {},
             {nil, "case", "kv", "all", "Benchmark case to run (or all)."},

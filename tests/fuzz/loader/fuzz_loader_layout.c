@@ -39,6 +39,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     if (data == NULL) {
         return 0;
     }
+    if (count == 0U) {
+        return 0;
+    }
 
     memset(&parent, 0, sizeof(parent));
     memset(&child, 0, sizeof(child));

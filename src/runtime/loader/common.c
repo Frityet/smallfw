@@ -34,7 +34,10 @@ typedef struct SFClassMetaEntry {
     IMP init_imp;
     IMP cxx_destruct_imp;
     uint32_t flags;
+    uint32_t object_flags;
     uint32_t strong_ivar_count;
+    uint32_t instance_size;
+    uint32_t total_alloc_size;
     uint32_t *strong_ivar_offsets;
 } SFClassMetaEntry_t;
 
@@ -113,10 +116,14 @@ Class _Nullable g_tagged_pointer_slot_classes[8];
 static uint8_t g_tagged_pointer_slot_conflicts[8];
 #endif
 static IMP g_object_dealloc_imp;
+static __thread Class g_last_class_meta_cls;
+static __thread SFClassMetaEntry_t *g_last_class_meta_entry;
 
 enum {
     SF_CLASS_META_FLAG_HAS_OBJECT_IVARS = 1U << 0U,
     SF_CLASS_META_FLAG_TRIVIAL_RELEASE = 1U << 1U,
+    SF_CLASS_META_FLAG_VALUE_OBJECT = 1U << 2U,
+    SF_CLASS_META_FLAG_INLINE_VALUE_ELIGIBLE = 1U << 3U,
 };
 
 #if SF_RUNTIME_TAGGED_POINTERS
@@ -130,6 +137,7 @@ enum {
 static void sf_cache_class_meta(Class cls);
 static IMP sf_lookup_method_imp_exact(Class cls, SEL sel);
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls);
+static SFClassMetaEntry_t *sf_class_meta_require(Class cls);
 static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super);
 static size_t align_up(size_t value, size_t align);
 
@@ -181,6 +189,58 @@ static int sf_header_matches_object_layout(SFObjHeader_t *hdr, id obj)
     }
     return 1;
 }
+
+static int sf_header_fast_matches_live_object(SFObjHeader_t *hdr, size_t minimum_alloc)
+{
+    if (hdr == NULL or not sf_header_has_live_cookie(hdr) or hdr->state != SF_OBJ_STATE_LIVE) {
+        return 0;
+    }
+    if ((size_t)hdr->alloc_size < minimum_alloc) {
+        return 0;
+    }
+    return ((size_t)hdr->alloc_size & (sizeof(void *) - 1U)) == 0U;
+}
+
+#if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
+static SFObjHeader_t *sf_inline_header_from_object_fast(id obj)
+{
+    size_t minimum_alloc = sizeof(SFInlineValueHeader_t) + sizeof(void *);
+    unsigned char *inline_parent_ptr = (unsigned char *)(void *)obj - sizeof(uintptr_t);
+
+    if (not sf_runtime_region_is_readable(inline_parent_ptr, sizeof(uintptr_t))) {
+        return NULL;
+    }
+
+    uintptr_t tagged_parent = *((uintptr_t *)(void *)inline_parent_ptr);
+    if ((tagged_parent & (uintptr_t)1U) == 0U) {
+        return NULL;
+    }
+
+    SFInlineValueHeader_t *inline_hdr =
+        (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
+    if (not sf_runtime_region_is_readable(inline_hdr, sizeof(*inline_hdr))) {
+        return NULL;
+    }
+    if ((inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) == 0U) {
+        return NULL;
+    }
+    return sf_header_fast_matches_live_object((SFObjHeader_t *)(void *)inline_hdr, minimum_alloc)
+               ? (SFObjHeader_t *)(void *)inline_hdr
+               : NULL;
+}
+#endif
+
+static SFObjHeader_t *sf_heap_header_from_object_fast(id obj)
+{
+    SFObjHeader_t *hdr = ((SFObjHeader_t *)obj) - 1;
+    size_t minimum_alloc = sizeof(SFObjHeader_t) + sizeof(void *);
+
+    if (not sf_runtime_region_is_readable(hdr, sizeof(*hdr))) {
+        return NULL;
+    }
+    return sf_header_fast_matches_live_object(hdr, minimum_alloc) ? hdr : NULL;
+}
+
 static void sf_reset_class_caches_unlocked(void);
 static SFSelectorEntry_t *sf_selector_entry_for_name_unlocked(const char *name);
 static SFSelectorEntry_t *sf_selector_entry_insert_unlocked(const char *name, const char *types);
@@ -189,25 +249,10 @@ static void sf_rebuild_frozen_selectors_unlocked(void);
 static SFFrozenSelector_t *sf_frozen_selector_for_name_unlocked(const char *name);
 static void sf_build_class_dtable_unlocked(Class cls);
 
-#if SF_RUNTIME_COMPACT_HEADERS
 static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
 {
-    uint32_t flags = SF_OBJ_CLASS_FLAG_NONE;
-    if (meta == NULL) {
-        return flags;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U) {
-        flags |= SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
-        flags |= SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS;
-    }
-    if (meta->cxx_destruct_imp != NULL) {
-        flags |= SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT;
-    }
-    return flags;
+    return meta != NULL ? meta->object_flags : SF_OBJ_CLASS_FLAG_NONE;
 }
-#endif
 
 static int sf_class_supports_inline_value_storage_unlocked(Class cls)
 {
@@ -219,16 +264,8 @@ static int sf_class_supports_inline_value_storage_unlocked(Class cls)
 #if !SF_RUNTIME_INLINE_VALUE_STORAGE
     return 1;
 #else
-    meta = sf_class_meta_for(cls);
-    if (meta == NULL) {
-        sf_cache_class_meta(cls);
-        meta = sf_class_meta_for(cls);
-    }
-    if (meta == NULL) {
-        return 0;
-    }
-    return (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
-           (meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U;
+    meta = sf_class_meta_require(cls);
+    return meta != NULL and (meta->flags & SF_CLASS_META_FLAG_INLINE_VALUE_ELIGIBLE) != 0U;
 #endif
 }
 
@@ -635,6 +672,8 @@ static void sf_reset_class_caches_unlocked(void)
     }
 
     g_object_dealloc_imp = NULL;
+    g_last_class_meta_cls = NULL;
+    g_last_class_meta_entry = NULL;
 }
 
 static SFClassMetaEntry_t *class_meta_slot_for(Class cls)
@@ -888,6 +927,11 @@ static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super)
 
 static int sf_class_is_value_object_unlocked(Class cls)
 {
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+
+    if (meta != NULL and (meta->flags & SF_CLASS_META_FLAG_VALUE_OBJECT) != 0U) {
+        return 1;
+    }
     if (cls == NULL) {
         return 0;
     }
@@ -1498,6 +1542,8 @@ void sf_unregister_live_object_header(SFObjHeader_t *hdr)
 
 SFObjHeader_t *sf_header_from_object(id obj)
 {
+    SFObjHeader_t *hdr = NULL;
+
     if (obj == NULL) {
         return NULL;
     }
@@ -1510,7 +1556,7 @@ SFObjHeader_t *sf_header_from_object(id obj)
     size_t bucket = live_object_bucket_index(obj);
 
     sf_runtime_rwlock_rdlock(&g_live_object_lock);
-    SFObjHeader_t *hdr = g_live_object_buckets[bucket];
+    hdr = g_live_object_buckets[bucket];
     while (hdr != NULL) {
         if ((id)(hdr + 1) == obj) {
             sf_runtime_rwlock_unlock(&g_live_object_lock);
@@ -1532,26 +1578,43 @@ SFObjHeader_t *sf_header_from_object(id obj)
     return NULL;
 #else
 #if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
-    unsigned char *inline_parent_ptr = (unsigned char *)(void *)obj - sizeof(uintptr_t);
-    if (sf_runtime_region_is_readable(inline_parent_ptr, sizeof(uintptr_t))) {
-        uintptr_t tagged_parent = *((uintptr_t *)(void *)inline_parent_ptr);
-        if ((tagged_parent & (uintptr_t)1U) != 0U) {
-            SFInlineValueHeader_t *inline_hdr =
-                (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
-            if (sf_runtime_region_is_readable(inline_hdr, sizeof(*inline_hdr)) and
-                inline_hdr->state == SF_OBJ_STATE_LIVE and
-                (inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U and
-                sf_header_matches_object_layout((SFObjHeader_t *)(void *)inline_hdr, obj)) {
-                return (SFObjHeader_t *)(void *)inline_hdr;
+    hdr = sf_inline_header_from_object_fast(obj);
+    if (hdr != NULL) {
+        return hdr;
+    }
+#endif
+
+    hdr = sf_heap_header_from_object_fast(obj);
+    if (hdr != NULL) {
+        return hdr;
+    }
+
+    Class cls = *(Class *)(void *)obj;
+    if (cls == NULL or sf_class_is_constant_string(cls)) {
+        return NULL;
+    }
+
+#if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
+    {
+        unsigned char *inline_parent_ptr = (unsigned char *)(void *)obj - sizeof(uintptr_t);
+        if (sf_runtime_region_is_readable(inline_parent_ptr, sizeof(uintptr_t))) {
+            uintptr_t tagged_parent = *((uintptr_t *)(void *)inline_parent_ptr);
+            if ((tagged_parent & (uintptr_t)1U) != 0U) {
+                SFInlineValueHeader_t *inline_hdr =
+                    (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
+                if (sf_runtime_region_is_readable(inline_hdr, sizeof(*inline_hdr)) and
+                    inline_hdr->state == SF_OBJ_STATE_LIVE and
+                    (inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U and
+                    sf_header_matches_object_layout((SFObjHeader_t *)(void *)inline_hdr, obj)) {
+                    return (SFObjHeader_t *)(void *)inline_hdr;
+                }
             }
         }
     }
 #endif
-    SFObjHeader_t *hdr = ((SFObjHeader_t *)obj) - 1;
-    if (not sf_runtime_region_is_readable(hdr, sizeof(*hdr))) {
-        return NULL;
-    }
-    if (sf_header_matches_object_layout(hdr, obj)) {
+
+    hdr = ((SFObjHeader_t *)obj) - 1;
+    if (sf_runtime_region_is_readable(hdr, sizeof(*hdr)) and sf_header_matches_object_layout(hdr, obj)) {
         return hdr;
     }
     return NULL;
@@ -1569,17 +1632,26 @@ size_t sf_object_allocation_size_for_object(id obj)
 
 static size_t sf_object_total_size(Class cls, size_t *align_out)
 {
-    size_t instance_size = sf_class_instance_size_fast(cls);
     size_t align = sizeof(void *);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
+
     if (align_out != NULL) {
         *align_out = align;
     }
-    return sizeof(SFObjHeader_t) + instance_size;
+    if (meta != NULL and meta->total_alloc_size != 0U) {
+        return (size_t)meta->total_alloc_size;
+    }
+    return sizeof(SFObjHeader_t) + sf_class_instance_size_fast(cls);
 }
 
-static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFAllocator_t *allocator)
+static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFAllocator_t *allocator,
+                                               uint32_t class_flags)
 {
-    memset(raw, 0, total_size);
+    SFAllocator_t *use_allocator = allocator != NULL ? allocator : sf_default_allocator();
+    if (use_allocator != sf_default_allocator() or
+        not sf_default_allocator_returns_zeroed(total_size, sizeof(void *))) {
+        memset(raw, 0, total_size);
+    }
 
     SFObjHeader_t *hdr = (SFObjHeader_t *)raw;
 #if SF_RUNTIME_VALIDATION
@@ -1592,23 +1664,20 @@ static SFObjHeader_t *sf_init_allocated_header(void *raw, size_t total_size, SFA
     hdr->state = SF_OBJ_STATE_LIVE;
     hdr->flags = SF_OBJ_FLAG_NONE;
     hdr->alloc_size = (uint32_t)total_size;
+    sf_header_set_class_flags(hdr, class_flags);
+    sf_header_set_aux_flags(hdr, 0U);
+    sf_header_set_live_cookie(hdr);
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->class_flags = 0U;
-    hdr->aux_flags = 0U;
     hdr->cold = NULL;
-    (void)sf_header_set_allocator(hdr, allocator);
+    (void)sf_header_set_allocator(hdr, use_allocator);
 #else
-    hdr->allocator = allocator;
+    hdr->allocator = use_allocator;
 #endif
     return hdr;
 }
 
 static id sf_finish_object_alloc(Class cls, SFObjHeader_t *hdr)
 {
-#if SF_RUNTIME_COMPACT_HEADERS
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
-    hdr->class_flags = sf_class_meta_to_object_flags(meta);
-#endif
     id obj = sf_header_object(hdr);
     *(Class *)obj = cls;
     return obj;
@@ -1628,7 +1697,8 @@ static int sf_value_slot_is_compatible(const SFValueSlot_t *slot, Class cls, siz
     return sf_class_is_subclass_of_unlocked(cls, slot->declared_cls);
 }
 
-static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *allocator)
+static id sf_alloc_embedded_value_object(Class cls, const SFClassMetaEntry_t *meta, id parent,
+                                         SFAllocator_t *allocator)
 {
     size_t slot_count = 0;
     const SFValueSlot_t *slots = sf_value_slots_for_class(sf_object_class(parent), &slot_count);
@@ -1638,12 +1708,13 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
         return NULL;
     }
 #if SF_RUNTIME_INLINE_VALUE_STORAGE
-    if (not sf_class_supports_inline_value_storage_unlocked(cls)) {
+    if (meta == NULL or (meta->flags & SF_CLASS_META_FLAG_INLINE_VALUE_ELIGIBLE) == 0U) {
         return NULL;
     }
     use_inline_prefix = 1;
 #endif
-    required = sf_embedded_value_storage_size(sf_class_instance_size_fast(cls));
+    required = sf_embedded_value_storage_size(meta != NULL ? (size_t)meta->instance_size
+                                                           : sf_class_instance_size_fast(cls));
 
     unsigned char *parent_bytes = (unsigned char *)(void *)parent;
     for (size_t i = 0; i < slot_count; ++i) {
@@ -1674,11 +1745,14 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
             inline_hdr->flags = SF_OBJ_FLAG_EMBEDDED | SF_OBJ_FLAG_INLINE_VALUE;
             inline_hdr->alloc_size = slot->storage_size;
             inline_hdr->reserved = slot->owner_offset;
-            inline_hdr->class_flags = sf_class_meta_to_object_flags(sf_class_meta_for(cls));
+            sf_header_set_class_flags((SFObjHeader_t *)(void *)inline_hdr, sf_class_meta_to_object_flags(meta));
+            sf_header_set_aux_flags((SFObjHeader_t *)(void *)inline_hdr, 0U);
+            sf_header_set_live_cookie((SFObjHeader_t *)(void *)inline_hdr);
             inline_hdr->tagged_parent = ((uintptr_t)parent) | (uintptr_t)1U;
 #endif
         } else {
-            hdr = sf_init_allocated_header((void *)hdr, (size_t)slot->storage_size, allocator);
+            hdr = sf_init_allocated_header((void *)hdr, (size_t)slot->storage_size, allocator,
+                                           sf_class_meta_to_object_flags(meta));
             hdr->flags |= SF_OBJ_FLAG_EMBEDDED;
             hdr->reserved = slot->owner_offset;
             if (not sf_header_set_parent(hdr, parent)) {
@@ -1695,52 +1769,16 @@ static id sf_alloc_embedded_value_object(Class cls, id parent, SFAllocator_t *al
     return NULL;
 }
 
-id sf_alloc_object(Class cls, SFAllocator_t *allocator)
+static id sf_alloc_heap_child_object(Class cls, const SFClassMetaEntry_t *meta, id parent,
+                                     SFObjHeader_t *parent_hdr)
 {
-    size_t align = 0;
-    size_t total_size = sf_object_total_size(cls, &align);
-    SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
-    void *raw = use_allocator->alloc(use_allocator->ctx, total_size, align);
-    if (raw == NULL) {
-        return NULL;
-    }
-
-    SFObjHeader_t *hdr = sf_init_allocated_header(raw, total_size, use_allocator);
-    sf_register_live_object_header(hdr);
-    return sf_finish_object_alloc(cls, hdr);
-}
-
-id sf_alloc_object_with_parent(Class cls, id parent)
-{
-    if (parent == NULL) {
-        return sf_alloc_object(cls, NULL);
-    }
-
-    SFObjHeader_t *parent_hdr = sf_header_from_object(parent);
-    if (parent_hdr == NULL) {
-        return NULL;
-    }
-
-    if (sf_class_is_value_object_unlocked(cls)) {
-        SFAllocator_t *use_allocator = sf_header_allocator(parent_hdr);
-        if (use_allocator == NULL) {
-            use_allocator = sf_default_allocator();
-        }
-        if (parent_hdr->state != SF_OBJ_STATE_LIVE) {
-            return NULL;
-        }
-        return sf_alloc_embedded_value_object(cls, parent, use_allocator);
-    }
-
     SFObjHeader_t *root = sf_header_group_root(parent_hdr);
-    size_t align = 0;
-    size_t total_size = sf_object_total_size(cls, &align);
+    size_t align = sizeof(void *);
+    size_t total_size = (meta != NULL and meta->total_alloc_size != 0U) ? (size_t)meta->total_alloc_size
+                                                                         : sf_object_total_size(cls, &align);
     void *raw = NULL;
 
-    if (not sf_header_init_group_root(root)) {
-        return NULL;
-    }
-    if (not sf_header_grouped(root)) {
+    if (root == NULL or not sf_header_init_group_root(root) or not sf_header_grouped(root)) {
         return NULL;
     }
 
@@ -1766,16 +1804,64 @@ id sf_alloc_object_with_parent(Class cls, id parent)
         return NULL;
     }
 
-    SFObjHeader_t *hdr = sf_init_allocated_header(raw, total_size, use_allocator);
-    if (not sf_header_set_parent(hdr, parent) or not sf_header_set_group_root(hdr, root) or not sf_header_set_group_next(hdr, sf_header_group_head(root)) or not sf_header_set_group_head(root, hdr) or not sf_header_set_group_live_count(root, sf_header_group_live_count(root) + 1U)) {
+    SFObjHeader_t *hdr =
+        sf_init_allocated_header(raw, total_size, use_allocator, sf_class_meta_to_object_flags(meta));
+    if (not sf_header_set_parent(hdr, parent) or not sf_header_set_group_root(hdr, root) or
+        not sf_header_set_group_next(hdr, sf_header_group_head(root)) or not sf_header_set_group_head(root, hdr) or
+        not sf_header_set_group_live_count(root, sf_header_group_live_count(root) + 1U)) {
         sf_runtime_mutex_unlock(group_lock);
         sf_header_destroy_sidecar(hdr, 0);
         use_allocator->free(use_allocator->ctx, raw, total_size, align);
         return NULL;
     }
     sf_runtime_mutex_unlock(group_lock);
+
     sf_register_live_object_header(hdr);
     return sf_finish_object_alloc(cls, hdr);
+}
+
+id sf_alloc_object(Class cls, SFAllocator_t *allocator)
+{
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
+    size_t align = sizeof(void *);
+    size_t total_size = (meta != NULL and meta->total_alloc_size != 0U) ? (size_t)meta->total_alloc_size
+                                                                         : sf_object_total_size(cls, &align);
+    SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
+    void *raw = use_allocator->alloc(use_allocator->ctx, total_size, align);
+    if (raw == NULL) {
+        return NULL;
+    }
+
+    SFObjHeader_t *hdr =
+        sf_init_allocated_header(raw, total_size, use_allocator, sf_class_meta_to_object_flags(meta));
+    sf_register_live_object_header(hdr);
+    return sf_finish_object_alloc(cls, hdr);
+}
+
+id sf_alloc_object_with_parent(Class cls, id parent)
+{
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
+
+    if (parent == NULL) {
+        return sf_alloc_object(cls, NULL);
+    }
+
+    SFObjHeader_t *parent_hdr = sf_header_from_object(parent);
+    if (parent_hdr == NULL) {
+        return NULL;
+    }
+
+    if (meta != NULL and (meta->flags & SF_CLASS_META_FLAG_VALUE_OBJECT) != 0U) {
+        SFAllocator_t *use_allocator = sf_header_allocator(parent_hdr);
+        if (use_allocator == NULL) {
+            use_allocator = sf_default_allocator();
+        }
+        if (parent_hdr->state != SF_OBJ_STATE_LIVE) {
+            return NULL;
+        }
+        return sf_alloc_embedded_value_object(cls, meta, parent, use_allocator);
+    }
+    return sf_alloc_heap_child_object(cls, meta, parent, parent_hdr);
 }
 
 size_t sf_cstr_len(const char *s)
@@ -1828,12 +1914,13 @@ static void sf_cache_class_meta(Class cls)
     uint32_t *offsets = NULL;
     size_t copied = 0U;
     IMP base_dealloc_imp = NULL;
+    uint32_t object_flags = SF_OBJ_CLASS_FLAG_NONE;
     if (slot == NULL or c == NULL) {
         return;
     }
 
     if (c->superclass != NULL and c->superclass != c) {
-        super_meta = sf_class_meta_for((Class)c->superclass);
+        super_meta = sf_class_meta_require((Class)c->superclass);
         if (super_meta != NULL) {
             super_count = (size_t)super_meta->strong_ivar_count;
         }
@@ -1862,24 +1949,67 @@ static void sf_cache_class_meta(Class cls)
     slot->init_imp = (g_init_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_init_sel) : NULL;
     slot->cxx_destruct_imp = (g_cxx_destruct_sel != NULL) ? sf_lookup_method_imp_exact(cls, g_cxx_destruct_sel) : NULL;
     slot->flags = 0U;
+    slot->object_flags = SF_OBJ_CLASS_FLAG_NONE;
     slot->strong_ivar_count = (offsets != NULL) ? (uint32_t)copied : 0U;
+    slot->instance_size = (uint32_t)sf_class_instance_size_fast(cls);
+    slot->total_alloc_size =
+        (uint32_t)align_up(sizeof(SFObjHeader_t) + (size_t)slot->instance_size, sizeof(void *));
     slot->strong_ivar_offsets = offsets;
 
     if (total_count > 0U) {
         slot->flags |= SF_CLASS_META_FLAG_HAS_OBJECT_IVARS;
+        object_flags |= SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS;
+    }
+    if (slot->cxx_destruct_imp != NULL) {
+        object_flags |= SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT;
+    }
+    if (g_value_object_class == NULL) {
+        g_value_object_class = (Class)sf_loader_class_lookup_unlocked("ValueObject");
+    }
+    if (g_value_object_class != NULL and sf_class_is_subclass_of_unlocked(cls, g_value_object_class)) {
+        slot->flags |= SF_CLASS_META_FLAG_VALUE_OBJECT;
+        object_flags |= SF_OBJ_CLASS_FLAG_VALUE_OBJECT;
     }
 
     base_dealloc_imp = sf_object_dealloc_imp_unlocked();
     if (total_count == 0U and slot->cxx_destruct_imp == NULL and
         (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp)) {
         slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
+        object_flags |= SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE;
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+        if ((slot->flags & SF_CLASS_META_FLAG_VALUE_OBJECT) != 0U) {
+            slot->flags |= SF_CLASS_META_FLAG_INLINE_VALUE_ELIGIBLE;
+            object_flags |= SF_OBJ_CLASS_FLAG_INLINE_VALUE_ELIGIBLE;
+        }
+#endif
     }
+    slot->object_flags = object_flags;
+    g_last_class_meta_cls = cls;
+    g_last_class_meta_entry = slot;
 }
 
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls)
 {
+    if (cls == g_last_class_meta_cls) {
+        return g_last_class_meta_entry;
+    }
     SFClassMetaEntry_t *slot = class_meta_slot_for(cls);
-    return (slot != NULL and slot->cls == cls) ? slot : NULL;
+    if (slot != NULL and slot->cls == cls) {
+        g_last_class_meta_cls = cls;
+        g_last_class_meta_entry = slot;
+        return slot;
+    }
+    return NULL;
+}
+
+static SFClassMetaEntry_t *sf_class_meta_require(Class cls)
+{
+    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    if (meta == NULL and cls != NULL) {
+        sf_cache_class_meta(cls);
+        meta = sf_class_meta_for(cls);
+    }
+    return meta;
 }
 
 SEL sf_cached_selector_dealloc(void)
@@ -1904,31 +2034,31 @@ SEL sf_cached_selector_forwarding_target(void)
 
 IMP sf_class_cached_dealloc_imp(Class cls)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
     return meta != NULL ? meta->dealloc_imp : NULL;
 }
 
 IMP sf_class_cached_alloc_imp(Class cls)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
     return meta != NULL ? meta->alloc_imp : NULL;
 }
 
 IMP sf_class_cached_init_imp(Class cls)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
     return meta != NULL ? meta->init_imp : NULL;
 }
 
 IMP sf_class_cached_cxx_destruct_imp(Class cls)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
     return meta != NULL ? meta->cxx_destruct_imp : NULL;
 }
 
 const uint32_t *sf_class_cached_object_ivar_offsets(Class cls, size_t *count_out)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
     if (count_out != NULL) {
         *count_out = (meta != NULL) ? (size_t)meta->strong_ivar_count : 0U;
     }
@@ -1937,31 +2067,13 @@ const uint32_t *sf_class_cached_object_ivar_offsets(Class cls, size_t *count_out
 
 int sf_class_has_trivial_release(Class cls)
 {
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
-    return (meta != NULL and (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U);
+    SFClassMetaEntry_t *meta = sf_class_meta_require(cls);
+    return (meta != NULL and (meta->object_flags & SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE) != 0U);
 }
 
 uint32_t sf_class_cached_object_flags(Class cls)
 {
-#if SF_RUNTIME_COMPACT_HEADERS
-    return sf_class_meta_to_object_flags(sf_class_meta_for(cls));
-#else
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
-    uint32_t flags = 0U;
-    if (meta == NULL) {
-        return 0U;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U) {
-        flags |= 1U << 0U;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
-        flags |= 1U << 1U;
-    }
-    if (meta->cxx_destruct_imp != NULL) {
-        flags |= 1U << 2U;
-    }
-    return flags;
-#endif
+    return sf_class_meta_to_object_flags(sf_class_meta_require(cls));
 }
 
 int sf_class_is_constant_string(Class cls)

@@ -58,6 +58,7 @@ Class _Nullable sf_cached_class_object(void);
 id _Nullable sf_autorelease(id _Nullable obj);
 void sf_object_dispose(id _Nullable obj);
 id _Nullable sf_alloc_object_with_parent(Class _Nullable cls, id _Nullable parent);
+int sf_default_allocator_returns_zeroed(size_t size, size_t align);
 SFAllocator_t *_Nullable sf_header_allocator(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_allocator(SFObjHeader_t *_Nullable hdr, SFAllocator_t *_Nullable allocator);
 id _Nullable sf_header_object(SFObjHeader_t *_Nullable hdr);

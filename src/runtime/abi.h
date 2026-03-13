@@ -142,14 +142,33 @@ enum SFObjFlags {
     SF_OBJ_FLAG_INLINE_VALUE = 1U << 3U,
 };
 
-#if SF_RUNTIME_COMPACT_HEADERS
 enum SFObjClassFlags {
     SF_OBJ_CLASS_FLAG_NONE = 0U,
     SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE = 1U << 0U,
     SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS = 1U << 1U,
     SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT = 1U << 2U,
+    SF_OBJ_CLASS_FLAG_VALUE_OBJECT = 1U << 3U,
+    SF_OBJ_CLASS_FLAG_INLINE_VALUE_ELIGIBLE = 1U << 4U,
 };
 
+enum SFObjAuxFlags {
+    SF_OBJ_AUX_FLAG_NONE = 0U,
+    SF_OBJ_AUX_FLAG_HAS_EXCEPTION_METADATA = 1U << 0U,
+    SF_OBJ_AUX_FLAG_GROUP_DEAD = 1U << 1U,
+};
+
+enum {
+    SF_OBJ_FLAG_PACKED_MASK = 0x000000FFU,
+    SF_OBJ_AUX_FLAGS_SHIFT = 8U,
+    SF_OBJ_AUX_FLAGS_MASK = 0x0000FF00U,
+    SF_OBJ_COOKIE_SHIFT = 16U,
+    SF_OBJ_COOKIE_MASK = 0x00FF0000U,
+    SF_OBJ_CLASS_FLAGS_SHIFT = 24U,
+    SF_OBJ_CLASS_FLAGS_MASK = 0xFF000000U,
+    SF_OBJ_HEADER_COOKIE_LIVE = 0xA5U,
+};
+
+#if SF_RUNTIME_COMPACT_HEADERS
 typedef struct SFInlineValueHeader {
 #if SF_RUNTIME_VALIDATION
     uint64_t magic;
@@ -211,6 +230,94 @@ typedef struct SFObjHeader {
     struct SFObjHeader *_Nullable group_next;
 } SFObjHeader_t;
 #endif
+
+static inline uint32_t sf_header_aux_flags(SFObjHeader_t *_Nullable hdr)
+{
+    if (hdr == NULL) {
+        return 0U;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    return hdr->aux_flags;
+#else
+    return (hdr->flags & SF_OBJ_AUX_FLAGS_MASK) >> SF_OBJ_AUX_FLAGS_SHIFT;
+#endif
+}
+
+static inline void sf_header_set_aux_flags(SFObjHeader_t *_Nullable hdr, uint32_t aux_flags)
+{
+    if (hdr == NULL) {
+        return;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    hdr->aux_flags = aux_flags;
+#else
+    hdr->flags =
+        (hdr->flags & ~SF_OBJ_AUX_FLAGS_MASK) | ((aux_flags << SF_OBJ_AUX_FLAGS_SHIFT) & SF_OBJ_AUX_FLAGS_MASK);
+#endif
+}
+
+static inline void sf_header_or_aux_flags(SFObjHeader_t *_Nullable hdr, uint32_t aux_flags)
+{
+    sf_header_set_aux_flags(hdr, sf_header_aux_flags(hdr) | aux_flags);
+}
+
+static inline void sf_header_clear_aux_flags(SFObjHeader_t *_Nullable hdr, uint32_t aux_flags)
+{
+    sf_header_set_aux_flags(hdr, sf_header_aux_flags(hdr) & ~aux_flags);
+}
+
+static inline int sf_header_has_aux_flag(SFObjHeader_t *_Nullable hdr, uint32_t aux_flag)
+{
+    return (sf_header_aux_flags(hdr) & aux_flag) != 0U;
+}
+
+static inline void sf_header_set_live_cookie(SFObjHeader_t *_Nullable hdr)
+{
+    if (hdr == NULL) {
+        return;
+    }
+    hdr->flags =
+        (hdr->flags & ~SF_OBJ_COOKIE_MASK) | ((uint32_t)SF_OBJ_HEADER_COOKIE_LIVE << SF_OBJ_COOKIE_SHIFT);
+}
+
+static inline void sf_header_clear_live_cookie(SFObjHeader_t *_Nullable hdr)
+{
+    if (hdr == NULL) {
+        return;
+    }
+    hdr->flags &= ~SF_OBJ_COOKIE_MASK;
+}
+
+static inline int sf_header_has_live_cookie(SFObjHeader_t *_Nullable hdr)
+{
+    return hdr != NULL and
+           ((hdr->flags & SF_OBJ_COOKIE_MASK) >> SF_OBJ_COOKIE_SHIFT) == (uint32_t)SF_OBJ_HEADER_COOKIE_LIVE;
+}
+
+static inline uint32_t sf_header_class_flags(SFObjHeader_t *_Nullable hdr)
+{
+    if (hdr == NULL) {
+        return 0U;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    return hdr->class_flags;
+#else
+    return (hdr->flags & SF_OBJ_CLASS_FLAGS_MASK) >> SF_OBJ_CLASS_FLAGS_SHIFT;
+#endif
+}
+
+static inline void sf_header_set_class_flags(SFObjHeader_t *_Nullable hdr, uint32_t class_flags)
+{
+    if (hdr == NULL) {
+        return;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    hdr->class_flags = class_flags;
+#else
+    hdr->flags =
+        (hdr->flags & ~SF_OBJ_CLASS_FLAGS_MASK) | ((class_flags << SF_OBJ_CLASS_FLAGS_SHIFT) & SF_OBJ_CLASS_FLAGS_MASK);
+#endif
+}
 
 #define SF_OBJ_HEADER_MAGIC UINT64_C(0x53464f424a484452)
 enum SFObjState {

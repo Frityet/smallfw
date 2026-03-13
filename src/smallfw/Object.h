@@ -43,6 +43,9 @@ __attribute__((objc_root_class))
 - (uintptr_t)taggedPointerPayload;
 - (int)isTaggedPointer;
 #endif
+
+- (void *_Nullable)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment;
+
 @end
 
 @interface AllocationFailedException : Object

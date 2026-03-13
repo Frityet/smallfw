@@ -47,9 +47,10 @@
     hdr->state = SF_OBJ_STATE_LIVE;
     hdr->flags = SF_OBJ_FLAG_IMMORTAL;
     hdr->alloc_size = (uint32_t)required;
+    sf_header_set_class_flags(hdr, sf_class_cached_object_flags((Class)self));
+    sf_header_set_aux_flags(hdr, 0U);
+    sf_header_set_live_cookie(hdr);
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->class_flags = sf_class_cached_object_flags((Class)self);
-    hdr->aux_flags = 0U;
     hdr->cold = NULL;
 #else
     hdr->allocator = sf_default_allocator();
@@ -173,6 +174,11 @@
     return (id)0;
 }
 #endif
+
+- (void *_Nullable)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
+{
+    return self.allocator->alloc(self.allocator->ctx, size, alignment);
+}
 
 @end
 
