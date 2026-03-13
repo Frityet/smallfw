@@ -193,19 +193,24 @@ static SFObjCMethodList_t *sf_objfw_normalize_method_lists(SFObjFWMethodList_t *
             count = 0;
         }
 
-        size_t bytes = offsetof(SFObjCMethodList_t, methods) + ((size_t)count * sizeof(SFObjCMethod_t));
+        size_t bytes = offsetof(SFObjCMethodList_t, methods) + ((size_t)count * sizeof(SFObjCMethod_t)) +
+                       ((size_t)count * sizeof(struct sf_objc_selector));
         SFObjCMethodList_t *copy = (SFObjCMethodList_t *)sf_runtime_test_calloc(1U, bytes);
+        struct sf_objc_selector *selectors = NULL;
         if (copy == NULL) {
             break;
         }
 
         copy->count = count;
         copy->size = (int64_t)sizeof(SFObjCMethod_t);
+        selectors = (struct sf_objc_selector *)(void *)(copy->methods + count);
         for (int32_t i = 0; i < count; ++i) {
-            SEL selector = sf_loader_intern_selector_name_types(lists->methods[i].name, lists->methods[i].types);
+            selectors[i].name = lists->methods[i].name;
+            selectors[i].types = lists->methods[i].types;
+            (void)sf_loader_intern_selector_name_types(lists->methods[i].name, lists->methods[i].types);
             copy->methods[i].imp = lists->methods[i].imp;
-            copy->methods[i].selector = selector;
-            copy->methods[i].types = (selector != NULL) ? selector->types : lists->methods[i].types;
+            copy->methods[i].selector = (SEL)(void *)&selectors[i];
+            copy->methods[i].types = lists->methods[i].types;
         }
 
         *tail = copy;
@@ -328,10 +333,7 @@ static void sf_objfw_register_selector_list(SFObjFWSelector_t *selectors, uintpt
     if (selectors == NULL or count == 0U) {
         return;
     }
-
-    for (uintptr_t i = 0; i < count; ++i) {
-        (void)sf_intern_selector((SEL)(void *)&selectors[i]);
-    }
+    sf_loader_register_selector_region((void *)selectors, (void *)(selectors + count));
 }
 
 static void sf_objfw_register_module(SFObjFWSymtab_t *symtab)

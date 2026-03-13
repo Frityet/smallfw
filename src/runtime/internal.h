@@ -8,22 +8,14 @@
 extern "C" {
 #endif
 
-typedef struct SFDispatchEntry {
-    Class cls;
-    SEL _Nullable sel;
-    IMP _Nullable imp;
-    uintptr_t reserved;
-} SFDispatchEntry_t;
+typedef struct SFFrozenSelector {
+    SFObjCSelectorFields_t sel;
+    uint32_t slot;
+    uint32_t flags;
+    char storage[];
+} SFFrozenSelector_t;
 
-enum { SF_DISPATCH_CACHE_SIZE = 4096U };
-enum { SF_DISPATCH_L0_SIZE = 2U };
-
-extern SFDispatchEntry_t g_dispatch_cache[SF_DISPATCH_CACHE_SIZE];
-#if SF_RUNTIME_THREADSAFE
-extern __thread SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
-#else
-extern SFDispatchEntry_t g_dispatch_l0[SF_DISPATCH_L0_SIZE];
-#endif
+#define SF_FROZEN_SELECTOR_NAME_OFFSET ((int)(sizeof(SFObjCSelectorFields_t) + sizeof(uint32_t) + sizeof(uint32_t)))
 
 IMP sf_lookup_imp(id _Nullable receiver, SEL _Nullable op);
 SFObjCMethod_t *_Nullable sf_lookup_method_in_class(Class _Nullable cls, SEL _Nullable op);
@@ -33,11 +25,15 @@ int sf_selector_equal(SEL _Nullable a, SEL _Nullable b);
 int sf_dispatch_imp_is_nil(IMP _Nullable imp);
 id _Nullable sf_dispatch_nil_imp(id _Nullable self, SEL _Nullable cmd, ...);
 SEL _Nullable sf_intern_selector(SEL _Nullable sel);
+SEL _Nullable sf_lookup_selector_named(const char *_Nullable name);
+uint32_t sf_selector_slot(SEL _Nullable sel);
+size_t sf_runtime_selector_count(void);
 SEL _Nullable sf_cached_selector_dealloc(void);
 SEL _Nullable sf_cached_selector_alloc(void);
 SEL _Nullable sf_cached_selector_init(void);
 SEL _Nullable sf_cached_selector_forwarding_target(void);
 IMP _Nullable sf_resolve_message_dispatch(id _Nullable *_Nonnull receiver, SEL _Nullable *_Nonnull op);
+IMP _Nullable sf_lookup_dtable_imp(Class _Nullable cls, SEL _Nullable op);
 IMP _Nullable sf_class_cached_dealloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_alloc_imp(Class _Nullable cls);
 IMP _Nullable sf_class_cached_init_imp(Class _Nullable cls);
@@ -109,8 +105,8 @@ size_t sf_runtime_test_dispatch_collect_explicit_arg_codes(SEL _Nullable op, cha
 size_t sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(SEL _Nullable op, char *_Nonnull out_codes, int *_Nullable unsupported_sig);
 uintptr_t sf_runtime_test_dispatch_read_word_arg(int code, ...);
 size_t sf_runtime_test_dispatch_cache_base_index(Class _Nullable cls, SEL _Nullable op);
-const SFDispatchEntry_t *_Nullable sf_runtime_test_dispatch_cache_entry(size_t index);
-const SFDispatchEntry_t *_Nullable sf_runtime_test_dispatch_l0_entry(size_t index);
+const void *_Nullable sf_runtime_test_dispatch_cache_entry(size_t index);
+const void *_Nullable sf_runtime_test_dispatch_l0_entry(size_t index);
 
 #if SF_RUNTIME_EXCEPTIONS
 typedef struct SFRuntimeTestLandingInfo {

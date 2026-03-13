@@ -132,18 +132,8 @@ function smallfw.add_runtime_mode_defines()
         add_defines("SF_RUNTIME_VALIDATION=0")
     end
 
-    if has_config("runtime-threadsafe") then
-        add_defines("SF_RUNTIME_THREADSAFE=1")
-        add_syslinks("pthread")
-    else
-        add_defines("SF_RUNTIME_THREADSAFE=0")
-    end
-
-    if has_config("dispatch-stats") then
-        add_defines("SF_DISPATCH_STATS=1")
-    else
-        add_defines("SF_DISPATCH_STATS=0")
-    end
+    add_defines("SF_RUNTIME_THREADSAFE=0")
+    add_defines("SF_DISPATCH_STATS=0")
 
     if has_config("runtime-forwarding") then
         add_defines("SF_RUNTIME_FORWARDING=1", {public = true})
@@ -177,21 +167,9 @@ function smallfw.add_runtime_mode_defines()
     else
         add_defines("SF_RUNTIME_TAGGED_POINTERS=0", {public = true})
     end
-    if has_config("dispatch-l0-dual") then
-        add_defines("SF_DISPATCH_L0_DUAL=1")
-    else
-        add_defines("SF_DISPATCH_L0_DUAL=0")
-    end
-    if has_config("dispatch-cache-2way") then
-        add_defines("SF_DISPATCH_CACHE_2WAY=1")
-    else
-        add_defines("SF_DISPATCH_CACHE_2WAY=0")
-    end
-    if has_config("dispatch-cache-negative") then
-        add_defines("SF_DISPATCH_CACHE_NEGATIVE=1")
-    else
-        add_defines("SF_DISPATCH_CACHE_NEGATIVE=0")
-    end
+    add_defines("SF_DISPATCH_L0_DUAL=0")
+    add_defines("SF_DISPATCH_CACHE_2WAY=0")
+    add_defines("SF_DISPATCH_CACHE_NEGATIVE=0")
     if has_config("runtime-compact-headers") then
         add_defines("SF_RUNTIME_COMPACT_HEADERS=1", {public = true})
     else

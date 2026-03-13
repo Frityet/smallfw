@@ -18,14 +18,8 @@
 #endif
 
 int g_counter_deallocs = 0;
-
-typedef struct SFForwardSelector {
-    const char *name;
-    const char *types;
-} SFForwardSelector;
-
-static SFForwardSelector g_forwarded_value_sel = {"forwardedValue:", "i20@0:8i16"};
-static SFForwardSelector g_class_forwarded_value_sel = {"classForwardedValue:", "i20@0:8i16"};
+static int g_c_dispatch_probe_argc = 0;
+static uintptr_t g_c_dispatch_probe_values[4] = {0U, 0U, 0U, 0U};
 
 extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
 
@@ -171,6 +165,121 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 }
 @end
 
+static void sf_test_record_c_dispatch_probe(int argc, uintptr_t v0, uintptr_t v1, uintptr_t v2, uintptr_t v3)
+{
+    g_c_dispatch_probe_argc = argc;
+    g_c_dispatch_probe_values[0] = v0;
+    g_c_dispatch_probe_values[1] = v1;
+    g_c_dispatch_probe_values[2] = v2;
+    g_c_dispatch_probe_values[3] = v3;
+}
+
+@implementation CDispatchProbe
+- (id _Nonnull)zero
+{
+    sf_test_record_c_dispatch_probe(0, 0U, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeI:(int)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeIq:(unsigned int)first second:(long long)second
+{
+    sf_test_record_c_dispatch_probe(2, (uintptr_t)first, (uintptr_t)second, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeQ:(unsigned long long)value star:(const char *_Nonnull)bytes sel:(SEL _Nonnull)selector
+{
+    sf_test_record_c_dispatch_probe(3, (uintptr_t)value, (uintptr_t)(const void *)bytes, (uintptr_t)(const void *)selector, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeObj:(id _Nonnull)obj cls:(Class _Nonnull)cls ptr:(void *_Nonnull)ptr cstr:(const char *_Nonnull)bytes
+{
+    sf_test_record_c_dispatch_probe(4, (uintptr_t)(const void *)obj, (uintptr_t)(const void *)cls, (uintptr_t)ptr,
+                                    (uintptr_t)(const void *)bytes);
+    return self;
+}
+
+- (id _Nonnull)takeChar:(char)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeShort:(short)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeBool:(_Bool)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeC:(unsigned char)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeS:(unsigned short)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeLong:(long)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeULong:(unsigned long)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takePointer:(int *_Nonnull)ptr
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)(const void *)ptr, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeStruct:(SFTestPair)pair
+{
+    sf_test_record_c_dispatch_probe(2, (uintptr_t)pair.left, (uintptr_t)pair.right, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeUnion:(SFTestEither)either
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)either.left, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeDouble:(double)value
+{
+    sf_test_record_c_dispatch_probe(1, (uintptr_t)value, 0U, 0U, 0U);
+    return self;
+}
+
+- (id _Nonnull)takeMany:(int)first second:(int)second third:(int)third fourth:(int)fourth fifth:(int)fifth
+{
+    sf_test_record_c_dispatch_probe(4, (uintptr_t)first, (uintptr_t)second, (uintptr_t)third, (uintptr_t)fourth);
+    (void)fifth;
+    return self;
+}
+@end
+
 static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 {
     static ForwardDispatchTarget *target = nil;
@@ -195,7 +304,11 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 @implementation ForwardDispatchProxy
 - (id)forwardingTargetForSelector:(SEL)selector
 {
-    if (sf_selector_equal(selector, (SEL)&g_forwarded_value_sel)) {
+    static SEL forwarded_value_sel = NULL;
+    if (forwarded_value_sel == NULL) {
+        forwarded_value_sel = sel_registerName("forwardedValue:");
+    }
+    if (sf_selector_equal(selector, forwarded_value_sel)) {
         return sf_test_forward_dispatch_target();
     }
     return nil;
@@ -203,7 +316,11 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 
 + (id)forwardingTargetForSelector:(SEL)selector
 {
-    if (sf_selector_equal(selector, (SEL)&g_class_forwarded_value_sel)) {
+    static SEL class_forwarded_value_sel = NULL;
+    if (class_forwarded_value_sel == NULL) {
+        class_forwarded_value_sel = sel_registerName("classForwardedValue:");
+    }
+    if (sf_selector_equal(selector, class_forwarded_value_sel)) {
         return objc_getClass("ForwardDispatchTarget");
     }
     return nil;
@@ -373,6 +490,24 @@ SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *ctx)
         .ctx = ctx,
     };
     return allocator;
+}
+
+void sf_test_reset_c_dispatch_probe(void)
+{
+    sf_test_record_c_dispatch_probe(0, 0U, 0U, 0U, 0U);
+}
+
+int sf_test_c_dispatch_probe_argc(void)
+{
+    return g_c_dispatch_probe_argc;
+}
+
+uintptr_t sf_test_c_dispatch_probe_value(int index)
+{
+    if (index < 0 or index >= 4) {
+        return 0U;
+    }
+    return g_c_dispatch_probe_values[index];
 }
 
 int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal)

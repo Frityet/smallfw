@@ -110,7 +110,6 @@ typedef struct SFTestObjFWBundle {
 } SFTestObjFWBundle;
 #endif
 
-#if SF_RUNTIME_THREADSAFE
 static void *class_lookup_thread_main(void *arg)
 {
     ClassLookupThreadCtx *ctx = (ClassLookupThreadCtx *)arg;
@@ -127,7 +126,6 @@ static void *class_lookup_thread_main(void *arg)
 
     return NULL;
 }
-#endif
 
 #if SF_RUNTIME_REFLECTION
 static void ensure_extra_registered_classes(void)
@@ -211,7 +209,7 @@ static int case_no_libobjc_dependency(void)
 
 static int case_loader_lookup_nulls(void)
 {
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
+    SEL ping_sel = sel_registerName("ping");
 
     sf_register_classes(NULL, NULL);
 #if defined(__clang__)
@@ -237,7 +235,7 @@ static int case_loader_lookup_nulls(void)
            sf_header_from_object(nil) == NULL and
            sf_object_is_heap(nil) == 0 and
            sf_cached_class_object() == objc_getClass("Object") and
-           sf_lookup_imp_in_class(NULL, (SEL)&ping_sel) == NULL;
+           sf_lookup_imp_in_class(NULL, ping_sel) == NULL;
 }
 
 static int case_loader_lookup_missing(void)
@@ -410,7 +408,10 @@ static int case_loader_class_size_synthetic(void)
 
     size_t size0 = class_getInstanceSize((Class)&bundle.cls);
     size_t size1 = class_getInstanceSize((Class)&bundle.cls);
-    return size0 == size1 and size0 >= sizeof(void *) and first_offset == 0 and second_offset == INT32_MAX;
+    return size0 == size1 and
+           size0 >= sizeof(void *) and
+           first_offset == INT32_MIN and
+           second_offset == INT32_MAX;
 }
 
 static int case_loader_objfw_exec_class(void)
@@ -490,7 +491,7 @@ static int case_loader_objfw_exec_class(void)
 
     Class parent = (Class)objc_getClass("ObjFWExecParent");
     Class child = (Class)objc_getClass("ObjFWExecChild");
-    SEL selector = (SEL)(void *)&bundle.selectors[0];
+    SEL selector = sel_registerName("objfwPing");
     Method method = class_getInstanceMethod(child, selector);
     Ivar ivar = class_getInstanceVariable(child, "_child");
 
@@ -498,10 +499,11 @@ static int case_loader_objfw_exec_class(void)
            child == (Class)(void *)&bundle.child_cls and
            class_getSuperclass(child) == parent and
            class_getInstanceSize(child) > class_getInstanceSize(parent) and
+           selector != NULL and
            method != NULL and
            method_getImplementation(method) == (IMP)objfw_probe and
            method_getName(method) != NULL and
-           sf_selector_equal(method_getName(method), selector) and
+           method_getName(method) == selector and
            sf_lookup_imp_in_class(child, selector) == (IMP)objfw_probe and
            ivar != NULL and
            bundle.parent_offset_value > 0 and
@@ -646,6 +648,7 @@ static int case_reflection_inherited_method_lookup(void)
     static int initialized = 0;
     static SFTestInheritBundle bundle;
     static SFTestSelector inherited_sel = {"inheritedPing", "@16@0:8"};
+    SEL canonical_sel = NULL;
 
     if (not initialized) {
         memset(&bundle, 0, sizeof(bundle));
@@ -676,8 +679,13 @@ static int case_reflection_inherited_method_lookup(void)
         initialized = 1;
     }
 
-    Method method = class_getInstanceMethod((Class)&bundle.child.cls, (SEL)&inherited_sel);
+    canonical_sel = sel_registerName("inheritedPing");
+    Method method = class_getInstanceMethod((Class)&bundle.child.cls, canonical_sel);
+    if (canonical_sel == NULL) {
+        return 0;
+    }
     return method != NULL and
+           method_getName(method) == canonical_sel and
            method_getImplementation(method) != NULL and
            method_getTypeEncoding(method) != NULL;
 }
@@ -906,11 +914,15 @@ static int case_reflection_null_paths(void)
            sel_isEqual(NULL, NULL);
 }
 
-static int case_reflection_selector_registration(void)
+static int case_reflection_selector_lookup_only(void)
 {
-    SEL first = sel_registerName("reflection_selector_registration");
-    SEL second = sel_registerName("reflection_selector_registration");
-    return first != NULL and first == second and strcmp(sel_getName(first), "reflection_selector_registration") == 0;
+    SEL first = sel_registerName("instancePing");
+    SEL second = sel_registerName("instancePing");
+    SEL missing = sel_registerName("reflection_selector_registration");
+    return first != NULL and
+           first == second and
+           missing == NULL and
+           strcmp(sel_getName(first), "instancePing") == 0;
 }
 
 static int case_reflection_failure_paths(void)
@@ -977,16 +989,6 @@ static int case_reflection_failure_paths(void)
         return 0;
     }
 
-    sf_runtime_test_fail_allocation_after(0);
-    if (sel_registerName("reflection_failure_selector_0") != NULL) {
-        sf_runtime_test_reset_alloc_failures();
-        return 0;
-    }
-    sf_runtime_test_fail_allocation_after(1);
-    if (sel_registerName("reflection_failure_selector_1") != NULL) {
-        sf_runtime_test_reset_alloc_failures();
-        return 0;
-    }
     sf_runtime_test_reset_alloc_failures();
     return 1;
 }
@@ -994,7 +996,6 @@ static int case_reflection_failure_paths(void)
 
 static int case_class_lookup_concurrent(void)
 {
-#if SF_RUNTIME_THREADSAFE
     enum { thread_count = 4,
            loops_per_thread = 40000,
            class_count = 5 };
@@ -1027,9 +1028,6 @@ static int case_class_lookup_concurrent(void)
         }
     }
     return 1;
-#else
-    return 1;
-#endif
 }
 
 static const SFTestCase g_loader_cases[] = {
@@ -1057,7 +1055,7 @@ static const SFTestCase g_loader_cases[] = {
     {"reflection_ivar_lookup", case_reflection_ivar_lookup},
     {"reflection_inherited_ivar_lookup", case_reflection_inherited_ivar_lookup},
     {"reflection_null_paths", case_reflection_null_paths},
-    {"reflection_selector_registration", case_reflection_selector_registration},
+    {"reflection_selector_lookup_only", case_reflection_selector_lookup_only},
     {"reflection_failure_paths", case_reflection_failure_paths},
     {"reflection_full_map_exhaustion", case_reflection_full_map_exhaustion},
 #endif

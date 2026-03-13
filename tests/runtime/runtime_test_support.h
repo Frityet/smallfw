@@ -54,6 +54,11 @@ typedef struct SFTestBigStruct {
     long long fourth;
 } SFTestBigStruct;
 
+typedef union SFTestEither {
+    int left;
+    int right;
+} SFTestEither;
+
 typedef void (*_Nonnull SFTestChildFn)(void *_Nullable ctx);
 
 extern int g_counter_deallocs;
@@ -136,6 +141,26 @@ extern int g_counter_deallocs;
 - (SFTestBigStruct)bigStructWithSeed:(long long)seed;
 @end
 
+@interface CDispatchProbe : Object
+- (id _Nonnull)zero;
+- (id _Nonnull)takeI:(int)value;
+- (id _Nonnull)takeIq:(unsigned int)first second:(long long)second;
+- (id _Nonnull)takeQ:(unsigned long long)value star:(const char *_Nonnull)bytes sel:(SEL _Nonnull)selector;
+- (id _Nonnull)takeObj:(id _Nonnull)obj cls:(Class _Nonnull)cls ptr:(void *_Nonnull)ptr cstr:(const char *_Nonnull)bytes;
+- (id _Nonnull)takeChar:(char)value;
+- (id _Nonnull)takeShort:(short)value;
+- (id _Nonnull)takeBool:(_Bool)value;
+- (id _Nonnull)takeC:(unsigned char)value;
+- (id _Nonnull)takeS:(unsigned short)value;
+- (id _Nonnull)takeLong:(long)value;
+- (id _Nonnull)takeULong:(unsigned long)value;
+- (id _Nonnull)takePointer:(int *_Nonnull)ptr;
+- (id _Nonnull)takeStruct:(SFTestPair)pair;
+- (id _Nonnull)takeUnion:(SFTestEither)either;
+- (id _Nonnull)takeDouble:(double)value;
+- (id _Nonnull)takeMany:(int)first second:(int)second third:(int)third fourth:(int)fourth fifth:(int)fifth;
+@end
+
 @interface ForwardDispatchTarget : Object
 - (int)forwardedValue:(int)x;
 + (int)classForwardedValue:(int)x;
@@ -192,6 +217,9 @@ CounterObject *_Nullable sf_test_factory_object(void);
 void *_Nullable sf_test_counting_alloc(void *_Nullable ctx, size_t size, size_t align);
 void sf_test_counting_free(void *_Nullable ctx, void *_Nullable ptr, size_t size, size_t align);
 SFAllocator_t sf_test_make_counting_allocator(SFTestAllocatorCtx *_Nonnull ctx);
+void sf_test_reset_c_dispatch_probe(void);
+int sf_test_c_dispatch_probe_argc(void);
+uintptr_t sf_test_c_dispatch_probe_value(int index);
 
 int sf_test_expect_signal(SFTestChildFn fn, void *_Nullable ctx, int expected_signal);
 int sf_test_expect_signal_case(const char *_Nonnull case_name, int expected_signal);

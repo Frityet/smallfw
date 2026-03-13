@@ -5,7 +5,6 @@ import("smallfw.task_helpers")
 local CASE_ORDER = {
     "dispatch_monomorphic_hot",
     "dispatch_polymorphic_hot",
-    "dispatch_nil_receiver_hot",
     "arc_retain_release_heap",
     "arc_retain_release_round_robin",
     "arc_store_strong_cycle",
@@ -16,7 +15,6 @@ local CASE_ORDER = {
 local CASE_TITLES = {
     dispatch_monomorphic_hot = "dispatch_monomorphic_hot",
     dispatch_polymorphic_hot = "dispatch_polymorphic_hot",
-    dispatch_nil_receiver_hot = "dispatch_nil_receiver_hot",
     arc_retain_release_heap = "arc_retain_release_heap",
     arc_retain_release_round_robin = "arc_retain_release_round_robin",
     arc_store_strong_cycle = "arc_store_strong_cycle",
@@ -93,9 +91,6 @@ local VARIANTS = {
         options = {
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
-            ["dispatch-l0-dual"] = "y",
-            ["dispatch-cache-2way"] = "y",
-            ["dispatch-cache-negative"] = "y",
             ["runtime-compact-headers"] = "y",
             ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
@@ -110,9 +105,6 @@ local VARIANTS = {
         options = {
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
-            ["dispatch-l0-dual"] = "y",
-            ["dispatch-cache-2way"] = "y",
-            ["dispatch-cache-negative"] = "y",
             ["runtime-compact-headers"] = "y",
             ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
@@ -129,9 +121,6 @@ local VARIANTS = {
             ["analysis-symbols"] = "y",
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
-            ["dispatch-l0-dual"] = "y",
-            ["dispatch-cache-2way"] = "y",
-            ["dispatch-cache-negative"] = "y",
             ["runtime-compact-headers"] = "y",
             ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
@@ -146,16 +135,10 @@ local VARIANTS = {
         note = "Uses the C message send path instead of the assembly fast path.",
     },
     {
-        id = "release-dispatch-stats",
-        category = "Dispatch / behavior",
-        options = {["dispatch-stats"] = "y"},
-        note = "Enables dispatch cache statistics counters.",
-    },
-    {
         id = "release-forwarding",
         category = "Dispatch / behavior",
         options = {["runtime-forwarding"] = "y"},
-        note = "Enables forwarding and runtime selector resolution.",
+        note = "Enables forwarding and the cold miss path.",
     },
     {
         id = "release-validation",
@@ -170,12 +153,6 @@ local VARIANTS = {
         note = "Enables tagged pointer support.",
     },
     {
-        id = "release-threadsafe",
-        category = "Dispatch / behavior",
-        options = {["runtime-threadsafe"] = "y"},
-        note = "Adds synchronized runtime bookkeeping.",
-    },
-    {
         id = "release-exceptions-off",
         category = "Dispatch / behavior",
         options = {["runtime-exceptions"] = "n"},
@@ -186,27 +163,6 @@ local VARIANTS = {
         category = "Dispatch / behavior",
         options = {["runtime-reflection"] = "n"},
         note = "Disables reflection support.",
-    },
-    {
-        id = "release-dispatch-l0-dual",
-        category = "Dispatch / behavior",
-        options = {["dispatch-l0-dual"] = "y"},
-        note = "Enables the dual-entry L0 dispatch cache.",
-    },
-    {
-        id = "release-dispatch-cache-2way",
-        category = "Dispatch / behavior",
-        options = {["dispatch-cache-2way"] = "y"},
-        note = "Enables a 2-way dispatch cache.",
-    },
-    {
-        id = "release-dispatch-cache-negative",
-        category = "Dispatch / behavior",
-        options = {
-            ["dispatch-cache-2way"] = "y",
-            ["dispatch-cache-negative"] = "y",
-        },
-        note = "Enables negative cache entries and its 2-way cache prerequisite.",
     },
     {
         id = "release-compact-headers",
@@ -258,9 +214,7 @@ local VARIANTS = {
 local DISPLAY_OPTION_ORDER = {
     "analysis-symbols",
     "objc-runtime",
-    "runtime-threadsafe",
     "dispatch-backend",
-    "dispatch-stats",
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
@@ -270,9 +224,6 @@ local DISPLAY_OPTION_ORDER = {
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
-    "dispatch-l0-dual",
-    "dispatch-cache-2way",
-    "dispatch-cache-negative",
     "runtime-compact-headers",
     "runtime-fast-objects",
     "runtime-inline-value-storage",

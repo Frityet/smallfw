@@ -17,7 +17,7 @@
 #endif
 
 typedef struct SFCSigCacheEntry {
-    SEL sel;
+    uint32_t slot;
     char codes[SF_C_FALLBACK_MAX_ARGS];
     uint8_t argc;
     uint8_t unsupported;
@@ -657,8 +657,8 @@ static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MA
 
 static inline size_t sig_cache_index(SEL op)
 {
-    uintptr_t v = (uintptr_t)op;
-    uintptr_t mix = (v >> 4U) ^ (v >> 11U);
+    uintptr_t v = (uintptr_t)sf_selector_slot(op);
+    uintptr_t mix = v ^ (v >> 5U);
     return (size_t)(mix & (SF_C_SIG_CACHE_SIZE - 1U));
 }
 
@@ -674,7 +674,8 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
     }
 
     SFCSigCacheEntry_t *entry = &g_sig_cache[sig_cache_index(op)];
-    if (entry->sel == op) {
+    uint32_t slot = sf_selector_slot(op);
+    if (entry->slot == slot) {
         size_t argc = (size_t)entry->argc;
         if (argc > SF_C_FALLBACK_MAX_ARGS) {
             argc = SF_C_FALLBACK_MAX_ARGS;
@@ -691,7 +692,7 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
     int unsupported = 0;
     size_t argc = collect_explicit_arg_codes(op, out_codes, &unsupported);
 
-    entry->sel = op;
+    entry->slot = slot;
     entry->argc = (uint8_t)argc;
     entry->unsupported = (uint8_t)(unsupported != 0);
     if (argc > 0) {
@@ -871,11 +872,16 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-    IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+    IMP imp = NULL;
     SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
     size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
-    if (out == NULL or unsupported_sig or imp == NULL or sf_dispatch_imp_is_nil(imp)) {
+#if SF_RUNTIME_FORWARDING
+    imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#else
+    imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
+#endif
+    if (out == NULL or unsupported_sig) {
         return;
     }
 
@@ -916,12 +922,13 @@ id objc_msgSend(id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-    IMP imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+    IMP imp = NULL;
+#if SF_RUNTIME_FORWARDING
+    imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#else
+    imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
+#endif
 #if SF_DISPATCH_C_USE_LIBFFI
-    if (imp == NULL or sf_dispatch_imp_is_nil(imp)) {
-        return (id)0;
-    }
-
     SFCCallArgInfo_t ret_info = {0};
     SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
@@ -1006,7 +1013,7 @@ id objc_msgSend(id receiver, SEL op, ...)
     char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
     size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
-    if (unsupported_sig or imp == NULL) {
+    if (unsupported_sig) {
         return (id)0;
     }
 

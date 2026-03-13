@@ -13,13 +13,6 @@ function smallfw.add_runtime_boolean_option(name, description, category)
     option_end()
 end
 
-option("runtime-threadsafe")
-    set_default(false)
-    set_showmenu(true)
-    set_category("runtime/core")
-    set_description("Enable synchronized runtime internals")
-option_end()
-
 option("objc-runtime")
     set_default("gnustep-2.3")
     set_showmenu(true)
@@ -34,13 +27,6 @@ option("dispatch-backend")
     set_category("runtime/core")
     set_values("asm", "c")
     set_description("Select objc_msgSend backend")
-option_end()
-
-option("dispatch-stats")
-    set_default(false)
-    set_showmenu(true)
-    set_category("runtime/core")
-    set_description("Enable dispatch cache stats counters")
 option_end()
 
 option("runtime-exceptions")
@@ -175,38 +161,6 @@ option("runtime-full-lto")
     end)
 option_end()
 
-smallfw.add_runtime_boolean_option("dispatch-l0-dual",
-                                   "Use a dual-entry thread-local last-hit dispatch cache.",
-                                   "runtime/perf")
-option("dispatch-l0-dual")
-    add_deps("dispatch-backend")
-    after_check(function (option)
-        if option:enabled() and option:dep("dispatch-backend") ~= nil and option:dep("dispatch-backend"):value() ~= "asm" then
-            option:enable(false)
-        end
-    end)
-option_end()
-
-smallfw.add_runtime_boolean_option("dispatch-cache-2way",
-                                   "Use a 2-way set-associative dispatch cache.",
-                                   "runtime/perf")
-
-smallfw.add_runtime_boolean_option("dispatch-cache-negative",
-                                   "Cache stable nil dispatch misses in the fast path.",
-                                   "runtime/perf")
-option("dispatch-cache-negative")
-    add_deps("dispatch-cache-2way", "runtime-forwarding")
-    after_check(function (option)
-        if option:enabled() then
-            local cache_2way = option:dep("dispatch-cache-2way")
-            local forwarding = option:dep("runtime-forwarding")
-            if cache_2way == nil or not cache_2way:enabled() or (forwarding ~= nil and forwarding:enabled()) then
-                option:enable(false)
-            end
-        end
-    end)
-option_end()
-
 smallfw.add_runtime_boolean_option("runtime-compact-headers",
                                    "Use a compact runtime header with cold state stored out-of-line.",
                                    "runtime/abi")
@@ -241,24 +195,21 @@ smallfw.add_runtime_boolean_option("runtime-inline-group-state",
                                    "Store non-threadsafe parent/group bookkeeping inline in the root allocation.",
                                    "runtime/abi")
 option("runtime-inline-group-state")
-    add_deps("runtime-compact-headers", "runtime-threadsafe")
+    add_deps("runtime-compact-headers")
     after_check(function (option)
         if not option:enabled() then
             return
         end
         local compact = option:dep("runtime-compact-headers")
-        local threadsafe = option:dep("runtime-threadsafe")
-        if compact == nil or not compact:enabled() or (threadsafe ~= nil and threadsafe:enabled()) then
+        if compact == nil or not compact:enabled() then
             option:enable(false)
         end
     end)
 option_end()
 
 smallfw.runtime_build_options = {
-    "runtime-threadsafe",
     "objc-runtime",
     "dispatch-backend",
-    "dispatch-stats",
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
@@ -269,9 +220,6 @@ smallfw.runtime_build_options = {
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
-    "dispatch-l0-dual",
-    "dispatch-cache-2way",
-    "dispatch-cache-negative",
     "runtime-compact-headers",
     "runtime-fast-objects",
     "runtime-inline-value-storage",

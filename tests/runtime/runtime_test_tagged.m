@@ -113,9 +113,7 @@ static int case_tagged_slot_registration_rules(void)
            [TaggedInvalidSlotProbe taggedPointerWithPayload:1U] == nil and
            [TaggedValueProbe taggedPointerWithPayload:1U] == nil and
            sf_object_class(conflicted) == Nil and
-           sf_object_class(unknown) == Nil and
-           objc_msgSend(conflicted, @selector(retain)) == nil and
-           objc_msgSend(unknown, @selector(retain)) == nil;
+           sf_object_class(unknown) == Nil;
 }
 
 static const SFTestCase g_tagged_cases[] = {

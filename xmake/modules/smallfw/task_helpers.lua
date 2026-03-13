@@ -5,10 +5,8 @@ import("lib.detect.find_tool")
 
 local runtime_config_keys = {
     "analysis-symbols",
-    "runtime-threadsafe",
     "objc-runtime",
     "dispatch-backend",
-    "dispatch-stats",
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
@@ -18,9 +16,6 @@ local runtime_config_keys = {
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
-    "dispatch-l0-dual",
-    "dispatch-cache-2way",
-    "dispatch-cache-negative",
     "runtime-compact-headers",
     "runtime-fast-objects",
     "runtime-inline-value-storage",
