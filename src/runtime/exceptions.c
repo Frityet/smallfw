@@ -264,10 +264,15 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
 void objc_exception_throw(id obj)
 {
     SFException_t *rethrow_exc = NULL;
-    if (g_gnu_current_exception != NULL and g_gnu_current_exception->object == obj) {
-        rethrow_exc = g_gnu_current_exception;
+    if (g_gnu_current_exception != NULL and obj != NULL) {
+        SFException_t *active_exc = sf_exception_from_object(obj);
+        if (active_exc == g_gnu_current_exception and g_gnu_current_exception->object == obj and
+            g_gnu_current_exception->catch_depth > 0U) {
+            rethrow_exc = g_gnu_current_exception;
+        }
     }
     if (rethrow_exc != NULL) {
+        rethrow_exc->reserved = 1U;
         _Unwind_Resume_or_Rethrow(&rethrow_exc->unwind);
         abort();
     }
@@ -294,6 +299,7 @@ id objc_begin_catch(void *exception)
         return (id)exception;
     }
     exc->catch_depth += 1;
+    exc->reserved = 0U;
     g_gnu_current_exception = exc;
     if (g_catch_stack_size < (sizeof(g_catch_stack) / sizeof(g_catch_stack[0]))) {
         g_catch_stack[g_catch_stack_size++] = exc;
@@ -314,6 +320,10 @@ void objc_end_catch(void)
         exc->catch_depth -= 1;
     }
     if (exc->catch_depth == 0) {
+        if (exc->reserved != 0U) {
+            exc->reserved = 0U;
+            return;
+        }
         _Unwind_DeleteException(&exc->unwind);
     }
 }
@@ -328,6 +338,7 @@ void objc_exception_rethrow(void *exception)
         exc = g_gnu_current_exception;
     }
     if (exc != NULL) {
+        exc->reserved = 1U;
         _Unwind_Resume_or_Rethrow(&exc->unwind);
     }
     abort();
@@ -362,7 +373,7 @@ static uint64_t read_uleb(const uint8_t **ptr)
         if ((b & 0x80) == 0) {
             break;
         }
-        shift = shift <= 56U and shift + 7U or 64U;
+        shift = (shift <= 56U) ? (shift + 7U) : 64U;
     }
     *ptr = p;
     return result;
@@ -379,10 +390,10 @@ static int64_t read_sleb(const uint8_t **ptr)
         if (shift < 64U) {
             result |= (uint64_t)(b & 0x7FU) << shift;
         }
+        shift = (shift <= 56U) ? (shift + 7U) : 64U;
         if ((b & 0x80) == 0) {
             break;
         }
-        shift = shift <= 56U and shift + 7U or 64U;
     }
     if ((shift < 64U) and ((b & 0x40U) != 0U)) {
         result |= UINT64_MAX << shift;

@@ -5,6 +5,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define SF_RUNTIME_HAS_ADDRESS_SANITIZER 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__) && !defined(SF_RUNTIME_HAS_ADDRESS_SANITIZER)
+#define SF_RUNTIME_HAS_ADDRESS_SANITIZER 1
+#endif
+
+#if defined(SF_RUNTIME_HAS_ADDRESS_SANITIZER)
+int __asan_address_is_poisoned(const void volatile *addr);
+#endif
+
 typedef struct SFClassEntry {
     const char *name;
     SFObjCClass_t *cls;
@@ -36,6 +49,7 @@ typedef struct SFValueSlot {
 typedef struct SFValueSlotEntry {
     Class cls;
     const SFValueSlot_t *slots;
+    void *owned_slots;
     size_t count;
 } SFValueSlotEntry_t;
 
@@ -118,6 +132,55 @@ static IMP sf_lookup_method_imp_exact(Class cls, SEL sel);
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls);
 static int sf_class_is_subclass_of_unlocked(Class cls, Class expected_super);
 static size_t align_up(size_t value, size_t align);
+
+static int sf_runtime_region_is_readable(const void *ptr, size_t size)
+{
+#if defined(SF_RUNTIME_HAS_ADDRESS_SANITIZER)
+    const unsigned char *bytes = (const unsigned char *)ptr;
+    if (ptr == NULL) {
+        return 0;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        if (__asan_address_is_poisoned((const void *)(bytes + i)) != 0) {
+            return 0;
+        }
+    }
+#else
+    (void)ptr;
+    (void)size;
+#endif
+    return 1;
+}
+
+static int sf_header_matches_object_layout(SFObjHeader_t *hdr, id obj)
+{
+    Class cls = NULL;
+    size_t header_size = sizeof(SFObjHeader_t);
+    size_t min_size = 0U;
+
+    if (hdr == NULL or obj == NULL or hdr->state != SF_OBJ_STATE_LIVE) {
+        return 0;
+    }
+
+    cls = *(Class *)(void *)obj;
+    if (cls == NULL) {
+        return 0;
+    }
+
+#if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
+    if ((hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U) {
+        header_size = sizeof(SFInlineValueHeader_t);
+    }
+#endif
+    min_size = header_size + sf_class_instance_size_fast(cls);
+    if ((size_t)hdr->alloc_size < min_size) {
+        return 0;
+    }
+    if (((size_t)hdr->alloc_size & (sizeof(void *) - 1U)) != 0U) {
+        return 0;
+    }
+    return 1;
+}
 static void sf_reset_class_caches_unlocked(void);
 static SFSelectorEntry_t *sf_selector_entry_for_name_unlocked(const char *name);
 static SFSelectorEntry_t *sf_selector_entry_insert_unlocked(const char *name, const char *types);
@@ -139,7 +202,7 @@ static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
     if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
         flags |= SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS;
     }
-    if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
+    if (meta->cxx_destruct_imp != NULL) {
         flags |= SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT;
     }
     return flags;
@@ -157,6 +220,10 @@ static int sf_class_supports_inline_value_storage_unlocked(Class cls)
     return 1;
 #else
     meta = sf_class_meta_for(cls);
+    if (meta == NULL) {
+        sf_cache_class_meta(cls);
+        meta = sf_class_meta_for(cls);
+    }
     if (meta == NULL) {
         return 0;
     }
@@ -505,6 +572,7 @@ void sf_loader_register_selector_region(void *start, void *stop)
 
 uint32_t sf_selector_slot(SEL sel)
 {
+    SEL canonical = NULL;
     const char *name = NULL;
     const SFFrozenSelector_t *frozen = NULL;
 
@@ -516,6 +584,17 @@ uint32_t sf_selector_slot(SEL sel)
     if (name == NULL) {
         return UINT32_MAX;
     }
+
+    canonical = sf_lookup_selector_named(name);
+    if (canonical == NULL) {
+        return UINT32_MAX;
+    }
+
+    name = sf_selector_name(canonical);
+    if (name == NULL) {
+        return UINT32_MAX;
+    }
+
     frozen = (const SFFrozenSelector_t *)(const void *)(name - SF_FROZEN_SELECTOR_NAME_OFFSET);
     return frozen->slot;
 }
@@ -529,8 +608,12 @@ static void sf_reset_class_caches_unlocked(void)
 {
     memset(g_layout_fixed_map, 0, sizeof(g_layout_fixed_map));
     memset(g_layout_active_stack, 0, sizeof(g_layout_active_stack));
-    memset(g_value_slot_map, 0, sizeof(g_value_slot_map));
     g_layout_active_count = 0U;
+
+    for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
+        free(g_value_slot_map[i].owned_slots);
+        memset(&g_value_slot_map[i], 0, sizeof(g_value_slot_map[i]));
+    }
 
     for (size_t i = 0; i < SF_CLASS_META_CAPACITY; ++i) {
         free(g_class_meta[i].strong_ivar_offsets);
@@ -605,14 +688,19 @@ static const SFValueSlot_t *sf_value_slots_for_class(Class cls, size_t *count_ou
     return entry->slots;
 }
 
-static void sf_set_value_slots_for_class_unlocked(Class cls, const SFValueSlot_t *slots, size_t count)
+static void sf_set_value_slots_for_class_unlocked(Class cls, const SFValueSlot_t *slots, size_t count, void *owned_slots)
 {
     SFValueSlotEntry_t *entry = value_slot_entry_for_unlocked(cls);
     if (entry == NULL) {
+        free(owned_slots);
         return;
+    }
+    if (entry->owned_slots != NULL and entry->owned_slots != owned_slots) {
+        free(entry->owned_slots);
     }
     entry->cls = (count > 0 and slots != NULL) ? cls : NULL;
     entry->slots = (count > 0 and slots != NULL) ? slots : NULL;
+    entry->owned_slots = (count > 0 and slots != NULL) ? owned_slots : NULL;
     entry->count = (count > 0 and slots != NULL) ? count : 0;
 }
 
@@ -1003,6 +1091,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
 
     size_t visible_end = align_up(max_end, sizeof(void *));
     const SFValueSlot_t *final_slots = NULL;
+    void *owned_slots = NULL;
     size_t final_slot_count = 0;
     size_t final_end = visible_end;
 
@@ -1022,6 +1111,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
                 memcpy(merged, super_slots, super_slot_count * sizeof(*merged));
                 memcpy(merged + super_slot_count, local_slots, local_slot_count * sizeof(*merged));
                 final_slots = merged;
+                owned_slots = merged;
                 final_slot_count = merged_count;
                 final_end = slot_cursor;
             } else {
@@ -1032,6 +1122,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
             local_slots = NULL;
         } else {
             final_slots = local_slots;
+            owned_slots = local_slots;
             final_slot_count = local_slot_count;
             final_end = slot_cursor;
         }
@@ -1051,7 +1142,7 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
     if (max_end < sizeof(void *))
         max_end = sizeof(void *);
     cls->instance_size = (long)max_end;
-    sf_set_value_slots_for_class_unlocked((Class)cls, final_slots, final_slot_count);
+    sf_set_value_slots_for_class_unlocked((Class)cls, final_slots, final_slot_count, owned_slots);
     layout_fixed_insert(cls);
     layout_active_pop(cls);
     return max_end;
@@ -1305,7 +1396,7 @@ int sf_object_is_heap(id obj)
     }
 #endif
     hdr = sf_header_from_object(obj);
-    return hdr != NULL and (hdr->state == SF_OBJ_STATE_LIVE or (hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U);
+    return hdr != NULL;
 }
 
 Class sf_object_class(id obj)
@@ -1441,16 +1532,29 @@ SFObjHeader_t *sf_header_from_object(id obj)
     return NULL;
 #else
 #if SF_RUNTIME_COMPACT_HEADERS && SF_RUNTIME_INLINE_VALUE_STORAGE
-    uintptr_t tagged_parent = *((uintptr_t *)(void *)((unsigned char *)(void *)obj - sizeof(uintptr_t)));
-    if ((tagged_parent & (uintptr_t)1U) != 0U) {
-        SFInlineValueHeader_t *inline_hdr =
-            (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
-        if ((inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U) {
-            return (SFObjHeader_t *)(void *)inline_hdr;
+    unsigned char *inline_parent_ptr = (unsigned char *)(void *)obj - sizeof(uintptr_t);
+    if (sf_runtime_region_is_readable(inline_parent_ptr, sizeof(uintptr_t))) {
+        uintptr_t tagged_parent = *((uintptr_t *)(void *)inline_parent_ptr);
+        if ((tagged_parent & (uintptr_t)1U) != 0U) {
+            SFInlineValueHeader_t *inline_hdr =
+                (SFInlineValueHeader_t *)(void *)((unsigned char *)(void *)obj - sizeof(SFInlineValueHeader_t));
+            if (sf_runtime_region_is_readable(inline_hdr, sizeof(*inline_hdr)) and
+                inline_hdr->state == SF_OBJ_STATE_LIVE and
+                (inline_hdr->flags & SF_OBJ_FLAG_INLINE_VALUE) != 0U and
+                sf_header_matches_object_layout((SFObjHeader_t *)(void *)inline_hdr, obj)) {
+                return (SFObjHeader_t *)(void *)inline_hdr;
+            }
         }
     }
 #endif
-    return ((SFObjHeader_t *)obj) - 1;
+    SFObjHeader_t *hdr = ((SFObjHeader_t *)obj) - 1;
+    if (not sf_runtime_region_is_readable(hdr, sizeof(*hdr))) {
+        return NULL;
+    }
+    if (sf_header_matches_object_layout(hdr, obj)) {
+        return hdr;
+    }
+    return NULL;
 #endif
 }
 
@@ -1766,8 +1870,8 @@ static void sf_cache_class_meta(Class cls)
     }
 
     base_dealloc_imp = sf_object_dealloc_imp_unlocked();
-    if (total_count == 0U and (slot->cxx_destruct_imp == NULL or sf_dispatch_imp_is_nil(slot->cxx_destruct_imp)) and
-        (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp or sf_dispatch_imp_is_nil(slot->dealloc_imp))) {
+    if (total_count == 0U and slot->cxx_destruct_imp == NULL and
+        (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp)) {
         slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
     }
 }
@@ -1853,7 +1957,7 @@ uint32_t sf_class_cached_object_flags(Class cls)
     if ((meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) != 0U) {
         flags |= 1U << 1U;
     }
-    if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
+    if (meta->cxx_destruct_imp != NULL) {
         flags |= 1U << 2U;
     }
     return flags;
@@ -1969,8 +2073,6 @@ id sf_make_tagged_pointer(Class cls, uintptr_t payload)
     return NULL;
 #endif
 }
-
-#if SF_RUNTIME_REFLECTION
 
 static Method class_get_method_impl(Class cls, SEL sel, int include_super)
 {
@@ -2260,5 +2362,3 @@ int sel_isEqual(SEL lhs, SEL rhs)
 {
     return sf_selector_equal(lhs, rhs);
 }
-
-#endif

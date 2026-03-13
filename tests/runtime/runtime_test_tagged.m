@@ -85,15 +85,11 @@ static int case_tagged_dispatch_methods(void)
     sum = [num plus:(uintptr_t)1U];
     return [num value] == 41U and
            plus_imp != NULL and
-           not sf_dispatch_imp_is_nil(plus_imp) and
            char_imp != NULL and
-           not sf_dispatch_imp_is_nil(char_imp) and
            resolved_plus_imp != NULL and
-           not sf_dispatch_imp_is_nil(resolved_plus_imp) and
            resolved_plus_op != NULL and
            sf_selector_types(resolved_plus_op) != NULL and
            resolved_char_imp != NULL and
-           not sf_dispatch_imp_is_nil(resolved_char_imp) and
            resolved_char_op != NULL and
            sf_selector_types(resolved_char_op) != NULL and
            sum != nil and

@@ -259,8 +259,8 @@ int main(int argc, char **argv)
             char *end = NULL;
             const char *raw = argv[++i];
             errno = 0;
-            long parsed = strtol(raw, &end, 10);
-            if (errno != 0 or end == raw or *end != '\0' or parsed < 1L or parsed > (long)INT_MAX) {
+            long long parsed = strtoll(raw, &end, 10);
+            if (errno != 0 or end == raw or *end != '\0' or parsed < 1LL or parsed > (long long)INT_MAX) {
                 fprintf(stderr, "invalid --iters value: %s\n", raw);
                 return 2;
             } else {

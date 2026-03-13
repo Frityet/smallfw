@@ -1,33 +1,36 @@
 #include "runtime/internal.h"
 
 #include <stdint.h>
-
-id sf_dispatch_nil_imp(id self, SEL cmd, ...)
-{
-    (void)self;
-    (void)cmd;
-    return (id)0;
-}
+#include <string.h>
 
 int sf_selector_equal(SEL a, SEL b)
 {
     return a == b;
 }
 
-int sf_dispatch_imp_is_nil(IMP imp)
-{
-    return imp == NULL or imp == (IMP)sf_dispatch_nil_imp;
-}
-
 static int selector_slots_match(SEL lhs, SEL rhs)
 {
+    const char *lhs_name = NULL;
+    const char *rhs_name = NULL;
+    uint32_t lhs_slot = 0U;
+    uint32_t rhs_slot = 0U;
+
     if (lhs == rhs) {
         return 1;
     }
     if (lhs == NULL or rhs == NULL) {
         return 0;
     }
-    return sf_selector_slot(lhs) == sf_selector_slot(rhs);
+
+    lhs_slot = sf_selector_slot(lhs);
+    rhs_slot = sf_selector_slot(rhs);
+    if (lhs_slot != UINT32_MAX and rhs_slot != UINT32_MAX) {
+        return lhs_slot == rhs_slot;
+    }
+
+    lhs_name = sf_selector_name(lhs);
+    rhs_name = sf_selector_name(rhs);
+    return lhs_name != NULL and rhs_name != NULL and strcmp(lhs_name, rhs_name) == 0;
 }
 
 static SFObjCMethod_t *lookup_method_in_class_local(Class cls, SEL op)
@@ -77,18 +80,24 @@ IMP sf_lookup_dtable_imp(Class cls, SEL op)
 
 IMP sf_lookup_imp_in_class(Class cls, SEL op)
 {
-    return sf_lookup_dtable_imp(cls, op);
+    IMP imp = sf_lookup_dtable_imp(cls, op);
+    if (imp != NULL) {
+        return imp;
+    }
+
+    SFObjCMethod_t *method = lookup_method_in_class_local(cls, op);
+    return method != NULL ? method->imp : NULL;
 }
 
 IMP sf_lookup_imp_miss(Class cls, SEL op)
 {
-    return sf_lookup_dtable_imp(cls, op);
+    return sf_lookup_imp_in_class(cls, op);
 }
 
 IMP sf_lookup_imp(id receiver, SEL op)
 {
     Class cls = sf_object_class(receiver);
-    return sf_lookup_dtable_imp(cls, op);
+    return sf_lookup_imp_in_class(cls, op);
 }
 
 IMP objc_msg_lookup(id receiver, SEL op)
@@ -168,11 +177,6 @@ IMP objc_msg_lookup_super(struct sf_objc_super *super_info, SEL op)
     if (super_info == NULL) {
         return NULL;
     }
-#if SF_RUNTIME_FORWARDING
-    if (super_info->self == NULL) {
-        return NULL;
-    }
-#endif
     return sf_lookup_imp_in_class(super_info->super_class, op);
 }
 

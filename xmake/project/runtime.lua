@@ -108,8 +108,11 @@ function smallfw.add_common_runtime_flags()
             add_objc_flags("-fno-semantic-interposition")
             add_ldflags("-Wl,-O2", "-Wl,--gc-sections", {force = true})
         end
-    elseif is_plat("mingw") and is_mode("release") then
-        add_ldflags("-Wl,--gc-sections", {force = true})
+    elseif is_plat("mingw") then
+        add_ldflags("-fuse-ld=lld", {force = true})
+        if is_mode("release") then
+            add_ldflags("-Wl,--gc-sections", {force = true})
+        end
     end
     add_objc_flags("-fobjc-runtime=" .. smallfw.objc_runtime(), "-fobjc-arc")
     add_objc_flags("-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable")
@@ -290,6 +293,4 @@ end
 
 if is_plat("linux") then
     add_ldflags("-rdynamic", {force = true})
-elseif is_plat("mingw") then
-    add_ldflags("-fuse-ld=lld", {force = true})
 end

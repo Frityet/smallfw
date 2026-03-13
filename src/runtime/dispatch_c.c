@@ -868,6 +868,7 @@ uintptr_t sf_runtime_test_dispatch_read_word_arg(int code, ...)
     return value;
 }
 
+#if !defined(SF_RUNTIME_DISPATCH_PARSER_ONLY)
 void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
@@ -1037,3 +1038,4 @@ id objc_msgSend(id receiver, SEL op, ...)
     }
 #endif
 }
+#endif

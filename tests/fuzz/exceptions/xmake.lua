@@ -1,4 +1,4 @@
-if not is_plat("mingw") then
+if not is_plat("mingw") and has_config("runtime-exceptions") then
     target("runtime-fuzz-exceptions")
         set_group("tests/fuzz/exceptions")
         smallfw.configure_runtime_binary_target({

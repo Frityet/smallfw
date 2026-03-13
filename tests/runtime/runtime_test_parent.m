@@ -248,7 +248,14 @@ static int case_value_parent_slot_exhaustion(void)
         ok = e != nil;
     }
 #else
-    int ok = [[InlineValue allocWithParent:holder] init] == nil;
+    __unsafe_unretained InlineValue *extra = [InlineValue allocWithParent:holder];
+    int ok = extra == nil;
+    if (extra != nil) {
+        extra = [extra init];
+        if (extra != nil) {
+            objc_release(extra);
+        }
+    }
 #endif
 
     objc_release(child);
@@ -275,7 +282,14 @@ static int case_value_parent_oversized_subclass_rejected(void)
         ok = e != nil;
     }
 #else
-    int ok = [[InlineLargeValueSub allocWithParent:holder] init] == nil;
+    __unsafe_unretained InlineLargeValueSub *child = [InlineLargeValueSub allocWithParent:holder];
+    int ok = child == nil;
+    if (child != nil) {
+        child = [child init];
+        if (child != nil) {
+            objc_release(child);
+        }
+    }
 #endif
 
     objc_release(holder);
@@ -492,7 +506,12 @@ static int case_parent_dead_parent_rejects_new_child(void)
         return 0;
     }
 #else
-    if ([[CounterObject allocWithParent:root] init] != nil) {
+    __unsafe_unretained CounterObject *replacement = [CounterObject allocWithParent:root];
+    if (replacement != nil) {
+        replacement = [replacement init];
+    }
+    if (replacement != nil) {
+        objc_release(replacement);
         objc_release(child);
         return 0;
     }

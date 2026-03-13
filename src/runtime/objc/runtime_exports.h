@@ -116,7 +116,6 @@ SF_RUNTIME_EXPORT Class _Nullable objc_lookup_class(const char *_Nullable name);
 SF_RUNTIME_EXPORT Class _Nullable objc_get_class(const char *_Nullable name);
 SF_RUNTIME_EXPORT id _Nullable objc_getClass(const char *_Nullable name);
 
-#if SF_RUNTIME_REFLECTION
 SF_RUNTIME_EXPORT const char *_Nullable class_getName(Class _Nullable cls);
 SF_RUNTIME_EXPORT Class _Nullable class_getSuperclass(Class _Nullable cls);
 SF_RUNTIME_EXPORT Class _Nullable object_getClass(id _Nullable obj);
@@ -136,7 +135,6 @@ SF_RUNTIME_EXPORT ptrdiff_t ivar_getOffset(Ivar _Nullable ivar);
 SF_RUNTIME_EXPORT const char *_Nullable sel_getName(SEL _Nullable sel);
 SF_RUNTIME_EXPORT SEL _Nullable sel_registerName(const char *_Nullable name);
 SF_RUNTIME_EXPORT int sel_isEqual(SEL _Nullable lhs, SEL _Nullable rhs);
-#endif
 
 SF_RUNTIME_EXPORT uint64_t sf_dispatch_cache_hits(void);
 SF_RUNTIME_EXPORT uint64_t sf_dispatch_cache_misses(void);

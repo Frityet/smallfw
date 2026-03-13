@@ -250,15 +250,9 @@ static int case_loader_header_validation(void)
     memset(storage, 0, sizeof(storage));
     id fake = (id)(void *)(storage + sizeof(SFObjHeader_t));
 
-#if SF_RUNTIME_VALIDATION
     if (sf_header_from_object(fake) != NULL or sf_object_is_heap(fake) != 0) {
         return 0;
     }
-#else
-    if (sf_header_from_object(fake) != (SFObjHeader_t *)(void *)storage or sf_object_is_heap(fake) != 0) {
-        return 0;
-    }
-#endif
 
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
     SFObjHeader_t *hdr = sf_header_from_object(obj);
