@@ -3,13 +3,14 @@ local function define_runtime_performance_matrix_task(name)
         set_category("tool")
         set_menu {
             usage = "xmake " .. name .. " [options]",
-            description = "Run a broad runtime benchmark matrix across the selected Objective-C ABIs and generate docs/PERFORMANCE.md from measured results.",
+            description = "Run the runtime benchmark matrix across the selected Objective-C ABIs and generate measured markdown docs. The default matrix is the full Linux x86_64 coverage set.",
             options = {
-                {"s", "samples", "kv", "1", "Number of recorded samples per variant."},
-                {"w", "warmups", "kv", "0", "Number of warmup runs per variant."},
+                {nil, "matrix", "kv", "full", "Select the benchmark matrix to run.", " - full", " - curated"},
+                {"s", "samples", "kv", nil, "Number of recorded samples per variant. Defaults to 5 for --matrix=full and 1 for --matrix=curated."},
+                {"w", "warmups", "kv", nil, "Number of warmup runs per variant. Defaults to 1 for --matrix=full and 0 for --matrix=curated."},
                 {nil, "objc-runtimes", "kv", "both", "Select which Objective-C ABIs to benchmark.", " - both", " - gnustep-2.3", " - objfw-1.5"},
-                {"O", "outdir", "kv", "build/runtime-analysis/performance-matrix", "Set the matrix artifact root."},
-                {"d", "doc", "kv", "docs/PERFORMANCE.md", "Set the generated markdown output path."},
+                {"O", "outdir", "kv", nil, "Set the matrix artifact root. Defaults depend on --matrix."},
+                {"d", "doc", "kv", nil, "Set the generated markdown output path. Defaults depend on --matrix."},
             }
         }
         on_run(function ()
