@@ -38,12 +38,12 @@ static void *parent_thread_main(void *arg)
         __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:ctx->parent] init];
         if (child == nil) {
             ctx->ok = 0;
-            return NULL;
+            return nullptr;
         }
         objc_release(child);
     }
 
-    return NULL;
+    return nullptr;
 }
 #endif
 
@@ -67,9 +67,9 @@ static int case_value_parent_layout_hidden_storage(void)
     unsigned int count = 0;
     Ivar *ivars = class_copyIvarList(holder_cls, &count);
     int ok = count == 2U and
-             class_getInstanceVariable(holder_cls, "_value") != NULL and
-             class_getInstanceVariable(holder_cls, "_ref") != NULL and
-             ivars != NULL;
+             class_getInstanceVariable(holder_cls, "_value") != nullptr and
+             class_getInstanceVariable(holder_cls, "_ref") != nullptr and
+             ivars != nullptr;
     free((void *)ivars);
     return ok;
 #else
@@ -96,13 +96,13 @@ static int case_value_parent_alloc_embeds_in_parent(void)
     uintptr_t holder_end = holder_begin + sf_object_allocation_size_for_object(holder);
     uintptr_t child_begin = (uintptr_t)(void *)child_hdr;
     uintptr_t child_end = child_begin + embedded_value_storage_size((Class)objc_getClass("InlineValueSub"));
-    int ok = holder_hdr != NULL and
-             child_hdr != NULL and
+    int ok = holder_hdr != nullptr and
+             child_hdr != nullptr and
              ctx.alloc_calls == 1 and
              ctx.free_calls == 0 and
              holder->_value == (InlineValue *)child and
              child.parent == holder and
-             [child allocator] == &allocator and
+             child.allocator == &allocator and
              sf_header_group_root(child_hdr) == child_hdr and
              sf_header_group_live_count(holder_hdr) == 1U and
              child_begin >= holder_begin and
@@ -188,7 +188,7 @@ static int case_value_parent_child_expires_with_parent(void)
     objc_release(holder);
     int ok = ctx.alloc_calls == 1 and ctx.free_calls == 1 and ctx.active_blocks == 0;
 #if SF_RUNTIME_VALIDATION
-    ok = ok and sf_header_from_object(child) == NULL and not sf_object_is_heap(child);
+    ok = ok and sf_header_from_object(child) == nullptr and not sf_object_is_heap(child);
 #endif
     return ok;
 }
@@ -215,13 +215,13 @@ static int case_value_parent_standalone_heap_alloc(void)
 
     SFObjHeader_t *direct_hdr = sf_header_from_object(direct);
     SFObjHeader_t *nil_parent_hdr = sf_header_from_object(nil_parent);
-    int ok = direct_hdr != NULL and
-             nil_parent_hdr != NULL and
+    int ok = direct_hdr != nullptr and
+             nil_parent_hdr != nullptr and
              sf_header_group_root(direct_hdr) == direct_hdr and
              sf_header_group_root(nil_parent_hdr) == nil_parent_hdr and
              direct.parent == nil and
              nil_parent.parent == nil and
-             [direct allocator] == &allocator and
+             direct.allocator == &allocator and
              ctx.alloc_calls == 1;
 
     objc_release(direct);
@@ -313,9 +313,9 @@ static int case_parent_group_inheritance(void)
     SFObjHeader_t *root_hdr = sf_header_from_object(root);
     SFObjHeader_t *child_hdr = sf_header_from_object(child);
     SFObjHeader_t *grandchild_hdr = sf_header_from_object(grandchild);
-    int ok = root_hdr != NULL and
-             child_hdr != NULL and
-             grandchild_hdr != NULL and
+    int ok = root_hdr != nullptr and
+             child_hdr != nullptr and
+             grandchild_hdr != nullptr and
              sf_header_group_root(child_hdr) == root_hdr and
              sf_header_group_root(grandchild_hdr) == root_hdr and
              sf_header_group_live_count(root_hdr) == 3 and
@@ -342,7 +342,7 @@ static int case_parent_allocator_propagation(void)
         return 0;
     }
 
-    int ok = [root allocator] == &allocator and [child allocator] == &allocator;
+    int ok = root.allocator == &allocator and child.allocator == &allocator;
     objc_release(child);
     objc_release(root);
     return ok;
@@ -390,7 +390,7 @@ static int case_parent_child_outlives_parent(void)
         return 0;
     }
 
-    (void)[child hash];
+    (void)child.hash;
     objc_release(child);
     return ctx.free_calls == 2 and ctx.active_blocks == 0 and g_counter_deallocs == 2;
 }
@@ -451,7 +451,7 @@ static int case_parent_nested_allocation_same_root(void)
     }
 
     SFObjHeader_t *great_hdr = sf_header_from_object(great_grandchild);
-    int ok = great_hdr != NULL and sf_header_group_root(great_hdr) == root_hdr;
+    int ok = great_hdr != nullptr and sf_header_group_root(great_hdr) == root_hdr;
 
     objc_release(great_grandchild);
     objc_release(grandchild);
@@ -476,7 +476,7 @@ static int case_parent_alloc_with_nil_parent(void)
     }
 
     SFObjHeader_t *hdr = sf_header_from_object(obj);
-    int ok = hdr != NULL and sf_header_group_root(hdr) == hdr and obj.parent == nil;
+    int ok = hdr != nullptr and sf_header_group_root(hdr) == hdr and obj.parent == nil;
     objc_release(obj);
     return ok;
 }
@@ -540,14 +540,14 @@ static int case_parent_concurrent_alloc_release(void)
         ctx[i].parent = root;
         ctx[i].loops = loops_per_thread;
         ctx[i].ok = 1;
-        if (pthread_create(&threads[i], NULL, parent_thread_main, &ctx[i]) != 0) {
+        if (pthread_create(&threads[i], nullptr, parent_thread_main, &ctx[i]) != 0) {
             objc_release(root);
             return 0;
         }
     }
 
     for (int i = 0; i < thread_count; ++i) {
-        if (pthread_join(threads[i], NULL) != 0 or not ctx[i].ok) {
+        if (pthread_join(threads[i], nullptr) != 0 or not ctx[i].ok) {
             objc_release(root);
             return 0;
         }
@@ -582,7 +582,7 @@ static const SFTestCase g_parent_cases[] = {
 
 const SFTestCase *sf_runtime_parent_cases(size_t *count)
 {
-    if (count != NULL) {
+    if (count != nullptr) {
         *count = sizeof(g_parent_cases) / sizeof(g_parent_cases[0]);
     }
     return g_parent_cases;

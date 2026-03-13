@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runtime/c2x-compat.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <iso646.h>
@@ -96,30 +98,30 @@ static inline const SFObjCSelectorFields_t *_Nullable sf_selector_fields(SEL _Nu
 static inline const char *_Nullable sf_selector_name(SEL _Nullable sel)
 {
     const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
-    return fields != NULL ? fields->name : NULL;
+    return fields != nullptr ? fields->name : nullptr;
 }
 
 static inline const char *_Nullable sf_selector_types(SEL _Nullable sel)
 {
     const SFObjCSelectorFields_t *fields = sf_selector_fields(sel);
-    return fields != NULL ? fields->types : NULL;
+    return fields != nullptr ? fields->types : nullptr;
 }
 
 static inline SEL _Nullable sf_method_selector_ptr(SFObjCMethod_t *_Nullable method)
 {
-    return method != NULL ? method->selector : NULL;
+    return method != nullptr ? method->selector : nullptr;
 }
 
 static inline const char *_Nullable sf_method_types(SFObjCMethod_t *_Nullable method)
 {
-    return method != NULL ? method->types : NULL;
+    return method != nullptr ? method->types : nullptr;
 }
 
 static inline void sf_method_assign_selector(SFObjCMethod_t *_Nonnull method, SEL _Nullable selector,
                                              const char *_Nullable types)
 {
     method->selector = selector;
-    method->types = (types != NULL) ? types : sf_selector_types(selector);
+    method->types = (types != nullptr) ? types : sf_selector_types(selector);
 }
 
 typedef uint32_t SFObjRefcount_t;
@@ -233,7 +235,7 @@ typedef struct SFObjHeader {
 
 static inline uint32_t sf_header_aux_flags(SFObjHeader_t *_Nullable hdr)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return 0U;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
@@ -245,7 +247,7 @@ static inline uint32_t sf_header_aux_flags(SFObjHeader_t *_Nullable hdr)
 
 static inline void sf_header_set_aux_flags(SFObjHeader_t *_Nullable hdr, uint32_t aux_flags)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
@@ -273,7 +275,7 @@ static inline int sf_header_has_aux_flag(SFObjHeader_t *_Nullable hdr, uint32_t 
 
 static inline void sf_header_set_live_cookie(SFObjHeader_t *_Nullable hdr)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return;
     }
     hdr->flags =
@@ -282,7 +284,7 @@ static inline void sf_header_set_live_cookie(SFObjHeader_t *_Nullable hdr)
 
 static inline void sf_header_clear_live_cookie(SFObjHeader_t *_Nullable hdr)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return;
     }
     hdr->flags &= ~SF_OBJ_COOKIE_MASK;
@@ -290,13 +292,13 @@ static inline void sf_header_clear_live_cookie(SFObjHeader_t *_Nullable hdr)
 
 static inline int sf_header_has_live_cookie(SFObjHeader_t *_Nullable hdr)
 {
-    return hdr != NULL and
+    return hdr != nullptr and
            ((hdr->flags & SF_OBJ_COOKIE_MASK) >> SF_OBJ_COOKIE_SHIFT) == (uint32_t)SF_OBJ_HEADER_COOKIE_LIVE;
 }
 
 static inline uint32_t sf_header_class_flags(SFObjHeader_t *_Nullable hdr)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return 0U;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
@@ -308,7 +310,7 @@ static inline uint32_t sf_header_class_flags(SFObjHeader_t *_Nullable hdr)
 
 static inline void sf_header_set_class_flags(SFObjHeader_t *_Nullable hdr, uint32_t class_flags)
 {
-    if (hdr == NULL) {
+    if (hdr == nullptr) {
         return;
     }
 #if SF_RUNTIME_COMPACT_HEADERS

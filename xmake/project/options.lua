@@ -58,10 +58,10 @@ option("runtime-validation")
 option_end()
 
 option("runtime-tagged-pointers")
-    set_default(false)
+    set_default(true)
     set_showmenu(true)
     set_category("runtime/core")
-    set_description("Enable tagged pointer runtime support for user-defined classes")
+    set_description("Enable tagged pointer runtime support for user-defined classes and GNUstep NSString/NSNumber literals")
 option_end()
 
 option("analysis-symbols")

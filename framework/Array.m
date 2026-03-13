@@ -1,35 +1,136 @@
 #include "Array.h"
-#include <string.h>
+#include "runtime/c2x-compat.h"
+
+#include <iso646.h>
+#include <stdint.h>
+
+#if SF_RUNTIME_EXCEPTIONS
+@interface InvalidArgumentException (SmallFWInternal)
++ (instancetype)invalidArgumentException;
+@end
+#endif
+
+static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
+{
+    for (size_t i = 0U; i < sizeof(word); ++i) {
+        unsigned char byte = (unsigned char)((word >> (i * 8U)) & (uintptr_t)0xffU);
+        hash ^= (uint64_t)byte;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
 
 @implementation Array
 
-- (instancetype)initWithItems: (const id [])val count: (size_t)count
+@synthesize count = _count;
+
++ (instancetype)arrayWithObjects: (const id _Nonnull * _Nullable)objects count: (size_t)count
 {
-    if ((self = [super init])) {
-        _count = count;
-        id *tmp = [self allocateMemoryWithSize: sizeof(id) * count alignment: _Alignof(id)];
-        if (tmp == NULL)
-            return NULL;
+    Array *array = [[self allocWithAllocator: nullptr] initWithObjects: objects count: count];
+    return [array autorelease];
+}
 
-        for (size_t i = 0; i < count; i++) {
-            tmp[i] = [val[i] retain];
-        }
-
-        _items = (id *)tmp;
+- (instancetype)initWithObjects: (const id _Nonnull * _Nullable)objects count: (size_t)count
+{
+    if (count > 0U and objects == nullptr) {
+        [self release];
+#if SF_RUNTIME_EXCEPTIONS
+        @throw [InvalidArgumentException invalidArgumentException];
+#endif
+        return nullptr;
     }
+
+    self = [super init];
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    _count = count;
+    if (count == 0U) {
+        _items = nullptr;
+        return self;
+    }
+
+    id *tmp = (id *)[self allocateMemoryWithSize: sizeof(id) * count alignment: alignof(id *)];
+    if (tmp == nullptr) {
+        [self release];
+        return nullptr;
+    }
+
+    for (size_t i = 0U; i < count; ++i) {
+        Object *item = (Object *)objects[i];
+        if (item != nullptr) {
+            tmp[i] = [item retain];
+        } else {
+            tmp[i] = nullptr;
+        }
+    }
+
+    _items = tmp;
     return self;
 }
 
-- (id)objectAtIndexedSubscript:(size_t)idx
+- (id)objectAtIndex: (size_t)idx
 {
+    if (idx >= _count or _items == nullptr) {
+        return nullptr;
+    }
     return _items[idx];
+}
+
+- (id)objectAtIndexedSubscript: (size_t)idx
+{
+    return [self objectAtIndex: idx];
+}
+
+- (int)isEqual: (Object *)other
+{
+    if ((id)self == (id)other) {
+        return 1;
+    }
+    if ([other isKindOfClass: Array.class] == 0) {
+        return 0;
+    }
+
+    Array<Object *> *rhs = (Array *)other;
+    if (_count != rhs.count) {
+        return 0;
+    }
+
+    for (size_t i = 0U; i < _count; ++i) {
+        Object *lhs_obj = _items[i];
+        Object *rhs_obj = rhs[i];
+        if (lhs_obj == rhs_obj) {
+            continue;
+        }
+        if (lhs_obj == nullptr or rhs_obj == nullptr or [lhs_obj isEqual: rhs_obj] == 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+- (unsigned long)hash
+{
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = sf_array_hash_word(hash, (uintptr_t)_count);
+    for (size_t i = 0U; i < _count; ++i) {
+        hash = sf_array_hash_word(hash, (uintptr_t)[(Object *)_items[i] hash]);
+    }
+    return (unsigned long)hash;
 }
 
 - (void)dealloc
 {
-    for (size_t i = 0; i < _count; i++) {
-        if (_items[i]) {
-            [_items[i] release];
+    for (size_t i = 0U; i < _count; ++i) {
+        if (_items[i] != nullptr) {
+            [(Object *)_items[i] release];
+        }
+    }
+    if (_items != nullptr) {
+        SFAllocator_t *allocator = self.allocator;
+        if (allocator != nullptr) {
+            allocator->free(allocator->ctx, _items, sizeof(id) * _count, alignof(id));
         }
     }
     [super dealloc];

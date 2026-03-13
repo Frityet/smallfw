@@ -1,4 +1,5 @@
 #include "runtime/sf_allocator.h"
+#include "runtime/c2x-compat.h"
 
 #include <iso646.h>
 #include <string.h>
@@ -23,7 +24,7 @@ enum {
     SF_FAST_ALLOC_REFILL_BLOCKS = 64U,
 };
 
-static __thread SFFreeNode_t *g_fast_alloc_bins[SF_FAST_ALLOC_BINS];
+static thread_local SFFreeNode_t *g_fast_alloc_bins[SF_FAST_ALLOC_BINS];
 
 int sf_default_allocator_returns_zeroed(size_t size, size_t align);
 
@@ -57,21 +58,21 @@ static int refill_fast_bin(size_t bin)
     size_t page_size = runtime_page_size();
     size_t slab_bytes = align_up(block_size * SF_FAST_ALLOC_REFILL_BLOCKS, page_size);
     size_t block_count = slab_bytes / block_size;
-    unsigned char *slab = NULL;
+    unsigned char *slab = nullptr;
 
     if (block_count == 0U) {
         return 0;
     }
 
 #if defined(__linux__)
-    slab = (unsigned char *)mmap(NULL, slab_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    slab = (unsigned char *)mmap(nullptr, slab_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (slab == MAP_FAILED) {
-        slab = NULL;
+        slab = nullptr;
     }
 #else
     slab = calloc(1U, slab_bytes);
 #endif
-    if (slab == NULL) {
+    if (slab == nullptr) {
         return 0;
     }
 
@@ -105,30 +106,30 @@ static size_t fast_bin_index(size_t size)
 static void *default_alloc(void *ctx, size_t size, size_t align)
 {
 #if !defined(_WIN32)
-    void *ptr = NULL;
+    void *ptr = nullptr;
 #endif
     (void)ctx;
     if (align <= sizeof(void *)) {
         size_t bin = fast_bin_index(size);
-        if (bin != (size_t)-1 and g_fast_alloc_bins[bin] == NULL) {
+        if (bin != (size_t)-1 and g_fast_alloc_bins[bin] == nullptr) {
             (void)refill_fast_bin(bin);
         }
-        if (bin != (size_t)-1 and g_fast_alloc_bins[bin] != NULL) {
+        if (bin != (size_t)-1 and g_fast_alloc_bins[bin] != nullptr) {
             SFFreeNode_t *node = g_fast_alloc_bins[bin];
             g_fast_alloc_bins[bin] = node->next;
-            node->next = NULL;
+            node->next = nullptr;
             return node;
         }
         return calloc(1U, size);
     }
     if (not is_valid_alignment(align)) {
-        return NULL;
+        return nullptr;
     }
 #if defined(_WIN32)
     return _aligned_malloc(size, align);
 #else
     if (posix_memalign(&ptr, align, size) != 0) {
-        return NULL;
+        return nullptr;
     }
     return ptr;
 #endif
@@ -137,7 +138,7 @@ static void *default_alloc(void *ctx, size_t size, size_t align)
 static void default_free(void *ctx, void *ptr, size_t size, size_t align)
 {
     (void)ctx;
-    if (ptr == NULL) {
+    if (ptr == nullptr) {
         return;
     }
     if (align <= sizeof(void *)) {
@@ -169,7 +170,7 @@ SFAllocator_t *sf_default_allocator(void)
     static SFAllocator_t allocator = {
         .alloc = default_alloc,
         .free = default_free,
-        .ctx = NULL,
+        .ctx = nullptr,
     };
     return &allocator;
 }

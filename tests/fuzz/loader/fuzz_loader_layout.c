@@ -33,10 +33,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     FuzzClassBundle child;
     SFObjCClass_t *classes[2];
     unsigned int ivar_count = 0;
-    Ivar *ivars = NULL;
+    Ivar *ivars = nullptr;
     size_t count = size < 8U ? size : 8U;
 
-    if (data == NULL) {
+    if (data == nullptr) {
         return 0;
     }
     if (count == 0U) {
@@ -67,7 +67,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         parent.offsets[i] = (int32_t)(data[i % count] & 31U);
         parent.ivars.ivars[i].name = k_ivar_names[i];
         parent.ivars.ivars[i].type = fuzz_type_for_byte(data[i % count]);
-        parent.ivars.ivars[i].offset = ((data[i % count] & 1U) == 0U) ? &parent.offsets[i] : NULL;
+        parent.ivars.ivars[i].offset = ((data[i % count] & 1U) == 0U) ? &parent.offsets[i] : nullptr;
         parent.ivars.ivars[i].size = (uint32_t)((data[i % count] & 15U) + 1U);
     }
     for (uintptr_t i = 0; i < child.ivars.count; ++i) {
@@ -75,7 +75,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         child.offsets[i] = (int32_t)(data[index] & 63U);
         child.ivars.ivars[i].name = k_ivar_names[i + 2U];
         child.ivars.ivars[i].type = fuzz_type_for_byte(data[index]);
-        child.ivars.ivars[i].offset = ((data[index] & 1U) == 0U) ? &child.offsets[i] : NULL;
+        child.ivars.ivars[i].offset = ((data[index] & 1U) == 0U) ? &child.offsets[i] : nullptr;
         child.ivars.ivars[i].size = (uint32_t)((data[index] & 15U) + 1U);
     }
 

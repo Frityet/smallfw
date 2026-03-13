@@ -9,17 +9,17 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    char *types = NULL;
+    char *types = nullptr;
     char codes[32];
     int unsupported = 0;
-    struct sf_objc_selector sel = {"fuzzDispatch", NULL};
+    struct sf_objc_selector sel = {"fuzzDispatch", nullptr};
 
-    if (data == NULL) {
+    if (data == nullptr) {
         return 0;
     }
 
     types = (char *)malloc(size + 1U);
-    if (types == NULL) {
+    if (types == nullptr) {
         return 0;
     }
     memcpy(types, data, size);

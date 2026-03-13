@@ -7,7 +7,7 @@
 
 #if SF_RUNTIME_EXCEPTIONS
 @interface AllocationFailedException (SmallFWInternal)
-+ (void)raiseForAllocationFailure __attribute__((noreturn));
++ (instancetype)allocationFailedException;
 @end
 #endif
 
@@ -15,16 +15,31 @@
 
 @end
 
+static int sf_class_is_or_inherits_from(Class cls, Class expected)
+{
+    while (cls != nullptr) {
+        if (cls == expected) {
+            return 1;
+        }
+        Class super_cls = class_getSuperclass(cls);
+        if (super_cls == cls) {
+            break;
+        }
+        cls = super_cls;
+    }
+    return 0;
+}
+
 @implementation Object
 
 + (instancetype)allocWithAllocator:(SFAllocator_t *)allocator
 {
     id obj = sf_alloc_object((Class)self, allocator);
 #if SF_RUNTIME_EXCEPTIONS
-    if (obj == NULL) {
-        [AllocationFailedException raiseForAllocationFailure];
+    if (obj == nullptr) {
+        @throw [AllocationFailedException allocationFailedException];
     }
-    __builtin_assume(obj != NULL);
+    __builtin_assume(obj != nullptr);
 #endif
     return (id)obj;
 }
@@ -32,11 +47,11 @@
 + (instancetype)allocInPlace:(void *)storage size:(size_t)size
 {
     size_t required = sizeof(SFObjHeader_t) + sf_class_instance_size_fast((Class)self);
-    SFObjHeader_t *hdr = NULL;
-    id obj = NULL;
+    SFObjHeader_t *hdr = nullptr;
+    id obj = nullptr;
 
-    if (storage == NULL or size < required or required > UINT32_MAX) {
-        return NULL;
+    if (storage == nullptr or size < required or required > UINT32_MAX) {
+        return nullptr;
     }
     memset(storage, 0, size);
     hdr = (SFObjHeader_t *)storage;
@@ -51,7 +66,7 @@
     sf_header_set_aux_flags(hdr, 0U);
     sf_header_set_live_cookie(hdr);
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->cold = NULL;
+    hdr->cold = nullptr;
 #else
     hdr->allocator = sf_default_allocator();
 #endif
@@ -61,15 +76,25 @@
     return (id)obj;
 }
 
++ (Class)class
+{
+    return (Class)self;
+}
+
++ (Class)superclass
+{
+    return class_getSuperclass((Class)self);
+}
+
 - (SFAllocator_t *)allocator
 {
-    SFObjHeader_t *hdr = NULL;
-    SFAllocator_t *allocator = NULL;
+    SFObjHeader_t *hdr = nullptr;
+    SFAllocator_t *allocator = nullptr;
     if (not sf_object_is_heap(self))
         return sf_default_allocator();
     hdr = sf_header_from_object(self);
     allocator = sf_header_allocator(hdr);
-    if (allocator == NULL)
+    if (allocator == nullptr)
         return sf_default_allocator();
     return allocator;
 }
@@ -78,30 +103,30 @@
 {
     id obj = sf_alloc_object_with_parent((Class)self, parent);
 #if SF_RUNTIME_EXCEPTIONS
-    if (obj == NULL) {
-        [AllocationFailedException raiseForAllocationFailure];
+    if (obj == nullptr) {
+        @throw [AllocationFailedException allocationFailedException];
     }
-    __builtin_assume(obj != NULL);
+    __builtin_assume(obj != nullptr);
 #endif
     return (id)obj;
 }
 
 - (Object *)parent
 {
-    SFObjHeader_t *hdr = NULL;
-    id parent = NULL;
-    SFObjHeader_t *parent_hdr = NULL;
+    SFObjHeader_t *hdr = nullptr;
+    id parent = nullptr;
+    SFObjHeader_t *parent_hdr = nullptr;
     if (not sf_object_is_heap(self))
-        return NULL;
+        return nullptr;
     hdr = sf_header_from_object(self);
-    if (hdr == NULL)
-        return NULL;
+    if (hdr == nullptr)
+        return nullptr;
     parent = sf_header_parent(hdr);
-    if (parent == NULL)
-        return NULL;
+    if (parent == nullptr)
+        return nullptr;
     parent_hdr = sf_header_from_object(parent);
-    if (parent_hdr == NULL or parent_hdr->state != SF_OBJ_STATE_LIVE)
-        return NULL;
+    if (parent_hdr == nullptr or parent_hdr->state != SF_OBJ_STATE_LIVE)
+        return nullptr;
     return (Object *)parent;
 }
 
@@ -127,6 +152,31 @@
 - (instancetype)autorelease
 {
     return (id)sf_autorelease(self);
+}
+
+- (Class)class
+{
+    Class cls = object_getClass(self);
+    __builtin_assume(cls != nullptr);
+    return cls;
+}
+
+- (Class)superclass
+{
+    return class_getSuperclass(self.class);
+}
+
+- (int)isKindOfClass:(Class)cls
+{
+    if (cls == nullptr) {
+        return 0;
+    }
+    return sf_class_is_or_inherits_from(self.class, cls);
+}
+
+- (int)isMemberOfClass:(Class)cls
+{
+    return cls != nullptr and self.class == cls;
 }
 
 - (int)isEqual:(Object *)other
@@ -175,9 +225,16 @@
 }
 #endif
 
-- (void *_Nullable)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
+- (void *)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
 {
-    return self.allocator->alloc(self.allocator->ctx, size, alignment);
+    void *ptr = self.allocator->alloc(self.allocator->ctx, size, alignment);
+#if SF_RUNTIME_EXCEPTIONS
+    if (ptr == nullptr) {
+        @throw [AllocationFailedException allocationFailedException];
+    }
+    __builtin_assume(ptr != nullptr);
+#endif
+    return ptr;
 }
 
 @end

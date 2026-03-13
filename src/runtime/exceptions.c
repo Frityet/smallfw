@@ -46,9 +46,9 @@ typedef struct SFBacktraceCapture {
 #endif
 
 #if not defined(_WIN32)
-static __thread SFException_t *g_catch_stack[32];
-static __thread size_t g_catch_stack_size;
-static __thread SFException_t *g_gnu_current_exception;
+static thread_local SFException_t *g_catch_stack[32];
+static thread_local size_t g_catch_stack_size;
+static thread_local SFException_t *g_gnu_current_exception;
 #endif
 static SFRuntimeMutex_t g_exception_metadata_lock = SF_RUNTIME_MUTEX_INITIALIZER;
 static SFExceptionMetadata_t *g_exception_metadata;
@@ -57,15 +57,15 @@ static SFException_t *g_exception_active;
 
 static SFException_t *sf_exception_from_unwind(struct _Unwind_Exception *exception_object)
 {
-    if (exception_object == NULL or exception_object->exception_class != SF_EXCEPTION_CLASS) {
-        return NULL;
+    if (exception_object == nullptr or exception_object->exception_class != SF_EXCEPTION_CLASS) {
+        return nullptr;
     }
     return (SFException_t *)exception_object;
 }
 
 static void sf_exception_register_active(SFException_t *exc)
 {
-    if (exc == NULL) {
+    if (exc == nullptr) {
         return;
     }
 
@@ -77,32 +77,32 @@ static void sf_exception_register_active(SFException_t *exc)
 
 static void sf_exception_unregister_active(SFException_t *exc)
 {
-    if (exc == NULL) {
+    if (exc == nullptr) {
         return;
     }
 
     sf_runtime_mutex_lock(&g_exception_active_lock);
     SFException_t **slot = &g_exception_active;
-    while (*slot != NULL and *slot != exc) {
+    while (*slot != nullptr and *slot != exc) {
         slot = &(*slot)->next_active;
     }
     if (*slot == exc) {
         *slot = exc->next_active;
-        exc->next_active = NULL;
+        exc->next_active = nullptr;
     }
     sf_runtime_mutex_unlock(&g_exception_active_lock);
 }
 
 static SFException_t *sf_exception_from_object(id obj)
 {
-    SFException_t *result = NULL;
+    SFException_t *result = nullptr;
 
-    if (obj == NULL) {
-        return NULL;
+    if (obj == nullptr) {
+        return nullptr;
     }
 
     sf_runtime_mutex_lock(&g_exception_active_lock);
-    for (SFException_t *it = g_exception_active; it != NULL; it = it->next_active) {
+    for (SFException_t *it = g_exception_active; it != nullptr; it = it->next_active) {
         if (it->object == obj) {
             result = it;
             break;
@@ -114,14 +114,14 @@ static SFException_t *sf_exception_from_object(id obj)
 
 static SFException_t *sf_exception_resolve(void *exception_or_object)
 {
-    SFException_t *exc = NULL;
+    SFException_t *exc = nullptr;
 
-    if (exception_or_object == NULL) {
-        return NULL;
+    if (exception_or_object == nullptr) {
+        return nullptr;
     }
 
     exc = sf_exception_from_unwind((struct _Unwind_Exception *)exception_or_object);
-    if (exc != NULL) {
+    if (exc != nullptr) {
         return exc;
     }
     return sf_exception_from_object((id)exception_or_object);
@@ -152,7 +152,7 @@ static size_t capture_backtrace(const void **frames, size_t limit)
     if (limit > SF_EXCEPTION_BACKTRACE_LIMIT) {
         limit = SF_EXCEPTION_BACKTRACE_LIMIT;
     }
-    count = CaptureStackBackTrace(2, (ULONG)limit, captured, NULL);
+    count = CaptureStackBackTrace(2, (ULONG)limit, captured, nullptr);
     for (USHORT i = 0; i < count; ++i) {
         frames[i] = captured[i];
     }
@@ -172,16 +172,16 @@ static size_t capture_backtrace(const void **frames, size_t limit)
 static SFExceptionMetadata_t **find_exception_metadata_slot(id obj)
 {
     SFExceptionMetadata_t **slot = &g_exception_metadata;
-    while (*slot != NULL and (*slot)->object != obj)
+    while (*slot != nullptr and (*slot)->object != obj)
         slot = &(*slot)->next;
     return slot;
 }
 
 void sf_exception_capture_metadata(id obj)
 {
-    SFObjHeader_t *hdr = NULL;
+    SFObjHeader_t *hdr = nullptr;
 
-    if (obj == NULL)
+    if (obj == nullptr)
         return;
 
     const void *frames[SF_EXCEPTION_BACKTRACE_LIMIT];
@@ -190,14 +190,14 @@ void sf_exception_capture_metadata(id obj)
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t **slot = find_exception_metadata_slot(obj);
     SFExceptionMetadata_t *meta = *slot;
-    if (meta == NULL) {
+    if (meta == nullptr) {
         meta = (SFExceptionMetadata_t *)sf_runtime_test_calloc(1, sizeof(*meta));
-        if (meta != NULL) {
+        if (meta != nullptr) {
             meta->object = obj;
             *slot = meta;
         }
     }
-    if (meta != NULL) {
+    if (meta != nullptr) {
         meta->count = count;
         if (count > 0)
             memcpy((void *)meta->frames, (const void *)frames, count * sizeof(frames[0]));
@@ -205,7 +205,7 @@ void sf_exception_capture_metadata(id obj)
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
 
     hdr = sf_header_from_object(obj);
-    if (hdr != NULL) {
+    if (hdr != nullptr) {
         sf_header_or_aux_flags(hdr, SF_OBJ_AUX_FLAG_HAS_EXCEPTION_METADATA);
     }
 }
@@ -213,12 +213,12 @@ void sf_exception_capture_metadata(id obj)
 size_t sf_exception_backtrace_count(id obj)
 {
     size_t count = 0;
-    if (obj == NULL)
+    if (obj == nullptr)
         return 0;
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t *meta = *find_exception_metadata_slot(obj);
-    if (meta != NULL)
+    if (meta != nullptr)
         count = meta->count;
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     return count;
@@ -226,13 +226,13 @@ size_t sf_exception_backtrace_count(id obj)
 
 const void *sf_exception_backtrace_frame(id obj, size_t index)
 {
-    const void *frame = NULL;
-    if (obj == NULL)
-        return NULL;
+    const void *frame = nullptr;
+    if (obj == nullptr)
+        return nullptr;
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t *meta = *find_exception_metadata_slot(obj);
-    if (meta != NULL and index < meta->count)
+    if (meta != nullptr and index < meta->count)
         frame = meta->frames[index];
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     return frame;
@@ -240,20 +240,20 @@ const void *sf_exception_backtrace_frame(id obj, size_t index)
 
 void sf_exception_clear_metadata(id obj)
 {
-    SFExceptionMetadata_t *meta = NULL;
-    SFObjHeader_t *hdr = NULL;
-    if (obj == NULL)
+    SFExceptionMetadata_t *meta = nullptr;
+    SFObjHeader_t *hdr = nullptr;
+    if (obj == nullptr)
         return;
 
     hdr = sf_header_from_object(obj);
-    if (hdr != NULL) {
+    if (hdr != nullptr) {
         sf_header_clear_aux_flags(hdr, SF_OBJ_AUX_FLAG_HAS_EXCEPTION_METADATA);
     }
 
     sf_runtime_mutex_lock(&g_exception_metadata_lock);
     SFExceptionMetadata_t **slot = find_exception_metadata_slot(obj);
     meta = *slot;
-    if (meta != NULL)
+    if (meta != nullptr)
         *slot = meta->next;
     sf_runtime_mutex_unlock(&g_exception_metadata_lock);
     free(meta);
@@ -266,9 +266,9 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
     SFException_t *exc = (SFException_t *)exception_object;
     sf_exception_unregister_active(exc);
     if (g_gnu_current_exception == exc) {
-        g_gnu_current_exception = NULL;
+        g_gnu_current_exception = nullptr;
     }
-    if (exc->object != NULL and SF_RUNTIME_OBJC_FRAMEWORK_OBJFW == 0) {
+    if (exc->object != nullptr and SF_RUNTIME_OBJC_FRAMEWORK_OBJFW == 0) {
         objc_release(exc->object);
     }
     free(exc);
@@ -276,22 +276,22 @@ static void sf_exception_cleanup(_Unwind_Reason_Code code, struct _Unwind_Except
 
 void objc_exception_throw(id obj)
 {
-    SFException_t *rethrow_exc = NULL;
-    if (g_gnu_current_exception != NULL and obj != NULL) {
+    SFException_t *rethrow_exc = nullptr;
+    if (g_gnu_current_exception != nullptr and obj != nullptr) {
         SFException_t *active_exc = sf_exception_from_object(obj);
         if (active_exc == g_gnu_current_exception and g_gnu_current_exception->object == obj and
             g_gnu_current_exception->catch_depth > 0U) {
             rethrow_exc = g_gnu_current_exception;
         }
     }
-    if (rethrow_exc != NULL) {
+    if (rethrow_exc != nullptr) {
         rethrow_exc->reserved = 1U;
         _Unwind_Resume_or_Rethrow(&rethrow_exc->unwind);
         abort();
     }
 
     SFException_t *exc = (SFException_t *)sf_runtime_test_calloc(1, sizeof(SFException_t));
-    if (exc == NULL) {
+    if (exc == nullptr) {
         abort();
     }
     exc->object = (SF_RUNTIME_OBJC_FRAMEWORK_OBJFW != 0) ? obj : objc_retain(obj);
@@ -308,7 +308,7 @@ void objc_exception_throw(id obj)
 id objc_begin_catch(void *exception)
 {
     SFException_t *exc = sf_exception_resolve(exception);
-    if (exc == NULL) {
+    if (exc == nullptr) {
         return (id)exception;
     }
     exc->catch_depth += 1;
@@ -327,7 +327,7 @@ void objc_end_catch(void)
     }
     SFException_t *exc = g_catch_stack[--g_catch_stack_size];
     if (g_catch_stack_size == 0 or g_catch_stack[g_catch_stack_size - 1U] != exc) {
-        g_gnu_current_exception = (g_catch_stack_size > 0) ? g_catch_stack[g_catch_stack_size - 1U] : NULL;
+        g_gnu_current_exception = (g_catch_stack_size > 0) ? g_catch_stack[g_catch_stack_size - 1U] : nullptr;
     }
     if (exc->catch_depth > 0) {
         exc->catch_depth -= 1;
@@ -344,13 +344,13 @@ void objc_end_catch(void)
 void objc_exception_rethrow(void *exception)
 {
     SFException_t *exc = sf_exception_resolve(exception);
-    if (exc == NULL and g_catch_stack_size > 0) {
+    if (exc == nullptr and g_catch_stack_size > 0) {
         exc = g_catch_stack[g_catch_stack_size - 1];
     }
-    if (exc == NULL) {
+    if (exc == nullptr) {
         exc = g_gnu_current_exception;
     }
-    if (exc != NULL) {
+    if (exc != nullptr) {
         exc->reserved = 1U;
         _Unwind_Resume_or_Rethrow(&exc->unwind);
     }
@@ -522,11 +522,11 @@ static size_t encoding_size(uint8_t encoding)
 
 static int class_name_matches(id object, const char *wanted)
 {
-    if (object == NULL or wanted == NULL)
+    if (object == nullptr or wanted == nullptr)
         return 0;
 
     SFObjCClass_t *cls = (SFObjCClass_t *)sf_object_class(object);
-    while (cls != NULL) {
+    while (cls != nullptr) {
         if (cls->name and strcmp(cls->name, wanted) == 0) {
             return 1;
         }
@@ -537,12 +537,12 @@ static int class_name_matches(id object, const char *wanted)
 
 static int exception_matches_type(struct _Unwind_Exception *exception_object, const char *type_name)
 {
-    if (exception_object == NULL or type_name == NULL) {
+    if (exception_object == nullptr or type_name == nullptr) {
         return 0;
     }
 
     SFException_t *exc = sf_exception_resolve(exception_object);
-    if (exc == NULL) {
+    if (exc == nullptr) {
         return 0;
     }
 
@@ -563,7 +563,7 @@ typedef struct SFLandingInfo {
 static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uintptr_t ip,
                                  struct _Unwind_Exception *exception_object, SFLandingInfo_t *out)
 {
-    if (lsda == NULL) {
+    if (lsda == nullptr) {
         return 0;
     }
 
@@ -581,7 +581,7 @@ static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uint
     }
 
     uint8_t ttype_encoding = *p++;
-    const uint8_t *class_info = NULL;
+    const uint8_t *class_info = nullptr;
     if (ttype_encoding != DW_EH_PE_OMIT) {
         uint64_t ttype_offset = read_uleb(&p);
         class_info = p + ttype_offset;
@@ -617,13 +617,13 @@ static int parse_lsda_for_ip_raw(const uint8_t *lsda, uintptr_t func_start, uint
         }
 
         const uint8_t *record = action_table + cs_action - 1;
-        while (record != NULL) {
+        while (record != nullptr) {
             const uint8_t *cursor = record;
             int64_t tti = read_sleb(&cursor);
             const uint8_t *next_field = cursor;
             int64_t next_offset = read_sleb(&cursor);
 
-            if (tti > 0 and class_info != NULL) {
+            if (tti > 0 and class_info != nullptr) {
                 size_t entry_size = encoding_size(ttype_encoding);
                 const uint8_t *type_entry = class_info - (size_t)tti * entry_size;
                 const uint8_t *type_cursor = type_entry;
@@ -741,7 +741,7 @@ static _Unwind_Reason_Code sf_objc_personality_v0(int version, _Unwind_Action ac
 
     SFException_t *exc = sf_exception_resolve(exception_object);
     uintptr_t exception_value = (uintptr_t)exception_object;
-    if (returns_object and exc != NULL) {
+    if (returns_object and exc != nullptr) {
         g_gnu_current_exception = exc;
         exception_value = (uintptr_t)exc->object;
     }
@@ -807,7 +807,7 @@ const void *sf_exception_backtrace_frame(id obj, size_t index)
 {
     (void)obj;
     (void)index;
-    return NULL;
+    return nullptr;
 }
 
 void sf_exception_clear_metadata(id obj)

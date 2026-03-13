@@ -51,6 +51,9 @@ function smallfw.add_common_runtime_flags()
     if smallfw.objc_runtime_is_objfw() and not is_plat("linux") then
         raise("objc-runtime=objfw-1.5 is only supported on linux")
     end
+    if is_plat("linux") then
+        add_defines("_POSIX_C_SOURCE=200809L", {force = true})
+    end
 
     add_objc_flags(
         "-Wpedantic",
@@ -70,6 +73,9 @@ function smallfw.add_common_runtime_flags()
         "-Wnullability",
         "-Wno-c++98-compat",
         "-Wno-c++98-compat-pedantic",
+        "-Wno-c23-extensions",
+        "-Wno-c2x-extensions",
+        "-Wno-pre-c11-compat",
         "-Wno-pre-c23-compat",
         "-Wno-pre-c2x-compat",
         "-Wno-nullability-extension",
@@ -84,6 +90,7 @@ function smallfw.add_common_runtime_flags()
         "-Wno-direct-ivar-access",
         "-Wno-objc-interface-ivars",
         "-Wno-unsafe-buffer-usage",
+        "-Wno-keyword-macro",
         "-Wno-c++-keyword"
     )
     if is_mode("release") then

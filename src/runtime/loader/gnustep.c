@@ -23,7 +23,7 @@ void sf_loader_prepare_registered_classes_unlocked(void)
 void __objc_load(void *init_ptr)
 {
     SFObjCInit_t *init = (SFObjCInit_t *)init_ptr;
-    if (init == NULL) {
+    if (init == nullptr) {
         return;
     }
 

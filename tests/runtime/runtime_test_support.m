@@ -26,7 +26,7 @@ extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_f
 #if not defined(_WIN32)
 static void sf_test_flush_profile_and_reraise(int sig)
 {
-    if (sf_test_llvm_profile_write_file != NULL) {
+    if (sf_test_llvm_profile_write_file != nullptr) {
         (void)sf_test_llvm_profile_write_file();
     }
     signal(sig, SIG_DFL);
@@ -37,7 +37,7 @@ static void sf_test_flush_profile_and_reraise(int sig)
 static void *sf_test_aligned_alloc(size_t size, size_t align)
 {
 #if not defined(_WIN32)
-    void *ptr = NULL;
+    void *ptr = nullptr;
 #endif
     if (align <= sizeof(void *)) {
         return malloc(size);
@@ -46,7 +46,7 @@ static void *sf_test_aligned_alloc(size_t size, size_t align)
     return _aligned_malloc(size, align);
 #else
     if (posix_memalign(&ptr, align, size) != 0) {
-        return NULL;
+        return nullptr;
     }
     return ptr;
 #endif
@@ -291,8 +291,8 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 @implementation ForwardDispatchProxy
 - (id)forwardingTargetForSelector:(SEL)selector
 {
-    static SEL forwarded_value_sel = NULL;
-    if (forwarded_value_sel == NULL) {
+    static SEL forwarded_value_sel = nullptr;
+    if (forwarded_value_sel == nullptr) {
         forwarded_value_sel = sel_registerName("forwardedValue:");
     }
     if (sf_selector_equal(selector, forwarded_value_sel)) {
@@ -303,8 +303,8 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 
 + (id)forwardingTargetForSelector:(SEL)selector
 {
-    static SEL class_forwarded_value_sel = NULL;
-    if (class_forwarded_value_sel == NULL) {
+    static SEL class_forwarded_value_sel = nullptr;
+    if (class_forwarded_value_sel == nullptr) {
         class_forwarded_value_sel = sel_registerName("classForwardedValue:");
     }
     if (sf_selector_equal(selector, class_forwarded_value_sel)) {
@@ -329,7 +329,7 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
 {
     uintptr_t payload = 0U;
-    if (bytes == NULL or length > 6U) {
+    if (bytes == nullptr or length > 6U) {
         return UINTPTR_MAX;
     }
 
@@ -353,12 +353,12 @@ static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
 
 - (uintptr_t)value
 {
-    return [self taggedPointerPayload];
+    return self.taggedPointerPayload;
 }
 
 - (TaggedNumberProbe *)plus:(uintptr_t)delta
 {
-    return (TaggedNumberProbe *)sf_make_tagged_pointer(sf_object_class(self), [self taggedPointerPayload] + delta);
+    return (TaggedNumberProbe *)sf_make_tagged_pointer(sf_object_class(self), self.taggedPointerPayload + delta);
 }
 @end
 
@@ -379,13 +379,13 @@ static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
 
 - (unsigned long)length
 {
-    return (unsigned long)([self taggedPointerPayload] & (uintptr_t)7U);
+    return (unsigned long)(self.taggedPointerPayload & (uintptr_t)7U);
 }
 
 - (unsigned int)characterAtIndex:(unsigned long)index
 {
-    uintptr_t payload = [self taggedPointerPayload];
-    if (index >= [self length]) {
+    uintptr_t payload = self.taggedPointerPayload;
+    if (index >= self.length) {
         return 0U;
     }
     return (unsigned int)((payload >> (3U + ((uintptr_t)index * 8U))) & (uintptr_t)0xffU);
@@ -443,7 +443,7 @@ CounterObject *sf_test_factory_object(void)
 void *sf_test_counting_alloc(void *ctx, size_t size, size_t align)
 {
     SFTestAllocatorCtx *state = (SFTestAllocatorCtx *)ctx;
-    void *ptr = NULL;
+    void *ptr = nullptr;
 
     (void)__atomic_fetch_add(&state->alloc_calls, 1, __ATOMIC_RELAXED);
     state->last_size = size;
@@ -451,7 +451,7 @@ void *sf_test_counting_alloc(void *ctx, size_t size, size_t align)
 
     ptr = sf_test_aligned_alloc(size, align);
 
-    if (ptr != NULL) {
+    if (ptr != nullptr) {
         (void)__atomic_fetch_add(&state->active_blocks, (size_t)1, __ATOMIC_RELAXED);
     }
     return ptr;
@@ -462,7 +462,7 @@ void sf_test_counting_free(void *ctx, void *ptr, size_t size, size_t align)
     SFTestAllocatorCtx *state = (SFTestAllocatorCtx *)ctx;
     (void)size;
     (void)align;
-    if (ptr != NULL) {
+    if (ptr != nullptr) {
         (void)__atomic_fetch_add(&state->free_calls, 1, __ATOMIC_RELAXED);
         (void)__atomic_fetch_sub(&state->active_blocks, (size_t)1, __ATOMIC_RELAXED);
     }
@@ -533,7 +533,7 @@ int sf_test_expect_signal_case(const char *case_name, int expected_signal)
     DWORD exit_code = 0;
 
     (void)expected_signal;
-    if (case_name == NULL or GetModuleFileNameA(NULL, exe_path, MAX_PATH) == 0) {
+    if (case_name == nullptr or GetModuleFileNameA(nullptr, exe_path, MAX_PATH) == 0) {
         return 0;
     }
 
@@ -544,7 +544,7 @@ int sf_test_expect_signal_case(const char *case_name, int expected_signal)
         sizeof(command_line)) {
         return 0;
     }
-    if (not CreateProcessA(exe_path, command_line, NULL, NULL, FALSE, 0, NULL, NULL, &startup_info, &process_info)) {
+    if (not CreateProcessA(exe_path, command_line, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup_info, &process_info)) {
         return 0;
     }
 

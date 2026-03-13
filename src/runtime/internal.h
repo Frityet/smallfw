@@ -1,6 +1,7 @@
 #pragma once
 
 #include "runtime/abi.h"
+#include "runtime/c2x-compat.h"
 
 #pragma clang assume_nonnull begin
 

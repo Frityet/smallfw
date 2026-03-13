@@ -30,7 +30,7 @@ void sf_runtime_test_fail_allocation_after(size_t successful_allocations)
 void *sf_runtime_test_malloc(size_t size)
 {
     if (not sf_runtime_test_consume_allocation()) {
-        return NULL;
+        return nullptr;
     }
     return malloc(size);
 }
@@ -38,7 +38,7 @@ void *sf_runtime_test_malloc(size_t size)
 void *sf_runtime_test_calloc(size_t count, size_t size)
 {
     if (not sf_runtime_test_consume_allocation()) {
-        return NULL;
+        return nullptr;
     }
     return calloc(count, size);
 }
@@ -46,7 +46,7 @@ void *sf_runtime_test_calloc(size_t count, size_t size)
 void *sf_runtime_test_realloc(void *ptr, size_t size)
 {
     if (not sf_runtime_test_consume_allocation()) {
-        return NULL;
+        return nullptr;
     }
     return realloc(ptr, size);
 }

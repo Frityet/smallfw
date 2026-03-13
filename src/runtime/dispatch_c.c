@@ -74,7 +74,7 @@ typedef struct SFCStructFFIType {
 } SFCStructFFIType_t;
 #endif
 
-static __thread SFCSigCacheEntry_t g_sig_cache[SF_C_SIG_CACHE_SIZE];
+static thread_local SFCSigCacheEntry_t g_sig_cache[SF_C_SIG_CACHE_SIZE];
 
 static int is_digit_char(char c)
 {
@@ -408,8 +408,8 @@ static int classify_type_token(const char *token, SFCCallArgInfo_t *out_info)
 
 static int collect_return_info(SEL op, SFCCallArgInfo_t *out_info)
 {
-    const char *types = op ? op->types : NULL;
-    if (types == NULL or types[0] == '\0') {
+    const char *types = op ? op->types : nullptr;
+    if (types == nullptr or types[0] == '\0') {
         out_info->code = '@';
         out_info->kind = (uint8_t)SFC_CALL_ARG_KIND_CODE;
         return 1;
@@ -421,10 +421,10 @@ static size_t collect_explicit_arg_infos(SEL op,
                                          SFCCallArgInfo_t out_infos[SF_C_FALLBACK_MAX_ARGS],
                                          int *unsupported_sig)
 {
-    if (unsupported_sig != NULL) {
+    if (unsupported_sig != nullptr) {
         *unsupported_sig = 0;
     }
-    if (op == NULL or op->types == NULL or op->types[0] == '\0') {
+    if (op == nullptr or op->types == nullptr or op->types[0] == '\0') {
         return 0;
     }
 
@@ -446,7 +446,7 @@ static size_t collect_explicit_arg_infos(SEL op,
         if (arg_index >= 2) {
             if (explicit_count >= SF_C_FALLBACK_MAX_ARGS or
                 not classify_type_token(token, &out_infos[explicit_count])) {
-                if (unsupported_sig != NULL) {
+                if (unsupported_sig != nullptr) {
                     *unsupported_sig = 1;
                 }
                 return explicit_count;
@@ -496,7 +496,7 @@ static ffi_type *ffi_type_for_code(char code)
         case '{':
             return &ffi_type_pointer;
         default:
-            return NULL;
+            return nullptr;
     }
 }
 
@@ -575,7 +575,7 @@ static id return_word_as_id(const SFCWordStorage_t *storage, char code)
 static int direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
                                       const SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS], size_t argc)
 {
-    if (ret_info == NULL or argc > SF_C_FALLBACK_MAX_ARGS) {
+    if (ret_info == nullptr or argc > SF_C_FALLBACK_MAX_ARGS) {
         return 0;
     }
     if (ret_info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
@@ -610,11 +610,11 @@ static id call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_
 
 static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MAX_ARGS], int *unsupported_sig)
 {
-    if (unsupported_sig != NULL) {
+    if (unsupported_sig != nullptr) {
         *unsupported_sig = 0;
     }
 
-    if (op == NULL or op->types == NULL or op->types[0] == '\0') {
+    if (op == nullptr or op->types == nullptr or op->types[0] == '\0') {
         return 0;
     }
 
@@ -636,13 +636,13 @@ static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MA
 
         if (arg_index >= 2) {
             if (code == 'f' or code == 'd' or code == 'D') {
-                if (unsupported_sig != NULL) {
+                if (unsupported_sig != nullptr) {
                     *unsupported_sig = 1;
                 }
                 return explicit_count;
             }
             if (explicit_count >= SF_C_FALLBACK_MAX_ARGS) {
-                if (unsupported_sig != NULL) {
+                if (unsupported_sig != nullptr) {
                     *unsupported_sig = 1;
                 }
                 return explicit_count;
@@ -666,10 +666,10 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
                                                 char out_codes[SF_C_FALLBACK_MAX_ARGS],
                                                 int *unsupported_sig)
 {
-    if (unsupported_sig != NULL) {
+    if (unsupported_sig != nullptr) {
         *unsupported_sig = 0;
     }
-    if (op == NULL) {
+    if (op == nullptr) {
         return 0;
     }
 
@@ -683,7 +683,7 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
         if (argc > 0) {
             memcpy(out_codes, entry->codes, argc);
         }
-        if (unsupported_sig != NULL) {
+        if (unsupported_sig != nullptr) {
             *unsupported_sig = (int)entry->unsupported;
         }
         return argc;
@@ -699,7 +699,7 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
         memcpy(entry->codes, out_codes, argc);
     }
 
-    if (unsupported_sig != NULL) {
+    if (unsupported_sig != nullptr) {
         *unsupported_sig = unsupported;
     }
     return argc;
@@ -790,7 +790,7 @@ static int build_struct_ffi_type(const char *token, SFCStructFFIType_t *out_type
 
     while (*p and *p != '}') {
         ffi_type *field_type = ffi_type_for_code(primary_type_code(p));
-        if (field_type == NULL) {
+        if (field_type == nullptr) {
             return 0;
         }
         if (count + 1U >= sizeof(out_type->elements) / sizeof(out_type->elements[0])) {
@@ -806,7 +806,7 @@ static int build_struct_ffi_type(const char *token, SFCStructFFIType_t *out_type
         return 0;
     }
 
-    out_type->elements[count] = NULL;
+    out_type->elements[count] = nullptr;
     out_type->type.size = 0U;
     out_type->type.alignment = 0U;
     out_type->type.type = FFI_TYPE_STRUCT;
@@ -873,7 +873,7 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-    IMP imp = NULL;
+    IMP imp = nullptr;
     SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
     int unsupported_sig = 0;
     size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
@@ -882,7 +882,7 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
 #else
     imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
 #endif
-    if (out == NULL or unsupported_sig) {
+    if (out == nullptr or unsupported_sig) {
         return;
     }
 
@@ -923,7 +923,7 @@ id objc_msgSend(id receiver, SEL op, ...)
 {
     id dispatch_receiver = receiver;
     SEL dispatch_op = op;
-    IMP imp = NULL;
+    IMP imp = nullptr;
 #if SF_RUNTIME_FORWARDING
     imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
 #else
@@ -938,7 +938,7 @@ id objc_msgSend(id receiver, SEL op, ...)
         return (id)0;
     }
     ffi_type *ret_type = ffi_type_for_call_info(&ret_info);
-    if (ret_type == NULL) {
+    if (ret_type == nullptr) {
         return (id)0;
     }
 
@@ -954,18 +954,18 @@ id objc_msgSend(id receiver, SEL op, ...)
         return call_word_imp(imp, dispatch_receiver, dispatch_op, args, argc);
     }
 
-    ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, NULL, NULL, NULL, NULL};
-    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, NULL, NULL, NULL, NULL};
+    ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
+    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
     SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
     SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
     memset(arg_storage, 0, sizeof(arg_storage));
     memset(struct_arg_types, 0, sizeof(struct_arg_types));
     for (size_t i = 0; i < argc; ++i) {
         if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
-            const char *types = dispatch_op != NULL ? dispatch_op->types : NULL;
+            const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
             const char *p = types;
             int arg_index = 0;
-            if (p == NULL) {
+            if (p == nullptr) {
                 return (id)0;
             }
             p = skip_type_token(p);
@@ -988,13 +988,13 @@ id objc_msgSend(id receiver, SEL op, ...)
                 }
                 arg_index += 1;
             }
-            if (arg_types[i + 2] == NULL) {
+            if (arg_types[i + 2] == nullptr) {
                 return (id)0;
             }
             continue;
         }
         arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
-        if (arg_types[i + 2] == NULL) {
+        if (arg_types[i + 2] == nullptr) {
             return (id)0;
         }
         store_word_arg(&arg_storage[i], arg_infos[i].code, args[i]);

@@ -39,7 +39,7 @@ static int case_tagged_arc_noop_semantics(void)
 static int case_tagged_object_decode_paths(void)
 {
     __unsafe_unretained TaggedNumberProbe *num = [TaggedNumberProbe numberWithValue:99U];
-    const char *name = NULL;
+    const char *name = nullptr;
     Class cls = (Class)objc_getClass("TaggedNumberProbe");
     if (num == nil or cls == Nil) {
         return 0;
@@ -48,13 +48,13 @@ static int case_tagged_object_decode_paths(void)
     name = sf_class_name_of_object(num);
     return sf_object_class(num) == cls and
            object_getClass(num) == cls and
-           sf_header_from_object(num) == NULL and
+           sf_header_from_object(num) == nullptr and
            sf_object_is_heap(num) == 0 and
-           [num isTaggedPointer] != 0 and
-           [num taggedPointerPayload] == 99U and
-           [num allocator] == sf_default_allocator() and
+           num.isTaggedPointer != 0 and
+           num.taggedPointerPayload == 99U and
+           num.allocator == sf_default_allocator() and
            num.parent == nil and
-           name != NULL and strcmp(name, "TaggedNumberProbe") == 0;
+           name != nullptr and strcmp(name, "TaggedNumberProbe") == 0;
 }
 
 static int case_tagged_dispatch_methods(void)
@@ -62,14 +62,14 @@ static int case_tagged_dispatch_methods(void)
     __unsafe_unretained TaggedNumberProbe *num = [TaggedNumberProbe numberWithValue:41U];
     __unsafe_unretained TaggedStringProbe *str = [TaggedStringProbe stringWithBytes:"hello!" length:6U];
     __unsafe_unretained TaggedNumberProbe *sum = nil;
-    IMP plus_imp = NULL;
-    IMP char_imp = NULL;
+    IMP plus_imp = nullptr;
+    IMP char_imp = nullptr;
     id resolved_plus_receiver = nil;
-    SEL resolved_plus_op = NULL;
-    IMP resolved_plus_imp = NULL;
+    SEL resolved_plus_op = nullptr;
+    IMP resolved_plus_imp = nullptr;
     id resolved_char_receiver = nil;
-    SEL resolved_char_op = NULL;
-    IMP resolved_char_imp = NULL;
+    SEL resolved_char_op = nullptr;
+    IMP resolved_char_imp = nullptr;
     if (num == nil or str == nil) {
         return 0;
     }
@@ -83,19 +83,19 @@ static int case_tagged_dispatch_methods(void)
     resolved_char_op = @selector(characterAtIndex:);
     resolved_char_imp = sf_resolve_message_dispatch(&resolved_char_receiver, &resolved_char_op);
     sum = [num plus:(uintptr_t)1U];
-    return [num value] == 41U and
-           plus_imp != NULL and
-           char_imp != NULL and
-           resolved_plus_imp != NULL and
-           resolved_plus_op != NULL and
-           sf_selector_types(resolved_plus_op) != NULL and
-           resolved_char_imp != NULL and
-           resolved_char_op != NULL and
-           sf_selector_types(resolved_char_op) != NULL and
+    return num.value == 41U and
+           plus_imp != nullptr and
+           char_imp != nullptr and
+           resolved_plus_imp != nullptr and
+           resolved_plus_op != nullptr and
+           sf_selector_types(resolved_plus_op) != nullptr and
+           resolved_char_imp != nullptr and
+           resolved_char_op != nullptr and
+           sf_selector_types(resolved_char_op) != nullptr and
            sum != nil and
            sf_object_class(sum) == (Class)objc_getClass("TaggedNumberProbe") and
-           [sum value] == 42U and
-           [str length] == 6UL and
+           sum.value == 42U and
+           str.length == 6UL and
            [str characterAtIndex:1UL] == (unsigned int)'e';
 }
 
@@ -123,14 +123,14 @@ static const SFTestCase g_tagged_cases[] = {
 const SFTestCase *sf_runtime_tagged_cases(size_t *count)
 {
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (count != NULL) {
+    if (count != nullptr) {
         *count = sizeof(g_tagged_cases) / sizeof(g_tagged_cases[0]);
     }
     return g_tagged_cases;
 #else
-    if (count != NULL) {
+    if (count != nullptr) {
         *count = 0U;
     }
-    return NULL;
+    return nullptr;
 #endif
 }

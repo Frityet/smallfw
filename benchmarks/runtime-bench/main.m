@@ -12,7 +12,7 @@
 #define SFW_NEW(T) [[T allocWithAllocator:sf_default_allocator()] init]
 #define SFW_RELEASE(obj)         \
     do {                         \
-        if ((obj) != NULL)       \
+        if ((obj) != nullptr)       \
             objc_release((obj)); \
     } while (0)
 
@@ -63,7 +63,7 @@ static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
     BenchMono *obj = SFW_NEW(BenchMono);
     int64_t local = 0;
 
-    if (obj == NULL) {
+    if (obj == nullptr) {
         return 0;
     }
 
@@ -82,7 +82,7 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
     BenchPolyB *b = SFW_NEW(BenchPolyB);
     int64_t local = 0;
 
-    if (a == NULL or b == NULL) {
+    if (a == nullptr or b == nullptr) {
         SFW_RELEASE(a);
         SFW_RELEASE(b);
         return 0;
@@ -124,7 +124,7 @@ static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *si
     memset(objs, 0, sizeof(objs));
     for (int i = 0; i < pool_size; ++i) {
         objs[i] = SFW_NEW(BenchARC);
-        if (objs[i] == NULL) {
+        if (objs[i] == nullptr) {
             for (int j = 0; j < i; ++j) {
                 SFW_RELEASE(objs[j]);
             }
@@ -149,9 +149,9 @@ static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
 {
     BenchARC *a = SFW_NEW(BenchARC);
     BenchARC *b = SFW_NEW(BenchARC);
-    id slot = NULL;
+    id slot = nullptr;
 
-    if (a == NULL or b == NULL) {
+    if (a == nullptr or b == nullptr) {
         SFW_RELEASE(a);
         SFW_RELEASE(b);
         return 0;
@@ -162,7 +162,7 @@ static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
     }
 
     *sink ^= (uint64_t)(uintptr_t)slot;
-    objc_storeStrong(&slot, NULL);
+    objc_storeStrong(&slot, nullptr);
     objc_release(a);
     objc_release(b);
     return 1;
@@ -174,7 +174,7 @@ static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink)
 
     for (int i = 0; i < iters; ++i) {
         BenchARC *obj = SFW_NEW(BenchARC);
-        if (obj == NULL) {
+        if (obj == nullptr) {
             return 0;
         }
         local ^= (uint64_t)(uintptr_t)obj;
@@ -192,7 +192,7 @@ static int bench_parent_group_cycle(int iters, volatile uint64_t *sink)
     for (int i = 0; i < iters; ++i) {
         BenchARC *root = SFW_NEW(BenchARC);
         BenchARC *child = [[BenchARC allocWithParent:root] init];
-        if (root == NULL or child == NULL) {
+        if (root == nullptr or child == nullptr) {
             SFW_RELEASE(child);
             SFW_RELEASE(root);
             return 0;
@@ -242,7 +242,7 @@ static int run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink)
 
 int main(int argc, char **argv)
 {
-    const char *case_name = NULL;
+    const char *case_name = nullptr;
     int iters = 0;
     int list_only = 0;
 
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
             continue;
         }
         if (strcmp(argv[i], "--iters") == 0 and (i + 1) < argc) {
-            char *end = NULL;
+            char *end = nullptr;
             const char *raw = argv[++i];
             errno = 0;
             long long parsed = strtoll(raw, &end, 10);
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    if (case_name == NULL) {
+    if (case_name == nullptr) {
         fprintf(stderr, "missing --case <name|all> [--iters N]\n");
         return 2;
     }

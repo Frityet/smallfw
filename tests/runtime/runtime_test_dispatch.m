@@ -15,7 +15,7 @@ typedef struct SFTestSelector {
 } SFTestSelector;
 
 static SFTestSelector g_raw_empty = {"takeEmpty", ""};
-static SFTestSelector g_raw_null_types = {"takeNullTypes", NULL};
+static SFTestSelector g_raw_null_types = {"takeNullTypes", nullptr};
 static SFTestSelector g_raw_unknown = {"takeUnknown:", "@24@0:8?16"};
 
 static void *dispatch_thread_main(void *arg)
@@ -28,18 +28,18 @@ static void *dispatch_thread_main(void *arg)
     }
 
     ctx->sum = sum;
-    return NULL;
+    return nullptr;
 }
 
 static int case_dispatch_cache_warm_hits(void)
 {
     SEL calc_sel = sel_registerName("calc:");
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
-    IMP imp0 = NULL;
-    IMP imp1 = NULL;
+    IMP imp0 = nullptr;
+    IMP imp1 = nullptr;
     int sum = 0;
 
-    if (obj == nil or calc_sel == NULL) {
+    if (obj == nil or calc_sel == nullptr) {
         return 0;
     }
 
@@ -50,7 +50,7 @@ static int case_dispatch_cache_warm_hits(void)
     }
 
     objc_release(obj);
-    return imp0 != NULL and
+    return imp0 != nullptr and
            imp0 == imp1 and
            ((int (*)(id, SEL, int))imp0)(obj, calc_sel, 41) == 42 and
            sum == ((2000 * 2001) / 2);
@@ -62,10 +62,10 @@ static int case_dispatch_super_lookup(void)
     __unsafe_unretained SuperChild *obj = SFW_NEW(SuperChild);
     Class super_cls = Nil;
     struct sf_objc_super super_info = {0};
-    IMP super_imp = NULL;
+    IMP super_imp = nullptr;
     int ok = 0;
 
-    if (obj == nil or ping_sel == NULL) {
+    if (obj == nil or ping_sel == nullptr) {
         return 0;
     }
 
@@ -78,7 +78,7 @@ static int case_dispatch_super_lookup(void)
     super_info.super_class = super_cls;
 
     super_imp = objc_msg_lookup_super(&super_info, ping_sel);
-    ok = [obj ping] == 17 and super_imp != NULL and ((int (*)(id, SEL))super_imp)(obj, ping_sel) == 10;
+    ok = [obj ping] == 17 and super_imp != nullptr and ((int (*)(id, SEL))super_imp)(obj, ping_sel) == 10;
     objc_release(obj);
     return ok;
 }
@@ -89,12 +89,12 @@ static int case_dispatch_selector_equality(void)
     SEL calc1 = sel_registerName("calc:");
     SEL ping = sel_registerName("ping");
 
-    return calc0 != NULL and
-           ping != NULL and
+    return calc0 != nullptr and
+           ping != nullptr and
            sf_selector_equal(calc0, calc1) and
            not sf_selector_equal(calc0, ping) and
-           not sf_selector_equal(calc0, NULL) and
-           sf_selector_equal(NULL, NULL);
+           not sf_selector_equal(calc0, nullptr) and
+           sf_selector_equal(nullptr, nullptr);
 }
 
 static int case_dispatch_selector_lookup_only_registration(void)
@@ -103,9 +103,9 @@ static int case_dispatch_selector_lookup_only_registration(void)
     SEL ping_sel = sel_registerName("ping");
     SEL missing = sel_registerName("definitely_missing_selector_name");
 
-    return calc_sel != NULL and
-           ping_sel != NULL and
-           missing == NULL and
+    return calc_sel != nullptr and
+           ping_sel != nullptr and
+           missing == nullptr and
            strcmp(sel_getName(calc_sel), "calc:") == 0 and
            strcmp(sel_getName(ping_sel), "ping") == 0;
 }
@@ -114,16 +114,16 @@ static int case_dispatch_method_lookup_canonical(void)
 {
     Class cls = (Class)objc_getClass("HotDispatch");
     SEL canonical = sel_registerName("calc:");
-    Method method = NULL;
+    Method method = nullptr;
 
-    if (cls == Nil or canonical == NULL) {
+    if (cls == Nil or canonical == nullptr) {
         return 0;
     }
 
     method = class_getInstanceMethod(cls, canonical);
-    return method != NULL and
+    return method != nullptr and
            method_getName(method) == canonical and
-           method_getImplementation(method) != NULL and
+           method_getImplementation(method) != nullptr and
            sf_selector_slot(method_getName(method)) == sf_selector_slot(canonical);
 }
 
@@ -143,7 +143,7 @@ static int case_dispatch_concurrent_reads(void)
         ctx[i].obj = obj;
         ctx[i].loops = loops_per_thread;
         ctx[i].sum = 0;
-        if (pthread_create(&threads[i], NULL, dispatch_thread_main, &ctx[i]) != 0) {
+        if (pthread_create(&threads[i], nullptr, dispatch_thread_main, &ctx[i]) != 0) {
             objc_release(obj);
             return 0;
         }
@@ -151,7 +151,7 @@ static int case_dispatch_concurrent_reads(void)
 
     long long total = 0;
     for (int i = 0; i < thread_count; ++i) {
-        if (pthread_join(threads[i], NULL) != 0) {
+        if (pthread_join(threads[i], nullptr) != 0) {
             objc_release(obj);
             return 0;
         }
@@ -184,10 +184,10 @@ static int case_dispatch_c_msgsend_signatures(void)
     int pointer_value = 17;
     int ok = 0;
 
-    if (obj == nil or zero_sel == NULL or take_i_sel == NULL or take_iq_sel == NULL or take_q_sel == NULL or
-        take_obj_sel == NULL or take_char_sel == NULL or take_short_sel == NULL or take_bool_sel == NULL or
-        take_c_sel == NULL or take_s_sel == NULL or take_long_sel == NULL or take_ulong_sel == NULL or
-        take_pointer_sel == NULL) {
+    if (obj == nil or zero_sel == nullptr or take_i_sel == nullptr or take_iq_sel == nullptr or take_q_sel == nullptr or
+        take_obj_sel == nullptr or take_char_sel == nullptr or take_short_sel == nullptr or take_bool_sel == nullptr or
+        take_c_sel == nullptr or take_s_sel == nullptr or take_long_sel == nullptr or take_ulong_sel == nullptr or
+        take_pointer_sel == nullptr) {
         return 0;
     }
 
@@ -257,7 +257,7 @@ static int case_dispatch_c_msgsend_unsupported_float(void)
     __unsafe_unretained CDispatchProbe *obj = SFW_NEW(CDispatchProbe);
     id result = nil;
 
-    if (obj == nil or take_double_sel == NULL) {
+    if (obj == nil or take_double_sel == nullptr) {
         return 0;
     }
 
@@ -284,8 +284,8 @@ static int case_dispatch_c_internal_helpers(void)
     SEL many_sel = sel_registerName("takeMany:second:third:fourth:fifth:");
     Class probe_class = (Class)objc_getClass("CDispatchProbe");
 
-    if (zero_sel == NULL or obj_class_ptr_sel == NULL or struct_sel == NULL or union_sel == NULL or
-        unsupported_sel == NULL or many_sel == NULL or probe_class == Nil) {
+    if (zero_sel == nullptr or obj_class_ptr_sel == nullptr or struct_sel == nullptr or union_sel == nullptr or
+        unsupported_sel == nullptr or many_sel == nullptr or probe_class == Nil) {
         return 0;
     }
 
@@ -309,7 +309,7 @@ static int case_dispatch_c_internal_helpers(void)
     }
 
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(NULL, codes, &unsupported) != 0 or unsupported != 0) {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(nullptr, codes, &unsupported) != 0 or unsupported != 0) {
         return 0;
     }
     unsupported = 7;
@@ -361,7 +361,7 @@ static int case_dispatch_c_internal_helpers(void)
         return 0;
     }
 
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(NULL, codes, &unsupported) != 0) {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(nullptr, codes, &unsupported) != 0) {
         return 0;
     }
 
@@ -442,15 +442,15 @@ static int case_dispatch_dtable_lookup(void)
     Class cls = (Class)objc_getClass("HotDispatch");
     SEL calc_sel = sel_registerName("calc:");
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
-    IMP imp = NULL;
+    IMP imp = nullptr;
     int ok = 0;
 
-    if (cls == Nil or calc_sel == NULL or obj == nil) {
+    if (cls == Nil or calc_sel == nullptr or obj == nil) {
         return 0;
     }
 
     imp = sf_lookup_imp_in_class(cls, calc_sel);
-    ok = imp != NULL and ((int (*)(id, SEL, int))imp)(obj, calc_sel, 41) == 42;
+    ok = imp != nullptr and ((int (*)(id, SEL, int))imp)(obj, calc_sel, 41) == 42;
     objc_release(obj);
     return ok;
 }
@@ -467,7 +467,7 @@ static int case_dispatch_forwarding_targets(void)
     int class_result0 = 0;
     int class_result1 = 0;
 
-    if (proxy == nil or proxy_cls == Nil or instance_sel == NULL or class_sel == NULL) {
+    if (proxy == nil or proxy_cls == Nil or instance_sel == nullptr or class_sel == nullptr) {
         return 0;
     }
 
@@ -503,7 +503,7 @@ static const SFTestCase g_dispatch_cases[] = {
 
 const SFTestCase *sf_runtime_dispatch_cases(size_t *count)
 {
-    if (count != NULL) {
+    if (count != nullptr) {
         *count = sizeof(g_dispatch_cases) / sizeof(g_dispatch_cases[0]);
     }
     return g_dispatch_cases;

@@ -167,12 +167,14 @@ extern int g_counter_deallocs;
 
 #if SF_RUNTIME_TAGGED_POINTERS
 @interface TaggedNumberProbe : Object
+@property(nonatomic, readonly) uintptr_t value;
 + (instancetype _Nullable)numberWithValue:(uintptr_t)value;
 - (uintptr_t)value;
 - (TaggedNumberProbe *_Nullable)plus:(uintptr_t)delta;
 @end
 
 @interface TaggedStringProbe : Object
+@property(nonatomic, readonly) unsigned long length;
 + (instancetype _Nullable)stringWithBytes:(const char *_Nullable)bytes length:(size_t)length;
 - (unsigned long)length;
 - (unsigned int)characterAtIndex:(unsigned long)index;

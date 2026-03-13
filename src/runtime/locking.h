@@ -1,5 +1,7 @@
 #pragma once
 
+#include "c2x-compat.h"
+
 #include <stdint.h>
 
 #ifndef SF_RUNTIME_THREADSAFE
@@ -82,7 +84,7 @@ static inline void sf_runtime_rwlock_unlock(SFRuntimeRwlock_t *lock)
 }
 static inline void sf_runtime_mutex_init(SFRuntimeMutex_t *lock)
 {
-    (void)pthread_mutex_init(lock, NULL);
+    (void)pthread_mutex_init(lock, nullptr);
 }
 static inline void sf_runtime_mutex_destroy(SFRuntimeMutex_t *lock)
 {

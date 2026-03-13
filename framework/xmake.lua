@@ -1,0 +1,7 @@
+target("smallfw-framework")
+    set_group("framework")
+    smallfw.configure_runtime_library_target()
+    add_deps(smallfw.runtime_binary_dependency(), {public = true})
+    add_includedirs(smallfw.project_path(), {public = true})
+    add_headerfiles("*.h", {prefixdir = "framework"})
+    add_files("*.m", {mflags = {"-fno-objc-arc"}})

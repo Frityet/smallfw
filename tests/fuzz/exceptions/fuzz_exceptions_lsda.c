@@ -145,7 +145,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     uint8_t ttype_encoding = 0U;
     uint8_t call_site_encoding = 0U;
 
-    if (data == NULL) {
+    if (data == nullptr) {
         return 0;
     }
 
@@ -211,6 +211,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
     scratch[call_site_len_offset] = (uint8_t)(out - call_site_table_start);
 
-    (void)sf_runtime_test_exception_parse_lsda(scratch, func_start, ip, NULL, &info);
+    (void)sf_runtime_test_exception_parse_lsda(scratch, func_start, ip, nullptr, &info);
     return 0;
 }

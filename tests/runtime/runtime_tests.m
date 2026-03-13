@@ -38,7 +38,7 @@ static int case_name_matches(const char *requested_name, const char *suite_name,
 {
     size_t suite_name_len = strlen(suite_name);
 
-    if (requested_name == NULL) {
+    if (requested_name == nullptr) {
         return 0;
     }
     if (strcmp(requested_name, case_name) == 0) {
@@ -51,8 +51,8 @@ static int case_name_matches(const char *requested_name, const char *suite_name,
 
 static const SFTestSuite *find_suite_named(const char *suite_name)
 {
-    if (suite_name == NULL) {
-        return NULL;
+    if (suite_name == nullptr) {
+        return nullptr;
     }
 
     for (size_t suite_index = 0; suite_index < sizeof(g_suites) / sizeof(g_suites[0]); ++suite_index) {
@@ -60,7 +60,7 @@ static const SFTestSuite *find_suite_named(const char *suite_name)
             return &g_suites[suite_index];
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 static void print_case_result(const char *suite_name, const char *case_name, int ok)
@@ -135,7 +135,7 @@ static int run_suite_cases(const SFTestSuite *suite)
 static int run_suite_named(const char *suite_name)
 {
     const SFTestSuite *suite = find_suite_named(suite_name);
-    if (suite == NULL) {
+    if (suite == nullptr) {
         (void)fprintf(stderr, "unknown suite: %s\n", suite_name);
         return 3;
     }
@@ -176,13 +176,13 @@ static void print_usage(const char *program_name)
 {
     (void)fprintf(stderr,
                   "usage: %s [--all] [--suite <name>] [--case <name|suite/name>] [--list]\n",
-                  program_name != NULL ? program_name : "runtime-tests");
+                  program_name != nullptr ? program_name : "runtime-tests");
 }
 
 int main(int argc, char **argv)
 {
-    const char *case_name = NULL;
-    const char *suite_name = NULL;
+    const char *case_name = nullptr;
+    const char *suite_name = nullptr;
     int list_only = 0;
     int run_all = 0;
 
@@ -203,17 +203,17 @@ int main(int argc, char **argv)
     if (list_only) {
         return list_cases();
     }
-    if (case_name != NULL) {
+    if (case_name != nullptr) {
         return run_case_named(case_name);
     }
-    if (suite_name != NULL) {
+    if (suite_name != nullptr) {
         return run_suite_named(suite_name);
     }
     if (run_all or argc == 1) {
         return run_all_cases();
     }
 
-    print_usage(argv != NULL ? argv[0] : "runtime-tests");
+    print_usage(argv != nullptr ? argv[0] : "runtime-tests");
     return 2;
 }
 

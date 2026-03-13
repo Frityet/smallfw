@@ -11,35 +11,25 @@ typedef struct SFStaticAllocationFailedException {
 } SFStaticAllocationFailedException_t;
 
 @interface AllocationFailedException (SmallFWInternal)
-+ (void)raiseForAllocationFailure __attribute__((noreturn));
++ (instancetype)allocationFailedException;
 @end
 
 @implementation AllocationFailedException
 
 + (instancetype)allocationFailedException
 {
-    static __thread SFStaticAllocationFailedException_t fallback;
+    static thread_local SFStaticAllocationFailedException_t fallback;
 
     id exc = sf_alloc_object((Class)self, sf_default_allocator());
-    if (exc != NULL) {
+    if (exc != nullptr) {
         return [(AllocationFailedException *)exc init];
     }
 
     exc = [self allocInPlace:&fallback size:sizeof(fallback)];
-    if (exc != NULL) {
+    if (exc != nullptr) {
         return [(AllocationFailedException *)exc init];
     }
-    return NULL;
-}
-
-+ (void)raiseForAllocationFailure
-{
-#if SF_RUNTIME_EXCEPTIONS
-    objc_exception_throw([self allocationFailedException]);
-    __builtin_unreachable();
-#else
-    abort();
-#endif
+    return nullptr;
 }
 
 - (size_t)exceptionBacktraceCount
