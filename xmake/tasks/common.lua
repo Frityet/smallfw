@@ -23,7 +23,6 @@ function smallfw.runtime_config_menu_options(extra_options, defaults)
         {nil, "runtime-thinlto", "kv", nil, "Override runtime-thinlto.", " - y", " - n"},
         {nil, "runtime-full-lto", "kv", nil, "Override runtime-full-lto.", " - y", " - n"},
         {nil, "runtime-compact-headers", "kv", nil, "Override runtime-compact-headers.", " - y", " - n"},
-        {nil, "runtime-fast-objects", "kv", nil, "Override runtime-fast-objects.", " - y", " - n"},
         {nil, "runtime-inline-value-storage", "kv", nil, "Override runtime-inline-value-storage.", " - y", " - n"},
         {nil, "runtime-inline-group-state", "kv", nil, "Override runtime-inline-group-state.", " - y", " - n"},
     }

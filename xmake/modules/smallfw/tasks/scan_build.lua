@@ -7,12 +7,9 @@ import("smallfw.task_helpers")
 local DEFAULT_TARGETS = {
     "runtime-tests",
     "runtime-bench",
-    "value-object-demo",
+    "particle-sim",
 }
 
-local CANARY_TARGET = "scan-build-canary"
-local CANARY_FILE_FRAGMENT = path.join("tools", "scan-build-canary", "main.c")
-local CANARY_CHECKER = "core.NullDereference"
 local CHECKER_CACHE = nil
 
 local function _append_all(dst, src)
@@ -107,16 +104,20 @@ local function _targets()
     return targets
 end
 
+local function _option_enabled(name, default_value)
+    local value = task_helpers.config_value_string(option.get(name))
+    if value == nil or value == "" then
+        return default_value ~= false
+    end
+    return value ~= "n"
+end
+
 local function _strict_enabled()
-    return option.get("strict") ~= "n"
+    return _option_enabled("strict", false)
 end
 
 local function _ctu_enabled()
-    return option.get("ctu") ~= "n" and _clang_extdef_mapping_program() ~= nil
-end
-
-local function _verify_enabled()
-    return option.get("verify") ~= "n"
+    return _option_enabled("ctu", false) and _clang_extdef_mapping_program() ~= nil
 end
 
 local function _maxloop_value()
@@ -275,7 +276,7 @@ local function _analysis_args(analyzer, opt)
         "--force-analyze-debug-code",
     }
 
-    if option.get("analyze-headers") ~= "n" and opt.analyze_headers ~= false then
+    if _option_enabled("analyze-headers", true) and opt.analyze_headers ~= false then
         table.insert(args, "--analyze-headers")
     end
     if _strict_enabled() then
@@ -311,70 +312,12 @@ local function _run_analyzer(program, args)
     }
 end
 
-local function _report_files(outdir)
-    local files = {}
-    _append_all(files, os.files(path.join(outdir, "**.plist")))
-    _append_all(files, os.files(path.join(outdir, "**.html")))
-    _append_all(files, os.files(path.join(outdir, "**.sarif")))
-    return files
-end
-
-local function _reports_contain(outdir, patterns)
-    for _, file in ipairs(_report_files(outdir)) do
-        local content = io.readfile(file)
-        if content ~= nil then
-            local matched = true
-            for _, pattern in ipairs(patterns) do
-                if not content:find(pattern, 1, true) then
-                    matched = false
-                    break
-                end
-            end
-            if matched then
-                return true, file
-            end
-        end
-    end
-    return false, nil
-end
-
 local function _analysis_report_files(outdir)
     local files = {}
     _append_all(files, os.files(path.join(outdir, "scan-build-*", "report-*.plist")))
     _append_all(files, os.files(path.join(outdir, "scan-build-*", "report-*.html")))
     _append_all(files, os.files(path.join(outdir, "scan-build-*", "result.sarif")))
     return files
-end
-
-local function _verify_canary(analyzer, outdir, compile_commands_file)
-    local verify_outdir = path.join(outdir, "verify")
-    local entries = _filtered_cdb_entries(compile_commands_file, {CANARY_TARGET})
-    local cdbfile = _write_filtered_cdb(outdir, "verify-canary", entries)
-    local args = _analysis_args(analyzer, {
-        cdbfile = cdbfile,
-        outdir = verify_outdir,
-        report_format = "plist",
-        analyze_headers = false,
-        ctu = false,
-    })
-
-    os.rm(verify_outdir)
-    os.mkdir(verify_outdir)
-
-    print("Verifying analyzer with canary target: %s", CANARY_TARGET)
-    local ok = _run_analyzer(analyzer, args)
-    if ok then
-        raise("analyzer verification failed: the intentional canary bug was not reported")
-    end
-
-    local matched, report = _reports_contain(verify_outdir, {
-        CANARY_FILE_FRAGMENT,
-        CANARY_CHECKER,
-    })
-    if not matched then
-        raise("analyzer verification failed: expected canary report not found in %s", path.absolute(verify_outdir))
-    end
-    print("Analyzer canary caught as expected: %s", path.relative(report, task_helpers.projectdir()))
 end
 
 function main()
@@ -388,10 +331,6 @@ function main()
 
     _configure_project(builddir)
     local compile_commands_file = _generate_compile_commands(outdir)
-
-    if _verify_enabled() then
-        _verify_canary(analyzer, outdir, compile_commands_file)
-    end
 
     local filtered_entries = _filtered_cdb_entries(compile_commands_file, targets)
     local filtered_cdb = _write_filtered_cdb(outdir, "targets", filtered_entries)

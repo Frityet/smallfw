@@ -104,19 +104,6 @@ static void sf_test_aligned_free(void *ptr, size_t align)
 @implementation AllocTracked
 @end
 
-@implementation PlainFastObject
-@end
-
-@implementation InvalidFastObject
-@end
-
-@implementation TrackedFastObject
-- (void)dealloc
-{
-    (void)__atomic_fetch_add(&g_counter_deallocs, 1, __ATOMIC_RELAXED);
-}
-@end
-
 @implementation NonTrivialInlineValue
 @end
 

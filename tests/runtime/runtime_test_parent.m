@@ -467,32 +467,6 @@ static int case_parent_alloc_with_nil_parent(void)
     return ok;
 }
 
-static int case_parent_fast_object_rejected(void)
-{
-    sf_test_reset_common_state();
-
-    __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
-    id child = nil;
-    int ok = 0;
-
-    if (root == nil) {
-        return 0;
-    }
-
-    child = sf_alloc_object_with_parent((Class)objc_getClass("PlainFastObject"), root);
-#if SF_RUNTIME_FAST_OBJECTS
-    ok = child == nil;
-#else
-    ok = child != nil and ((Object *)child).parent == root;
-    if (child != nil) {
-        objc_release(child);
-    }
-#endif
-
-    objc_release(root);
-    return ok;
-}
-
 static int case_parent_dead_parent_rejects_new_child(void)
 {
     sf_test_reset_common_state();
@@ -583,7 +557,6 @@ static const SFTestCase g_parent_cases[] = {
     {"parent_group_frees_on_last_release", case_parent_group_frees_on_last_release},
     {"parent_nested_allocation_same_root", case_parent_nested_allocation_same_root},
     {"parent_alloc_with_nil_parent", case_parent_alloc_with_nil_parent},
-    {"parent_fast_object_rejected", case_parent_fast_object_rejected},
     {"parent_dead_parent_rejects_new_child", case_parent_dead_parent_rejects_new_child},
     {"parent_concurrent_alloc_release", case_parent_concurrent_alloc_release},
 };

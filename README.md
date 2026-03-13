@@ -87,7 +87,6 @@ SmallFW is EXTREMLEY configurable!
         --runtime-inline-value-storage=[y|n]    Use compact inline prefixes for embedded ValueObjects.
         --runtime-inline-group-state=[y|n]      Store non-threadsafe parent/group bookkeeping inline in the root allocation.
         --runtime-compact-headers=[y|n]         Use a compact runtime header with cold state stored out-of-line.
-        --runtime-fast-objects=[y|n]            Enable FastObject allocation/release fast paths for compatible classes.
 ```
 
 ## **FAST**

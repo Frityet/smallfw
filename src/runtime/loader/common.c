@@ -86,7 +86,6 @@ static size_t g_selector_capacity;
 
 static Class g_object_class;
 static Class g_value_object_class;
-static Class g_fast_object_class;
 static Class g_nsconstantstring_class;
 static Class g_nxconstantstring_class;
 static SEL g_dealloc_sel;
@@ -104,8 +103,6 @@ static IMP g_object_dealloc_imp;
 enum {
     SF_CLASS_META_FLAG_HAS_OBJECT_IVARS = 1U << 0U,
     SF_CLASS_META_FLAG_TRIVIAL_RELEASE = 1U << 1U,
-    SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT = 1U << 2U,
-    SF_CLASS_META_FLAG_FAST_OBJECT_CLASS = 1U << 3U,
 };
 
 #if SF_RUNTIME_TAGGED_POINTERS
@@ -145,29 +142,9 @@ static uint32_t sf_class_meta_to_object_flags(const SFClassMetaEntry_t *meta)
     if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
         flags |= SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT;
     }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) != 0U) {
-        flags |= SF_OBJ_CLASS_FLAG_FAST_OBJECT_COMPAT;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) != 0U) {
-        flags |= SF_OBJ_CLASS_FLAG_FAST_OBJECT;
-    }
     return flags;
 }
 #endif
-
-static int sf_class_is_fast_object_unlocked(Class cls)
-{
-    if (cls == NULL) {
-        return 0;
-    }
-    if (g_fast_object_class == NULL) {
-        g_fast_object_class = (Class)sf_loader_class_lookup_unlocked("FastObject");
-    }
-    if (g_fast_object_class == NULL) {
-        return 0;
-    }
-    return sf_class_is_subclass_of_unlocked(cls, g_fast_object_class);
-}
 
 static int sf_class_supports_inline_value_storage_unlocked(Class cls)
 {
@@ -185,23 +162,6 @@ static int sf_class_supports_inline_value_storage_unlocked(Class cls)
     }
     return (meta->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
            (meta->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U;
-#endif
-}
-
-static int sf_class_rejects_fast_object_allocation_unlocked(Class cls)
-{
-#if !SF_RUNTIME_FAST_OBJECTS
-    (void)cls;
-    return 0;
-#else
-    SFClassMetaEntry_t *meta = sf_class_meta_for(cls);
-    if (meta == NULL) {
-        return 0;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) == 0U) {
-        return 0;
-    }
-    return (meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) == 0U;
 #endif
 }
 
@@ -1245,7 +1205,6 @@ void sf_finalize_registered_classes(void)
 #endif
     g_object_class = (Class)sf_loader_class_lookup_unlocked("Object");
     g_value_object_class = (Class)sf_loader_class_lookup_unlocked("ValueObject");
-    g_fast_object_class = (Class)sf_loader_class_lookup_unlocked("FastObject");
     g_nsconstantstring_class = (Class)sf_loader_class_lookup_unlocked("NSConstantString");
     g_nxconstantstring_class = (Class)sf_loader_class_lookup_unlocked("NXConstantString");
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
@@ -1636,12 +1595,6 @@ id sf_alloc_object(Class cls, SFAllocator_t *allocator)
 {
     size_t align = 0;
     size_t total_size = sf_object_total_size(cls, &align);
-
-#if SF_RUNTIME_FAST_OBJECTS
-    if (sf_class_rejects_fast_object_allocation_unlocked(cls)) {
-        return NULL;
-    }
-#endif
     SFAllocator_t *use_allocator = allocator ? allocator : sf_default_allocator();
     void *raw = use_allocator->alloc(use_allocator->ctx, total_size, align);
     if (raw == NULL) {
@@ -1674,12 +1627,6 @@ id sf_alloc_object_with_parent(Class cls, id parent)
         }
         return sf_alloc_embedded_value_object(cls, parent, use_allocator);
     }
-
-#if SF_RUNTIME_FAST_OBJECTS
-    if (sf_class_is_fast_object_unlocked(cls)) {
-        return NULL;
-    }
-#endif
 
     SFObjHeader_t *root = sf_header_group_root(parent_hdr);
     size_t align = 0;
@@ -1823,15 +1770,6 @@ static void sf_cache_class_meta(Class cls)
         (slot->dealloc_imp == NULL or slot->dealloc_imp == base_dealloc_imp or sf_dispatch_imp_is_nil(slot->dealloc_imp))) {
         slot->flags |= SF_CLASS_META_FLAG_TRIVIAL_RELEASE;
     }
-
-    if (sf_class_is_fast_object_unlocked(cls)) {
-        slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_CLASS;
-        if ((slot->flags & SF_CLASS_META_FLAG_TRIVIAL_RELEASE) != 0U and
-            (slot->flags & SF_CLASS_META_FLAG_HAS_OBJECT_IVARS) == 0U and
-            not sf_class_is_value_object_unlocked(cls)) {
-            slot->flags |= SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT;
-        }
-    }
 }
 
 static SFClassMetaEntry_t *sf_class_meta_for(Class cls)
@@ -1918,12 +1856,6 @@ uint32_t sf_class_cached_object_flags(Class cls)
     if (meta->cxx_destruct_imp != NULL and not sf_dispatch_imp_is_nil(meta->cxx_destruct_imp)) {
         flags |= 1U << 2U;
     }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_CLASS) != 0U) {
-        flags |= 1U << 3U;
-    }
-    if ((meta->flags & SF_CLASS_META_FLAG_FAST_OBJECT_COMPAT) != 0U) {
-        flags |= 1U << 4U;
-    }
     return flags;
 #endif
 }
@@ -1942,7 +1874,6 @@ void sf_register_builtin_class_cache(void)
     g_cxx_destruct_sel = sf_lookup_selector_named(".cxx_destruct");
     g_object_class = (Class)sf_class_from_name("Object");
     g_value_object_class = (Class)sf_class_from_name("ValueObject");
-    g_fast_object_class = (Class)sf_class_from_name("FastObject");
     g_nsconstantstring_class = (Class)sf_class_from_name("NSConstantString");
     g_nxconstantstring_class = (Class)sf_class_from_name("NXConstantString");
     g_object_dealloc_imp = (g_object_class != NULL and g_dealloc_sel != NULL) ? sf_lookup_method_imp_exact(g_object_class, g_dealloc_sel) : NULL;

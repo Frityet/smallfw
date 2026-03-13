@@ -356,11 +356,13 @@ static uint64_t read_uleb(const uint8_t **ptr)
     const uint8_t *p = *ptr;
     while (1) {
         uint8_t b = *p++;
-        result |= (uint64_t)(b & 0x7F) << shift;
+        if (shift < 64U) {
+            result |= (uint64_t)(b & 0x7FU) << shift;
+        }
         if ((b & 0x80) == 0) {
             break;
         }
-        shift += 7;
+        shift = shift <= 56U and shift + 7U or 64U;
     }
     *ptr = p;
     return result;
@@ -368,23 +370,32 @@ static uint64_t read_uleb(const uint8_t **ptr)
 
 static int64_t read_sleb(const uint8_t **ptr)
 {
-    int64_t result = 0;
+    uint64_t result = 0;
     unsigned shift = 0;
     uint8_t b = 0;
     const uint8_t *p = *ptr;
     while (1) {
         b = *p++;
-        result |= (int64_t)(b & 0x7F) << shift;
-        shift += 7;
+        if (shift < 64U) {
+            result |= (uint64_t)(b & 0x7FU) << shift;
+        }
         if ((b & 0x80) == 0) {
             break;
         }
+        shift = shift <= 56U and shift + 7U or 64U;
     }
-    if ((shift < 64) and (b & 0x40)) {
-        result |= -((int64_t)1 << shift);
+    if ((shift < 64U) and ((b & 0x40U) != 0U)) {
+        result |= UINT64_MAX << shift;
     }
     *ptr = p;
-    return result;
+    return (int64_t)result;
+}
+
+static uintptr_t read_indirect_uintptr(uintptr_t address)
+{
+    uintptr_t value = 0;
+    memcpy(&value, (const void *)address, sizeof(value));
+    return value;
 }
 
 static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding)
@@ -459,7 +470,7 @@ static uintptr_t read_encoded(const uint8_t **ptr, uint8_t encoding)
     }
 
     if ((encoding & DW_EH_PE_INDIRECT) != 0) {
-        value = *(uintptr_t *)value;
+        value = read_indirect_uintptr(value);
     }
 
     *ptr = p;

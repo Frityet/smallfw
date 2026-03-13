@@ -24,6 +24,7 @@
     if (obj == NULL) {
         [AllocationFailedException raiseForAllocationFailure];
     }
+    __builtin_assume(obj != NULL);
 #endif
     return (id)obj;
 }
@@ -79,6 +80,7 @@
     if (obj == NULL) {
         [AllocationFailedException raiseForAllocationFailure];
     }
+    __builtin_assume(obj != NULL);
 #endif
     return (id)obj;
 }
@@ -188,9 +190,5 @@
 @implementation ValueObject
 
 
-
-@end
-
-@implementation FastObject
 
 @end

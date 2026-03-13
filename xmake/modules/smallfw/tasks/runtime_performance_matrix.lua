@@ -37,12 +37,6 @@ local ABI_ENTRIES = {
 
 local VARIANTS = {
     {
-        id = "debug-default",
-        category = "Modes",
-        mode = "debug",
-        note = "Debug build with runtime defaults.",
-    },
-    {
         id = "release-default",
         category = "Modes",
         note = "Release build with runtime defaults. This is the matrix baseline.",
@@ -92,7 +86,6 @@ local VARIANTS = {
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
             ["runtime-compact-headers"] = "y",
-            ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
             ["runtime-inline-group-state"] = "y",
         },
@@ -106,7 +99,6 @@ local VARIANTS = {
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
             ["runtime-compact-headers"] = "y",
-            ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
             ["runtime-inline-group-state"] = "y",
         },
@@ -122,7 +114,6 @@ local VARIANTS = {
             ["runtime-native-tuning"] = "y",
             ["runtime-thinlto"] = "y",
             ["runtime-compact-headers"] = "y",
-            ["runtime-fast-objects"] = "y",
             ["runtime-inline-value-storage"] = "y",
             ["runtime-inline-group-state"] = "y",
         },
@@ -171,15 +162,6 @@ local VARIANTS = {
         note = "Uses the compact runtime object header layout.",
     },
     {
-        id = "release-fast-objects",
-        category = "Layout / ABI",
-        options = {
-            ["runtime-compact-headers"] = "y",
-            ["runtime-fast-objects"] = "y",
-        },
-        note = "Enables FastObject paths and the compact-header prerequisite.",
-    },
-    {
         id = "release-inline-value-storage",
         category = "Layout / ABI",
         options = {
@@ -203,12 +185,6 @@ local VARIANTS = {
         options = {["analysis-symbols"] = "y"},
         note = "Keeps debug symbols, disables strip, and emits relocations.",
     },
-    {
-        id = "release-sanitize",
-        category = "Instrumentation",
-        options = {["runtime-sanitize"] = "y"},
-        note = "AddressSanitizer and UndefinedBehaviorSanitizer enabled.",
-    },
 }
 
 local DISPLAY_OPTION_ORDER = {
@@ -225,7 +201,6 @@ local DISPLAY_OPTION_ORDER = {
     "runtime-thinlto",
     "runtime-full-lto",
     "runtime-compact-headers",
-    "runtime-fast-objects",
     "runtime-inline-value-storage",
     "runtime-inline-group-state",
 }

@@ -18,9 +18,13 @@ __attribute__((objc_root_class))
 @interface Object
 @property(nonatomic, readonly) SFAllocator_t *allocator;
 @property(nonatomic, readonly, nullable) Object *parent;
-
-+ (instancetype)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
-+ (instancetype)allocWithParent:(Object *)parent;
+#if SF_RUNTIME_EXCEPTIONS
++ (instancetype _Nonnull)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
++ (instancetype _Nonnull)allocWithParent:(Object *_Nullable)parent;
+#else
++ (instancetype _Nullable)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
++ (instancetype _Nullable)allocWithParent:(Object *_Nullable)parent;
+#endif
 + (instancetype _Nullable)allocInPlace:(void *_Nullable)storage size:(size_t)size;
 - (instancetype)init;
 - (void)dealloc;
@@ -51,10 +55,6 @@ __attribute__((objc_root_class))
 // Their lifetime is bound to that owner slot: clearing the slot or destroying the parent
 // invalidates the embedded ValueObject, and retain/release do not extend that lifetime.
 @interface ValueObject : Object
-
-@end
-
-@interface FastObject : Object
 
 @end
 

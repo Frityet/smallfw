@@ -22,7 +22,6 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 
 | Variant | ABI | Category | Mode | PGO | BOLT | Changed Options | Status | Failure | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `debug-default` | `gnustep-2.3` | Modes | `debug` | `off` | `off` | `objc-runtime=gnustep-2.3` | ok | - | Debug build with runtime defaults. |
 | `release-default` | `gnustep-2.3` | Modes | `release` | `off` | `off` | `objc-runtime=gnustep-2.3` | ok | - | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | `gnustep-2.3` | Whole-program | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y` | ok | - | Enables -march=native and -mtune=native. |
 | `release-thinlto` | `gnustep-2.3` | Whole-program | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-thinlto=y` | ok | - | Enables ThinLTO. |
@@ -30,9 +29,9 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-pgo-gen` | `gnustep-2.3` | Instrumentation | `release` | `gen` | `off` | `objc-runtime=gnustep-2.3` | ok | - | Instrumentation-only PGO generation build. |
 | `release-pgo-use` | `gnustep-2.3` | Whole-program | `release` | `use` | `off` | `objc-runtime=gnustep-2.3` | ok | - | Profile-guided optimization on the default release stack. |
 | `release-pgo-use-bolt` | `gnustep-2.3` | Whole-program | `release` | `use` | `on` | `analysis-symbols=y`, `objc-runtime=gnustep-2.3` | ok | - | Default release stack with PGO and BOLT. |
-| `release-max-opt` | `gnustep-2.3` | Whole-program | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-fast-objects=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack without profile feedback. |
-| `release-max-opt-pgo` | `gnustep-2.3` | Whole-program | `release` | `use` | `off` | `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-fast-objects=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack with PGO. |
-| `release-max-opt-pgo-bolt` | `gnustep-2.3` | Whole-program | `release` | `use` | `on` | `analysis-symbols=y`, `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-fast-objects=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack with PGO and BOLT. |
+| `release-max-opt` | `gnustep-2.3` | Whole-program | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack without profile feedback. |
+| `release-max-opt-pgo` | `gnustep-2.3` | Whole-program | `release` | `use` | `off` | `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack with PGO. |
+| `release-max-opt-pgo-bolt` | `gnustep-2.3` | Whole-program | `release` | `use` | `on` | `analysis-symbols=y`, `objc-runtime=gnustep-2.3`, `runtime-native-tuning=y`, `runtime-thinlto=y`, `runtime-compact-headers=y`, `runtime-inline-value-storage=y`, `runtime-inline-group-state=y` | ok | - | Recommended tuned release stack with PGO and BOLT. |
 | `release-dispatch-c` | `gnustep-2.3` | Dispatch / behavior | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `dispatch-backend=c` | ok | - | Uses the C message send path instead of the assembly fast path. |
 | `release-forwarding` | `gnustep-2.3` | Dispatch / behavior | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-forwarding=y` | ok | - | Enables forwarding and the cold miss path. |
 | `release-validation` | `gnustep-2.3` | Dispatch / behavior | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-validation=y` | ok | - | Adds defensive object validation checks. |
@@ -40,11 +39,9 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | `gnustep-2.3` | Dispatch / behavior | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-exceptions=n` | ok | - | Disables Objective-C exceptions support. |
 | `release-reflection-off` | `gnustep-2.3` | Dispatch / behavior | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-reflection=n` | ok | - | Disables reflection support. |
 | `release-compact-headers` | `gnustep-2.3` | Layout / ABI | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-compact-headers=y` | ok | - | Uses the compact runtime object header layout. |
-| `release-fast-objects` | `gnustep-2.3` | Layout / ABI | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-compact-headers=y`, `runtime-fast-objects=y` | ok | - | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | `gnustep-2.3` | Layout / ABI | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-compact-headers=y`, `runtime-inline-value-storage=y` | ok | - | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | `gnustep-2.3` | Layout / ABI | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-compact-headers=y`, `runtime-inline-group-state=y` | ok | - | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | `gnustep-2.3` | Instrumentation | `release` | `off` | `off` | `analysis-symbols=y`, `objc-runtime=gnustep-2.3` | ok | - | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | `gnustep-2.3` | Instrumentation | `release` | `off` | `off` | `objc-runtime=gnustep-2.3`, `runtime-sanitize=y` | ok | - | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ## Leaderboard
 
@@ -68,13 +65,10 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | 14 | `release-native-tuning` | Whole-program | 0.98x | `arc_retain_release_round_robin` (1.11x) | `arc_retain_release_heap` (0.93x) | Enables -march=native and -mtune=native. |
 | 15 | `release-inline-group-state` | Layout / ABI | 0.98x | `arc_retain_release_round_robin` (1.14x) | `parent_group_cycle` (0.76x) | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | 16 | `release-compact-headers` | Layout / ABI | 0.94x | `arc_retain_release_round_robin` (1.13x) | `parent_group_cycle` (0.65x) | Uses the compact runtime object header layout. |
-| 17 | `release-fast-objects` | Layout / ABI | 0.93x | `arc_retain_release_round_robin` (1.14x) | `parent_group_cycle` (0.63x) | Enables FastObject paths and the compact-header prerequisite. |
-| 18 | `release-validation` | Dispatch / behavior | 0.93x | `arc_retain_release_round_robin` (1.05x) | `alloc_init_release_plain` (0.79x) | Adds defensive object validation checks. |
-| 19 | `release-inline-value-storage` | Layout / ABI | 0.91x | `arc_retain_release_round_robin` (1.12x) | `parent_group_cycle` (0.54x) | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
-| 20 | `release-pgo-gen` | Instrumentation | 0.59x | `arc_retain_release_round_robin` (0.96x) | `parent_group_cycle` (0.24x) | Instrumentation-only PGO generation build. |
-| 21 | `debug-default` | Modes | 0.40x | `dispatch_polymorphic_hot` (0.58x) | `parent_group_cycle` (0.29x) | Debug build with runtime defaults. |
-| 22 | `release-dispatch-c` | Dispatch / behavior | 0.31x | `arc_retain_release_round_robin` (1.21x) | `dispatch_monomorphic_hot` (0.03x) | Uses the C message send path instead of the assembly fast path. |
-| 23 | `release-sanitize` | Instrumentation | 0.18x | `dispatch_polymorphic_hot` (0.29x) | `parent_group_cycle` (0.09x) | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
+| 17 | `release-validation` | Dispatch / behavior | 0.93x | `arc_retain_release_round_robin` (1.05x) | `alloc_init_release_plain` (0.79x) | Adds defensive object validation checks. |
+| 18 | `release-inline-value-storage` | Layout / ABI | 0.91x | `arc_retain_release_round_robin` (1.12x) | `parent_group_cycle` (0.54x) | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
+| 19 | `release-pgo-gen` | Instrumentation | 0.59x | `arc_retain_release_round_robin` (0.96x) | `parent_group_cycle` (0.24x) | Instrumentation-only PGO generation build. |
+| 20 | `release-dispatch-c` | Dispatch / behavior | 0.31x | `arc_retain_release_round_robin` (1.21x) | `dispatch_monomorphic_hot` (0.03x) | Uses the C message send path instead of the assembly fast path. |
 
 ## Fastest Variant Per Benchmark
 
@@ -106,7 +100,6 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 1.092 ns | 0.53x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 0.577 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 0.616 ns | 0.94x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 0.580 ns | 0.99x | Whole-program | Enables ThinLTO. |
@@ -124,17 +117,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 0.601 ns | 0.96x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 0.579 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 0.607 ns | 0.95x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 0.592 ns | 0.97x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 0.575 ns | 1.00x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 0.584 ns | 0.99x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 0.596 ns | 0.97x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 2.095 ns | 0.28x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### dispatch_polymorphic_hot
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 1.157 ns | 0.58x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 0.669 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 0.668 ns | 1.00x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 0.645 ns | 1.04x | Whole-program | Enables ThinLTO. |
@@ -152,17 +142,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 0.671 ns | 1.00x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 0.666 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 0.691 ns | 0.97x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 0.703 ns | 0.95x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 0.675 ns | 0.99x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 0.680 ns | 0.98x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 0.681 ns | 0.98x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 2.307 ns | 0.29x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### arc_retain_release_heap
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 20.247 ns | 0.34x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 6.920 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 7.443 ns | 0.93x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 4.870 ns | 1.42x | Whole-program | Enables ThinLTO. |
@@ -180,17 +167,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 6.756 ns | 1.02x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 7.307 ns | 0.95x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 6.994 ns | 0.99x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 6.861 ns | 1.01x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 6.989 ns | 0.99x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 6.950 ns | 1.00x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 6.881 ns | 1.01x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 40.016 ns | 0.17x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### arc_retain_release_round_robin
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 34.136 ns | 0.31x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 10.479 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 9.433 ns | 1.11x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 4.872 ns | 2.15x | Whole-program | Enables ThinLTO. |
@@ -208,17 +192,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 8.744 ns | 1.20x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 10.446 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 9.288 ns | 1.13x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 9.188 ns | 1.14x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 9.361 ns | 1.12x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 9.216 ns | 1.14x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 10.405 ns | 1.01x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 65.120 ns | 0.16x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### arc_store_strong_cycle
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 31.836 ns | 0.45x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 14.463 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 14.833 ns | 0.98x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 4.208 ns | 3.44x | Whole-program | Enables ThinLTO. |
@@ -236,17 +217,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 12.708 ns | 1.14x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 14.451 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 13.733 ns | 1.05x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 13.485 ns | 1.07x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 14.187 ns | 1.02x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 13.499 ns | 1.07x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 14.515 ns | 1.00x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 55.517 ns | 0.26x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### alloc_init_release_plain
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 58.194 ns | 0.36x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 21.238 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 21.663 ns | 0.98x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 12.144 ns | 1.75x | Whole-program | Enables ThinLTO. |
@@ -264,17 +242,14 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 19.654 ns | 1.08x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 21.232 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 23.061 ns | 0.92x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 24.469 ns | 0.87x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 24.402 ns | 0.87x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 22.333 ns | 0.95x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 21.181 ns | 1.00x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 175.928 ns | 0.12x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ### parent_group_cycle
 
 | Variant | ABI | Mean | Speedup vs ABI `release-default` | Category | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `debug-default` | GNUstep ABI | 263.042 ns | 0.29x | Modes | Debug build with runtime defaults. |
 | `release-default` | GNUstep ABI | 75.565 ns | 1.00x | Modes | Release build with runtime defaults. This is the matrix baseline. |
 | `release-native-tuning` | GNUstep ABI | 79.400 ns | 0.95x | Whole-program | Enables -march=native and -mtune=native. |
 | `release-thinlto` | GNUstep ABI | 41.207 ns | 1.83x | Whole-program | Enables ThinLTO. |
@@ -292,11 +267,9 @@ Regenerate with: `xmake run-runtime-performance-matrix --samples=1 --warmups=0 -
 | `release-exceptions-off` | GNUstep ABI | 74.560 ns | 1.01x | Dispatch / behavior | Disables Objective-C exceptions support. |
 | `release-reflection-off` | GNUstep ABI | 75.597 ns | 1.00x | Dispatch / behavior | Disables reflection support. |
 | `release-compact-headers` | GNUstep ABI | 116.730 ns | 0.65x | Layout / ABI | Uses the compact runtime object header layout. |
-| `release-fast-objects` | GNUstep ABI | 120.168 ns | 0.63x | Layout / ABI | Enables FastObject paths and the compact-header prerequisite. |
 | `release-inline-value-storage` | GNUstep ABI | 140.418 ns | 0.54x | Layout / ABI | Enables compact inline ValueObject prefixes and the compact-header prerequisite. |
 | `release-inline-group-state` | GNUstep ABI | 98.983 ns | 0.76x | Layout / ABI | Stores parent/group bookkeeping inline and enables the compact-header prerequisite. |
 | `release-analysis-symbols` | GNUstep ABI | 78.066 ns | 0.97x | Instrumentation | Keeps debug symbols, disables strip, and emits relocations. |
-| `release-sanitize` | GNUstep ABI | 834.469 ns | 0.09x | Instrumentation | AddressSanitizer and UndefinedBehaviorSanitizer enabled. |
 
 ## Baseline Reference
 

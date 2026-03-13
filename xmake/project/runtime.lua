@@ -175,11 +175,6 @@ function smallfw.add_runtime_mode_defines()
     else
         add_defines("SF_RUNTIME_COMPACT_HEADERS=0", {public = true})
     end
-    if has_config("runtime-fast-objects") then
-        add_defines("SF_RUNTIME_FAST_OBJECTS=1", {public = true})
-    else
-        add_defines("SF_RUNTIME_FAST_OBJECTS=0", {public = true})
-    end
     if has_config("runtime-inline-value-storage") then
         add_defines("SF_RUNTIME_INLINE_VALUE_STORAGE=1", {public = true})
     else

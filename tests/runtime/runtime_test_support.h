@@ -105,18 +105,6 @@ extern int g_counter_deallocs;
 @interface AllocTracked : Object
 @end
 
-@interface PlainFastObject : FastObject
-@end
-
-@interface InvalidFastObject : FastObject {
-  @public
-    Object *_child;
-}
-@end
-
-@interface TrackedFastObject : FastObject
-@end
-
 @interface NonTrivialInlineValue : ValueObject {
   @public
     Object *_ref;

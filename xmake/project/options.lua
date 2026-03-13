@@ -165,19 +165,6 @@ smallfw.add_runtime_boolean_option("runtime-compact-headers",
                                    "Use a compact runtime header with cold state stored out-of-line.",
                                    "runtime/abi")
 
-smallfw.add_runtime_boolean_option("runtime-fast-objects",
-                                   "Enable FastObject allocation/release fast paths for compatible classes.",
-                                   "runtime/abi")
-option("runtime-fast-objects")
-    add_deps("runtime-compact-headers")
-    after_check(function (option)
-        local compact = option:dep("runtime-compact-headers")
-        if option:enabled() and (compact == nil or not compact:enabled()) then
-            option:enable(false)
-        end
-    end)
-option_end()
-
 smallfw.add_runtime_boolean_option("runtime-inline-value-storage",
                                    "Use compact inline prefixes for embedded ValueObjects.",
                                    "runtime/abi")
@@ -221,7 +208,6 @@ smallfw.runtime_build_options = {
     "runtime-thinlto",
     "runtime-full-lto",
     "runtime-compact-headers",
-    "runtime-fast-objects",
     "runtime-inline-value-storage",
     "runtime-inline-group-state",
 }

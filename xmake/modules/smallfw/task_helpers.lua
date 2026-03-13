@@ -17,7 +17,6 @@ local runtime_config_keys = {
     "runtime-thinlto",
     "runtime-full-lto",
     "runtime-compact-headers",
-    "runtime-fast-objects",
     "runtime-inline-value-storage",
     "runtime-inline-group-state",
 }
