@@ -71,14 +71,10 @@ SmallFW is EXTREMLEY configurable!
         --runtime-sanitize=[y|n]                Enable AddressSanitizer and UndefinedBehaviorSanitizer for runtime analysis builds
         --analysis-symbols=[y|n]                Internal: keep symbols in analysis/profile builds
 
-        --dispatch-l0-dual=[y|n]                Use a dual-entry thread-local last-hit dispatch cache.
-        --dispatch-cache-negative=[y|n]         Cache stable nil dispatch misses in the fast path.
         --runtime-thinlto=[y|n]                 Enable ThinLTO for runtime targets.
         --runtime-full-lto=[y|n]                Enable full LTO for runtime targets.
         --runtime-native-tuning=[y|n]           Enable -march=native and -mtune=native on supported Linux x86_64 builds.
-        --dispatch-cache-2way=[y|n]             Use a 2-way set-associative dispatch cache.
 
-        --runtime-threadsafe=[y|n]              Enable synchronized runtime internals
         --objc-runtime=OBJC-RUNTIME            Select Objective-C runtime ABI/compiler mode (default: gnustep-2.3)
         --dispatch-backend=DISPATCH-BACKEND     Select objc_msgSend backend (default: asm)
         --runtime-forwarding=[y|n]              Enable message forwarding and runtime selector resolution support
@@ -87,7 +83,6 @@ SmallFW is EXTREMLEY configurable!
         --runtime-tagged-pointers=[y|n]         Enable tagged pointer runtime support for user-defined classes
         --runtime-exceptions=[y|n]              Enable Objective-C exceptions support in runtime (default: y)
         --runtime-reflection=[y|n]              Enable Objective-C reflection support in runtime (default: y)
-        --dispatch-stats=[y|n]                  Enable dispatch cache stats counters
 
         --runtime-inline-value-storage=[y|n]    Use compact inline prefixes for embedded ValueObjects.
         --runtime-inline-group-state=[y|n]      Store non-threadsafe parent/group bookkeeping inline in the root allocation.
