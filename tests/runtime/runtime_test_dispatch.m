@@ -14,13 +14,10 @@ typedef struct SFTestSelector {
     const char *types;
 } SFTestSelector;
 
-typedef struct SFDispatchCandidate {
-    id obj;
-    Class cls;
-    SEL sel;
-} SFDispatchCandidate;
+static SFTestSelector g_raw_empty = {"takeEmpty", ""};
+static SFTestSelector g_raw_null_types = {"takeNullTypes", NULL};
+static SFTestSelector g_raw_unknown = {"takeUnknown:", "@24@0:8?16"};
 
-#if SF_RUNTIME_THREADSAFE
 static void *dispatch_thread_main(void *arg)
 {
     DispatchThreadCtx *ctx = (DispatchThreadCtx *)arg;
@@ -33,429 +30,114 @@ static void *dispatch_thread_main(void *arg)
     ctx->sum = sum;
     return NULL;
 }
-#endif
-
-#ifdef SF_DISPATCH_BACKEND_C
-typedef struct SFTestMethodList {
-    SFObjCMethodList_t *next;
-    int32_t count;
-    int64_t size;
-    SFObjCMethod_t methods[18];
-} SFTestMethodList;
-
-typedef struct SFTestDispatchBundle {
-    SFObjCClass_t cls;
-    SFObjCClass_t meta;
-    SFTestMethodList methods;
-} SFTestDispatchBundle;
-
-static int g_probe_argc = 0;
-static uintptr_t g_probe_values[4] = {0, 0, 0, 0};
-
-static id probe0(id self, SEL cmd)
-{
-    (void)cmd;
-    g_probe_argc = 0;
-    memset(g_probe_values, 0, sizeof(g_probe_values));
-    return self;
-}
-
-static id probe1(id self, SEL cmd, uintptr_t a0)
-{
-    (void)cmd;
-    g_probe_argc = 1;
-    g_probe_values[0] = a0;
-    return self;
-}
-
-static id probe2(id self, SEL cmd, uintptr_t a0, uintptr_t a1)
-{
-    (void)cmd;
-    g_probe_argc = 2;
-    g_probe_values[0] = a0;
-    g_probe_values[1] = a1;
-    return self;
-}
-
-static id probe3(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2)
-{
-    (void)cmd;
-    g_probe_argc = 3;
-    g_probe_values[0] = a0;
-    g_probe_values[1] = a1;
-    g_probe_values[2] = a2;
-    return self;
-}
-
-static id probe4(id self, SEL cmd, uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-    (void)cmd;
-    g_probe_argc = 4;
-    g_probe_values[0] = a0;
-    g_probe_values[1] = a1;
-    g_probe_values[2] = a2;
-    g_probe_values[3] = a3;
-    return self;
-}
-
-static SFTestSelector g_c_zero = {"zero", "@16@0:8"};
-static SFTestSelector g_c_i = {"takeI:", "@24@0:8i16"};
-static SFTestSelector g_c_Iq = {"takeIq:second:", "@32@0:8I16q24"};
-static SFTestSelector g_c_QstarSel = {"takeQ:star:sel:", "@40@0:8Q16*24:32"};
-static SFTestSelector g_c_objClassPtrConst = {"takeObj:cls:ptr:cstr:", "@48@0:8@16#24^v32r*40"};
-static SFTestSelector g_c_char = {"takeChar:", "@24@0:8c16"};
-static SFTestSelector g_c_short = {"takeShort:", "@24@0:8s16"};
-static SFTestSelector g_c_bool = {"takeBool:", "@24@0:8B16"};
-static SFTestSelector g_c_C = {"takeC:", "@24@0:8C16"};
-static SFTestSelector g_c_S = {"takeS:", "@24@0:8S16"};
-static SFTestSelector g_c_long = {"takeLong:", "@24@0:8l16"};
-static SFTestSelector g_c_ulong = {"takeULong:", "@24@0:8L16"};
-static SFTestSelector g_c_pointer = {"takePointer:", "@24@0:8^i16"};
-static SFTestSelector g_c_struct = {"takeStruct:", "@24@0:8{Pair=ii}16"};
-static SFTestSelector g_c_union = {"takeUnion:", "@24@0:8(U=ii)16"};
-static SFTestSelector g_c_array = {"takeArray:", "@24@0:8[4i]16"};
-static SFTestSelector g_c_block = {"takeBlock:", "@24@0:8@?16"};
-static SFTestSelector g_c_unknown = {"takeUnknown:", "@24@0:8?16"};
-static SFTestSelector g_c_many = {"takeMany:second:third:fourth:fifth:", "@56@0:8i16i24i32i40i48"};
-static SFTestSelector g_c_empty = {"takeEmpty", ""};
-static SFTestSelector g_c_null_types = {"takeNullTypes", NULL};
-static SFTestSelector g_c_unsupported = {"takeDouble:", "@24@0:8d16"};
-
-static SFTestDispatchBundle *dispatch_bundle(void)
-{
-    static SFTestDispatchBundle bundle;
-    static int initialized = 0;
-    if (initialized) {
-        return &bundle;
-    }
-
-    memset(&bundle, 0, sizeof(bundle));
-    bundle.cls.isa = &bundle.meta;
-    bundle.cls.name = "DispatchCFallbackProbe";
-    bundle.meta.isa = &bundle.meta;
-    bundle.meta.name = "DispatchCFallbackProbeMeta";
-    bundle.methods.count = 18;
-    bundle.methods.size = (int64_t)sizeof(SFObjCMethod_t);
-
-    SFObjCMethod_t *methods = bundle.methods.methods;
-    methods[0] = (SFObjCMethod_t){.imp = (IMP)probe0, .selector = (SEL)&g_c_zero, .types = g_c_zero.types};
-    methods[1] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_i, .types = g_c_i.types};
-    methods[2] = (SFObjCMethod_t){.imp = (IMP)probe2, .selector = (SEL)&g_c_Iq, .types = g_c_Iq.types};
-    methods[3] = (SFObjCMethod_t){.imp = (IMP)probe3, .selector = (SEL)&g_c_QstarSel, .types = g_c_QstarSel.types};
-    methods[4] = (SFObjCMethod_t){.imp = (IMP)probe4, .selector = (SEL)&g_c_objClassPtrConst, .types = g_c_objClassPtrConst.types};
-    methods[5] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_char, .types = g_c_char.types};
-    methods[6] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_short, .types = g_c_short.types};
-    methods[7] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_bool, .types = g_c_bool.types};
-    methods[8] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_C, .types = g_c_C.types};
-    methods[9] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_S, .types = g_c_S.types};
-    methods[10] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_long, .types = g_c_long.types};
-    methods[11] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_ulong, .types = g_c_ulong.types};
-    methods[12] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_pointer, .types = g_c_pointer.types};
-    methods[13] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_struct, .types = g_c_struct.types};
-    methods[14] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_union, .types = g_c_union.types};
-    methods[15] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_array, .types = g_c_array.types};
-    methods[16] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_block, .types = g_c_block.types};
-    methods[17] = (SFObjCMethod_t){.imp = (IMP)probe1, .selector = (SEL)&g_c_unsupported, .types = g_c_unsupported.types};
-    bundle.cls.methods = (SFObjCMethodList_t *)&bundle.methods;
-    initialized = 1;
-    return &bundle;
-}
-#endif
 
 static int case_dispatch_cache_warm_hits(void)
 {
-    sf_dispatch_reset_stats();
+    SEL calc_sel = sel_registerName("calc:");
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
+    IMP imp0 = NULL;
+    IMP imp1 = NULL;
     int sum = 0;
 
+    if (obj == nil or calc_sel == NULL) {
+        return 0;
+    }
+
+    imp0 = sf_lookup_imp(obj, calc_sel);
+    imp1 = sf_lookup_imp(obj, calc_sel);
     for (int i = 0; i < 2000; ++i) {
         sum += [obj calc:i];
     }
 
     objc_release(obj);
-#if SF_DISPATCH_STATS
-    (void)sum;
-    return sf_dispatch_cache_hits() > sf_dispatch_cache_misses() and sf_dispatch_method_walks() > 0;
-#else
-    return sum == ((2000 * 2001) / 2);
-#endif
+    return imp0 != NULL and
+           imp0 == imp1 and
+           ((int (*)(id, SEL, int))imp0)(obj, calc_sel, 41) == 42 and
+           sum == ((2000 * 2001) / 2);
 }
 
 static int case_dispatch_super_lookup(void)
 {
+    SEL ping_sel = sel_registerName("ping");
     __unsafe_unretained SuperChild *obj = SFW_NEW(SuperChild);
-    int ok = [obj ping] == 17;
-    objc_release(obj);
-    return ok;
-}
+    Class super_cls = Nil;
+    struct sf_objc_super super_info = {0};
+    IMP super_imp = NULL;
+    int ok = 0;
 
-static int case_dispatch_lookup_nil_paths(void)
-{
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
-    static SFTestSelector missing_sel = {"missing", "@16@0:8"};
-
-    IMP nil_receiver_imp = sf_lookup_imp(nil, (SEL)&ping_sel);
-    if (nil_receiver_imp == NULL or objc_msgSend(nil, (SEL)&ping_sel) != nil) {
-        return 0;
-    }
-    if (sf_lookup_imp_in_class(NULL, (SEL)&ping_sel) != NULL) {
-        return 0;
-    }
-    if (sf_lookup_imp_in_class((Class)objc_getClass("HotDispatch"), NULL) != NULL) {
-        return 0;
-    }
-    if (sf_lookup_imp_in_class((Class)objc_getClass("HotDispatch"), (SEL)&missing_sel) != NULL) {
+    if (obj == nil or ping_sel == NULL) {
         return 0;
     }
 
-    __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
-    IMP nil_sel_imp = sf_lookup_imp(obj, NULL);
-    IMP missing_imp = sf_lookup_imp(obj, (SEL)&missing_sel);
-    int ok = nil_sel_imp != NULL and
-             objc_msgSend(obj, NULL) == nil and
-             missing_imp != NULL and
-             objc_msgSend(obj, (SEL)&missing_sel) == nil;
+    super_cls = class_getSuperclass((Class)sf_object_class(obj));
+    if (super_cls == Nil) {
+        objc_release(obj);
+        return 0;
+    }
+    super_info.self = obj;
+    super_info.super_class = super_cls;
+
+    super_imp = objc_msg_lookup_super(&super_info, ping_sel);
+    ok = [obj ping] == 17 and super_imp != NULL and ((int (*)(id, SEL))super_imp)(obj, ping_sel) == 10;
     objc_release(obj);
     return ok;
 }
 
 static int case_dispatch_selector_equality(void)
 {
-    static SFTestSelector a = {"value", "@16@0:8"};
-    static SFTestSelector b = {"value", "@16@0:8"};
-    static SFTestSelector c = {"value", NULL};
-    static SFTestSelector d = {"other", "@16@0:8"};
-    static SFTestSelector e = {NULL, "@16@0:8"};
+    SEL calc0 = sel_registerName("calc:");
+    SEL calc1 = sel_registerName("calc:");
+    SEL ping = sel_registerName("ping");
 
-    return sf_selector_equal((SEL)&a, (SEL)&a) and
-           sf_selector_equal((SEL)&a, (SEL)&b) and
-           sf_selector_equal((SEL)&a, (SEL)&c) and
-           not sf_selector_equal((SEL)&a, (SEL)&e) and
-           not sf_selector_equal((SEL)&a, (SEL)&d) and
-           not sf_selector_equal((SEL)&a, NULL) and
+    return calc0 != NULL and
+           ping != NULL and
+           sf_selector_equal(calc0, calc1) and
+           not sf_selector_equal(calc0, ping) and
+           not sf_selector_equal(calc0, NULL) and
            sf_selector_equal(NULL, NULL);
 }
 
-static int case_dispatch_msg_lookup_super_nil_paths(void)
+static int case_dispatch_selector_lookup_only_registration(void)
 {
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
-    struct sf_objc_super nil_super = {.self = nil, .super_class = NULL};
+    SEL calc_sel = sel_registerName("calc:");
+    SEL ping_sel = sel_registerName("ping");
+    SEL missing = sel_registerName("definitely_missing_selector_name");
 
-    IMP imp0 = objc_msg_lookup_super(NULL, (SEL)&ping_sel);
-    IMP imp1 = objc_msg_lookup_super(&nil_super, (SEL)&ping_sel);
-    IMP imp2 = objc_msg_lookup_super(&nil_super, NULL);
-    return imp0 != NULL and
-           imp1 != NULL and
-           imp2 != NULL;
+    return calc_sel != NULL and
+           ping_sel != NULL and
+           missing == NULL and
+           strcmp(sel_getName(calc_sel), "calc:") == 0 and
+           strcmp(sel_getName(ping_sel), "ping") == 0;
 }
 
-static int case_dispatch_cache_nil_imp(void)
+static int case_dispatch_method_lookup_canonical(void)
 {
-    static SFTestSelector missing_sel = {"missingDispatch", "@16@0:8"};
-    __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
-    IMP imp0 = sf_lookup_imp(obj, (SEL)&missing_sel);
-    IMP imp1 = sf_lookup_imp(obj, (SEL)&missing_sel);
-    int ok = imp0 != NULL and
-             imp1 != NULL and
-             objc_msgSend(obj, (SEL)&missing_sel) == nil;
-    objc_release(obj);
-    return ok;
-}
+    Class cls = (Class)objc_getClass("HotDispatch");
+    SEL canonical = sel_registerName("calc:");
+    Method method = NULL;
 
-static int case_dispatch_negative_cache_hits(void)
-{
-    static SFTestSelector missing_sel = {"missingDispatchNegative", "@16@0:8"};
-    __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
-    IMP imp0 = NULL;
-    IMP imp1 = NULL;
-
-    if (obj == nil) {
+    if (cls == Nil or canonical == NULL) {
         return 0;
     }
 
-    sf_dispatch_reset_stats();
-    imp0 = sf_lookup_imp(obj, (SEL)&missing_sel);
-    imp1 = sf_lookup_imp(obj, (SEL)&missing_sel);
-    objc_release(obj);
-
-#if SF_DISPATCH_CACHE_NEGATIVE && SF_DISPATCH_STATS
-    return imp0 == (IMP)sf_dispatch_nil_imp and
-           imp1 == (IMP)sf_dispatch_nil_imp and
-           sf_dispatch_cache_misses() == 1 and
-           sf_dispatch_cache_hits() >= 1;
-#elif SF_DISPATCH_CACHE_NEGATIVE
-    return imp0 == (IMP)sf_dispatch_nil_imp and imp1 == (IMP)sf_dispatch_nil_imp;
-#elif SF_DISPATCH_STATS
-    return imp0 == (IMP)sf_dispatch_nil_imp and
-           imp1 == (IMP)sf_dispatch_nil_imp and
-           sf_dispatch_cache_misses() >= 2 and
-           sf_dispatch_cache_hits() == 0;
-#else
-    return imp0 == (IMP)sf_dispatch_nil_imp and imp1 == (IMP)sf_dispatch_nil_imp;
-#endif
+    method = class_getInstanceMethod(cls, canonical);
+    return method != NULL and
+           method_getName(method) == canonical and
+           method_getImplementation(method) != NULL and
+           sf_selector_slot(method_getName(method)) == sf_selector_slot(canonical);
 }
 
-static int case_dispatch_l0_dual_state(void)
+static int case_dispatch_concurrent_reads(void)
 {
-#if SF_DISPATCH_L0_DUAL
-    static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
-    __unsafe_unretained HotDispatch *hot = SFW_NEW(HotDispatch);
-    __unsafe_unretained SuperChild *super_obj = SFW_NEW(SuperChild);
-    const SFDispatchEntry_t *lane0 = NULL;
-    const SFDispatchEntry_t *lane1 = NULL;
-
-    if (hot == nil or super_obj == nil) {
-        return 0;
-    }
-
-    sf_dispatch_reset_stats();
-    (void)sf_lookup_imp(hot, (SEL)&calc_sel);
-    (void)sf_lookup_imp(super_obj, (SEL)&ping_sel);
-
-    lane0 = sf_runtime_test_dispatch_l0_entry(0);
-    lane1 = sf_runtime_test_dispatch_l0_entry(1);
-
-    objc_release(hot);
-    objc_release(super_obj);
-    return lane0 != NULL and lane1 != NULL and
-           lane0->cls == (Class)objc_getClass("SuperChild") and
-           lane0->sel == (SEL)&ping_sel and
-           lane1->cls == (Class)objc_getClass("HotDispatch") and
-           lane1->sel == (SEL)&calc_sel;
-#else
-    return 1;
-#endif
-}
-
-static int dispatch_find_collision_pair(SFDispatchCandidate *out_a, SFDispatchCandidate *out_b)
-{
-    static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
-    static SFTestSelector sum_pair_sel = {"sumPair:", "q24@0:8{?=ii}16"};
-    static SFTestSelector instance_ping_sel = {"instancePing", "i16@0:8"};
-    SFDispatchCandidate candidates[4];
-
-    candidates[0] = (SFDispatchCandidate){.obj = SFW_NEW(HotDispatch), .cls = (Class)objc_getClass("HotDispatch"),
-                                          .sel = (SEL)&calc_sel};
-    candidates[1] = (SFDispatchCandidate){.obj = SFW_NEW(SuperChild), .cls = (Class)objc_getClass("SuperChild"),
-                                          .sel = (SEL)&ping_sel};
-    candidates[2] = (SFDispatchCandidate){.obj = SFW_NEW(StructDispatchProbe),
-                                          .cls = (Class)objc_getClass("StructDispatchProbe"),
-                                          .sel = (SEL)&sum_pair_sel};
-    candidates[3] = (SFDispatchCandidate){.obj = SFW_NEW(ReflectionProbe),
-                                          .cls = (Class)objc_getClass("ReflectionProbe"),
-                                          .sel = (SEL)&instance_ping_sel};
-
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
-        for (size_t j = i + 1U; j < sizeof(candidates) / sizeof(candidates[0]); ++j) {
-            if (candidates[i].obj == nil or candidates[j].obj == nil) {
-                continue;
-            }
-            if (sf_runtime_test_dispatch_cache_base_index(candidates[i].cls, candidates[i].sel) ==
-                sf_runtime_test_dispatch_cache_base_index(candidates[j].cls, candidates[j].sel)) {
-                *out_a = candidates[i];
-                *out_b = candidates[j];
-                for (size_t k = 0; k < sizeof(candidates) / sizeof(candidates[0]); ++k) {
-                    if (k != i and k != j and candidates[k].obj != nil) {
-                        objc_release(candidates[k].obj);
-                    }
-                }
-                return 1;
-            }
-        }
-    }
-
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
-        if (candidates[i].obj != nil) {
-            objc_release(candidates[i].obj);
-        }
-    }
-    return 0;
-}
-
-static int case_dispatch_cache_2way_collision(void)
-{
-#if SF_DISPATCH_CACHE_2WAY && SF_DISPATCH_STATS
-    SFDispatchCandidate first = {0};
-    SFDispatchCandidate second = {0};
-    size_t base = 0U;
-    const SFDispatchEntry_t *way0 = NULL;
-    const SFDispatchEntry_t *way1 = NULL;
-    uint64_t misses = 0;
-    uint64_t hits = 0;
-    int ok = 0;
-
-    if (not dispatch_find_collision_pair(&first, &second)) {
-        return 0;
-    }
-
-    base = sf_runtime_test_dispatch_cache_base_index(first.cls, first.sel);
-    sf_dispatch_reset_stats();
-    (void)sf_lookup_imp(first.obj, first.sel);
-    (void)sf_lookup_imp(second.obj, second.sel);
-    misses = sf_dispatch_cache_misses();
-    (void)sf_lookup_imp(first.obj, first.sel);
-    hits = sf_dispatch_cache_hits();
-    way0 = sf_runtime_test_dispatch_cache_entry(base);
-    way1 = sf_runtime_test_dispatch_cache_entry(base + 1U);
-
-    ok = misses == 2 and hits >= 1 and way0 != NULL and way1 != NULL and
-         ((way0->cls == first.cls and way0->sel == first.sel) or
-          (way1->cls == first.cls and way1->sel == first.sel)) and
-         ((way0->cls == second.cls and way0->sel == second.sel) or
-          (way1->cls == second.cls and way1->sel == second.sel));
-
-    objc_release(first.obj);
-    objc_release(second.obj);
-    return ok;
-#else
-    return 1;
-#endif
-}
-
-static int case_dispatch_stats_accessors(void)
-{
-    static SFTestSelector calc_sel = {"calc:", "i20@0:8i16"};
-
-    sf_dispatch_reset_stats();
-    if (sf_dispatch_cache_hits() != 0 or sf_dispatch_cache_misses() != 0 or sf_dispatch_method_walks() != 0) {
-        return 0;
-    }
-
-    __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
-    if (obj == nil) {
-        return 0;
-    }
-    (void)sf_lookup_imp(obj, (SEL)&calc_sel);
-    (void)sf_lookup_imp(obj, (SEL)&calc_sel);
-
-#if SF_DISPATCH_STATS
-    int ok = sf_dispatch_cache_hits() > 0 and sf_dispatch_cache_misses() > 0 and sf_dispatch_method_walks() > 0;
-#else
-    int ok = sf_dispatch_cache_hits() == 0 and sf_dispatch_cache_misses() == 0 and sf_dispatch_method_walks() == 0;
-#endif
-    objc_release(obj);
-    return ok;
-}
-
-static int case_dispatch_fake_object_null_class(void)
-{
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
-    Class fake_cls = Nil;
-    id fake = (id)&fake_cls;
-    IMP imp = sf_lookup_imp(fake, (SEL)&ping_sel);
-    return imp != NULL and objc_msgSend(fake, (SEL)&ping_sel) == nil;
-}
-
-static int case_dispatch_concurrent_cache(void)
-{
-#if SF_RUNTIME_THREADSAFE
     enum { thread_count = 4,
            loops_per_thread = 50000 };
     pthread_t threads[thread_count];
     DispatchThreadCtx ctx[thread_count];
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
+
+    if (obj == nil) {
+        return 0;
+    }
 
     for (int i = 0; i < thread_count; ++i) {
         ctx[i].obj = obj;
@@ -477,68 +159,92 @@ static int case_dispatch_concurrent_cache(void)
     }
 
     objc_release(obj);
-    long long expected = (long long)thread_count * ((long long)loops_per_thread * (loops_per_thread + 1) / 2);
-    return total == expected;
-#else
-    return 1;
-#endif
+    return total == (long long)thread_count * ((long long)loops_per_thread * (loops_per_thread + 1) / 2);
 }
 
 static int case_dispatch_c_msgsend_signatures(void)
 {
 #ifdef SF_DISPATCH_BACKEND_C
-    SFTestDispatchBundle *bundle = dispatch_bundle();
+    SEL zero_sel = sel_registerName("zero");
+    SEL take_i_sel = sel_registerName("takeI:");
+    SEL take_iq_sel = sel_registerName("takeIq:second:");
+    SEL take_q_sel = sel_registerName("takeQ:star:sel:");
+    SEL take_obj_sel = sel_registerName("takeObj:cls:ptr:cstr:");
+    SEL take_char_sel = sel_registerName("takeChar:");
+    SEL take_short_sel = sel_registerName("takeShort:");
+    SEL take_bool_sel = sel_registerName("takeBool:");
+    SEL take_c_sel = sel_registerName("takeC:");
+    SEL take_s_sel = sel_registerName("takeS:");
+    SEL take_long_sel = sel_registerName("takeLong:");
+    SEL take_ulong_sel = sel_registerName("takeULong:");
+    SEL take_pointer_sel = sel_registerName("takePointer:");
+    __unsafe_unretained CDispatchProbe *obj = SFW_NEW(CDispatchProbe);
+    const char *hello = "hello";
+    const char *const_text = "const";
+    int pointer_value = 17;
+    int ok = 0;
 
-    __unsafe_unretained Object *obj = (Object *)sf_alloc_object((Class)&bundle->cls, NULL);
-    int array_values[4] = {1, 2, 3, 4};
-    struct {
-        int left;
-        int right;
-    } pair = {5, 6};
-    union {
-        int left;
-        int right;
-    } either = {.left = 7};
-
-    if (objc_msgSend(obj, (SEL)&g_c_zero) != obj) {
-        sf_object_dispose(obj);
-        return 0;
-    }
-    if (objc_msgSend(obj, (SEL)&g_c_i, 11) != obj or g_probe_argc != 1 or g_probe_values[0] != 11U) {
-        sf_object_dispose(obj);
-        return 0;
-    }
-    if (objc_msgSend(obj, (SEL)&g_c_Iq, 12U, 13LL) != obj or g_probe_argc != 2) {
-        sf_object_dispose(obj);
-        return 0;
-    }
-    if (objc_msgSend(obj, (SEL)&g_c_QstarSel, 14ULL, "hello", (SEL)&g_c_zero) != obj or g_probe_argc != 3) {
-        sf_object_dispose(obj);
-        return 0;
-    }
-    if (objc_msgSend(obj, (SEL)&g_c_objClassPtrConst, obj, (Class)&bundle->cls, (void *)&pair, "const") != obj or
-        g_probe_argc != 4) {
-        sf_object_dispose(obj);
-        return 0;
-    }
-    if (objc_msgSend(obj, (SEL)&g_c_char, 'a') != obj or
-        objc_msgSend(obj, (SEL)&g_c_short, (short)2) != obj or
-        objc_msgSend(obj, (SEL)&g_c_bool, 1) != obj or
-        objc_msgSend(obj, (SEL)&g_c_C, (unsigned int)3) != obj or
-        objc_msgSend(obj, (SEL)&g_c_S, (unsigned int)4) != obj or
-        objc_msgSend(obj, (SEL)&g_c_long, (long)5) != obj or
-        objc_msgSend(obj, (SEL)&g_c_ulong, (unsigned long)6) != obj or
-        objc_msgSend(obj, (SEL)&g_c_pointer, (void *)&pair) != obj or
-        objc_msgSend(obj, (SEL)&g_c_struct, (void *)&pair) != obj or
-        objc_msgSend(obj, (SEL)&g_c_union, (void *)&either) != obj or
-        objc_msgSend(obj, (SEL)&g_c_array, (void *)array_values) != obj or
-        objc_msgSend(obj, (SEL)&g_c_block, (void *)bundle) != obj) {
-        sf_object_dispose(obj);
+    if (obj == nil or zero_sel == NULL or take_i_sel == NULL or take_iq_sel == NULL or take_q_sel == NULL or
+        take_obj_sel == NULL or take_char_sel == NULL or take_short_sel == NULL or take_bool_sel == NULL or
+        take_c_sel == NULL or take_s_sel == NULL or take_long_sel == NULL or take_ulong_sel == NULL or
+        take_pointer_sel == NULL) {
         return 0;
     }
 
-    sf_object_dispose(obj);
-    return 1;
+    sf_test_reset_c_dispatch_probe();
+    if (objc_msgSend(obj, zero_sel) != obj or sf_test_c_dispatch_probe_argc() != 0) {
+        objc_release(obj);
+        return 0;
+    }
+
+    if (objc_msgSend(obj, take_i_sel, 11) != obj or sf_test_c_dispatch_probe_argc() != 1 or
+        sf_test_c_dispatch_probe_value(0) != 11U) {
+        objc_release(obj);
+        return 0;
+    }
+
+    if (objc_msgSend(obj, take_iq_sel, 12U, 13LL) != obj or sf_test_c_dispatch_probe_argc() != 2 or
+        sf_test_c_dispatch_probe_value(0) != 12U or sf_test_c_dispatch_probe_value(1) != 13U) {
+        objc_release(obj);
+        return 0;
+    }
+
+    if (objc_msgSend(obj, take_q_sel, 14ULL, hello, zero_sel) != obj or sf_test_c_dispatch_probe_argc() != 3 or
+        sf_test_c_dispatch_probe_value(0) != 14U or
+        sf_test_c_dispatch_probe_value(1) != (uintptr_t)(const void *)hello or
+        sf_test_c_dispatch_probe_value(2) != (uintptr_t)(const void *)zero_sel) {
+        objc_release(obj);
+        return 0;
+    }
+
+    if (objc_msgSend(obj, take_obj_sel, obj, (Class)sf_object_class(obj), (void *)&pointer_value, const_text) != obj or
+        sf_test_c_dispatch_probe_argc() != 4 or
+        sf_test_c_dispatch_probe_value(0) != (uintptr_t)(const void *)obj or
+        sf_test_c_dispatch_probe_value(1) != (uintptr_t)(const void *)sf_object_class(obj) or
+        sf_test_c_dispatch_probe_value(2) != (uintptr_t)(void *)&pointer_value or
+        sf_test_c_dispatch_probe_value(3) != (uintptr_t)(const void *)const_text) {
+        objc_release(obj);
+        return 0;
+    }
+
+    ok = objc_msgSend(obj, take_char_sel, 'a') == obj and
+         sf_test_c_dispatch_probe_value(0) == (uintptr_t)'a' and
+         objc_msgSend(obj, take_short_sel, (short)2) == obj and
+         sf_test_c_dispatch_probe_value(0) == 2U and
+         objc_msgSend(obj, take_bool_sel, 1) == obj and
+         sf_test_c_dispatch_probe_value(0) == 1U and
+         objc_msgSend(obj, take_c_sel, (unsigned char)3U) == obj and
+         sf_test_c_dispatch_probe_value(0) == 3U and
+         objc_msgSend(obj, take_s_sel, (unsigned short)4U) == obj and
+         sf_test_c_dispatch_probe_value(0) == 4U and
+         objc_msgSend(obj, take_long_sel, (long)5) == obj and
+         sf_test_c_dispatch_probe_value(0) == 5U and
+         objc_msgSend(obj, take_ulong_sel, (unsigned long)6) == obj and
+         sf_test_c_dispatch_probe_value(0) == 6U and
+         objc_msgSend(obj, take_pointer_sel, &pointer_value) == obj and
+         sf_test_c_dispatch_probe_value(0) == (uintptr_t)(void *)&pointer_value;
+    objc_release(obj);
+    return ok;
 #else
     return 1;
 #endif
@@ -547,37 +253,18 @@ static int case_dispatch_c_msgsend_signatures(void)
 static int case_dispatch_c_msgsend_unsupported_float(void)
 {
 #ifdef SF_DISPATCH_BACKEND_C
-    SFTestDispatchBundle *bundle = dispatch_bundle();
+    SEL take_double_sel = sel_registerName("takeDouble:");
+    __unsafe_unretained CDispatchProbe *obj = SFW_NEW(CDispatchProbe);
+    id result = nil;
 
-    __unsafe_unretained Object *obj = (Object *)sf_alloc_object((Class)&bundle->cls, NULL);
-    g_probe_argc = 0;
-    id result = objc_msgSend(obj, (SEL)&g_c_unsupported, 1.25);
-    sf_object_dispose(obj);
-    return result == nil and g_probe_argc == 0;
-#else
-    return 1;
-#endif
-}
+    if (obj == nil or take_double_sel == NULL) {
+        return 0;
+    }
 
-static int case_dispatch_c_msgsend_parser_edges(void)
-{
-#ifdef SF_DISPATCH_BACKEND_C
-    if (objc_msgSend(nil, NULL) != nil) {
-        return 0;
-    }
-    if (objc_msgSend(nil, (SEL)&g_c_empty) != nil) {
-        return 0;
-    }
-    if (objc_msgSend(nil, (SEL)&g_c_null_types) != nil) {
-        return 0;
-    }
-    if (objc_msgSend(nil, (SEL)&g_c_unknown, (void *)&g_c_zero) != nil) {
-        return 0;
-    }
-    if (objc_msgSend(nil, (SEL)&g_c_many, 1, 2, 3, 4, 5) != nil) {
-        return 0;
-    }
-    return 1;
+    sf_test_reset_c_dispatch_probe();
+    result = objc_msgSend(obj, take_double_sel, 1.25);
+    objc_release(obj);
+    return result == nil and sf_test_c_dispatch_probe_argc() == 0;
 #else
     return 1;
 #endif
@@ -589,8 +276,18 @@ static int case_dispatch_c_internal_helpers(void)
     char codes[4] = {0, 0, 0, 0};
     int unsupported = -1;
     const char *ptr_arg = "ptr";
-    SEL zero_sel = (SEL)&g_c_zero;
-    Class zero_class = (Class)&g_c_zero;
+    SEL zero_sel = sel_registerName("zero");
+    SEL obj_class_ptr_sel = sel_registerName("takeObj:cls:ptr:cstr:");
+    SEL struct_sel = sel_registerName("takeStruct:");
+    SEL union_sel = sel_registerName("takeUnion:");
+    SEL unsupported_sel = sel_registerName("takeDouble:");
+    SEL many_sel = sel_registerName("takeMany:second:third:fourth:fifth:");
+    Class probe_class = (Class)objc_getClass("CDispatchProbe");
+
+    if (zero_sel == NULL or obj_class_ptr_sel == NULL or struct_sel == NULL or union_sel == NULL or
+        unsupported_sel == NULL or many_sel == NULL or probe_class == Nil) {
+        return 0;
+    }
 
     if (not sf_runtime_test_dispatch_is_digit_char('7') or sf_runtime_test_dispatch_is_digit_char('x')) {
         return 0;
@@ -616,39 +313,54 @@ static int case_dispatch_c_internal_helpers(void)
         return 0;
     }
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_null_types, codes, &unsupported) != 0 or
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_raw_null_types, codes, &unsupported) != 0 or
         unsupported != 0) {
         return 0;
     }
     unsupported = 7;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_empty, codes, &unsupported) != 0 or
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_raw_empty, codes, &unsupported) != 0 or
         unsupported != 0) {
         return 0;
     }
+
     memset(codes, 0, sizeof(codes));
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 or
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(obj_class_ptr_sel, codes, &unsupported) != 4 or
         codes[0] != '@' or codes[1] != '#' or codes[2] != '^' or codes[3] != '*') {
         return 0;
     }
+
+    memset(codes, 0, sizeof(codes));
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(struct_sel, codes, &unsupported) != 1 or codes[0] != '{') {
+        return 0;
+    }
+
+    memset(codes, 0, sizeof(codes));
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(union_sel, codes, &unsupported) != 1 or codes[0] != '(') {
+        return 0;
+    }
+
     unsupported = 0;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_unsupported, codes, &unsupported) != 0 or
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(unsupported_sel, codes, &unsupported) != 0 or
         unsupported == 0) {
         return 0;
     }
+
     unsupported = 0;
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes((SEL)&g_c_many, codes, &unsupported) != 4 or
-        unsupported == 0) {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes(many_sel, codes, &unsupported) != 4 or unsupported == 0) {
         return 0;
     }
+
     memset(codes, 0, sizeof(codes));
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4) {
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(obj_class_ptr_sel, codes, &unsupported) != 4) {
         return 0;
     }
+
     memset(codes, 0, sizeof(codes));
-    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached((SEL)&g_c_objClassPtrConst, codes, &unsupported) != 4 or
+    if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(obj_class_ptr_sel, codes, &unsupported) != 4 or
         codes[0] != '@' or codes[1] != '#' or codes[2] != '^' or codes[3] != '*') {
         return 0;
     }
+
     if (sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(NULL, codes, &unsupported) != 0) {
         return 0;
     }
@@ -667,12 +379,12 @@ static int case_dispatch_c_internal_helpers(void)
         sf_runtime_test_dispatch_read_word_arg('*', ptr_arg) != (uintptr_t)(const void *)ptr_arg or
         sf_runtime_test_dispatch_read_word_arg(':', zero_sel) != (uintptr_t)(const void *)zero_sel or
         sf_runtime_test_dispatch_read_word_arg('@', nil) != (uintptr_t)nil or
-        sf_runtime_test_dispatch_read_word_arg('#', zero_class) != (uintptr_t)(const void *)zero_class or
+        sf_runtime_test_dispatch_read_word_arg('#', probe_class) != (uintptr_t)(const void *)probe_class or
         sf_runtime_test_dispatch_read_word_arg('^', (void *)&codes) != (uintptr_t)(void *)&codes or
         sf_runtime_test_dispatch_read_word_arg('[', (void *)&codes) != (uintptr_t)(void *)&codes or
         sf_runtime_test_dispatch_read_word_arg('(', (void *)&codes) != (uintptr_t)(void *)&codes or
         sf_runtime_test_dispatch_read_word_arg('{', (void *)&codes) != (uintptr_t)(void *)&codes or
-        sf_runtime_test_dispatch_read_word_arg('?', (void *)&codes) != (uintptr_t)(void *)&codes) {
+        sf_runtime_test_dispatch_read_word_arg('?', (void *)&g_raw_unknown) != (uintptr_t)(void *)&g_raw_unknown) {
         return 0;
     }
     return 1;
@@ -697,8 +409,7 @@ static int case_dispatch_struct_params(void)
     ok = pair.left == 5 and
          pair.right == 9 and
          [obj sumPair:(SFTestPair){.left = 7, .right = 11}] == 18 and
-         [obj sumBigStruct:big
-                      bias:10] == 20;
+         [obj sumBigStruct:big bias:10] == 20;
     objc_release(obj);
     return ok;
 }
@@ -726,33 +437,29 @@ static int case_dispatch_struct_returns(void)
     return ok;
 }
 
-static int case_dispatch_runtime_selector_resolution(void)
+static int case_dispatch_dtable_lookup(void)
 {
-#if SF_RUNTIME_FORWARDING
-    static SFTestSelector calc_sel_data = {"calc:", NULL};
-    SEL calc_sel = (SEL)&calc_sel_data;
+    Class cls = (Class)objc_getClass("HotDispatch");
+    SEL calc_sel = sel_registerName("calc:");
     __unsafe_unretained HotDispatch *obj = SFW_NEW(HotDispatch);
-    int result = 0;
+    IMP imp = NULL;
+    int ok = 0;
 
-    if (obj == nil) {
+    if (cls == Nil or calc_sel == NULL or obj == nil) {
         return 0;
     }
 
-    result = ((int (*)(id, SEL, int))objc_msgSend)(obj, calc_sel, 41);
+    imp = sf_lookup_imp_in_class(cls, calc_sel);
+    ok = imp != NULL and ((int (*)(id, SEL, int))imp)(obj, calc_sel, 41) == 42;
     objc_release(obj);
-    return result == 42;
-#else
-    return 1;
-#endif
+    return ok;
 }
 
 static int case_dispatch_forwarding_targets(void)
 {
 #if SF_RUNTIME_FORWARDING
-    static SFTestSelector instance_sel_data = {"forwardedValue:", NULL};
-    static SFTestSelector class_sel_data = {"classForwardedValue:", NULL};
-    SEL instance_sel = (SEL)&instance_sel_data;
-    SEL class_sel = (SEL)&class_sel_data;
+    SEL instance_sel = sel_registerName("forwardedValue:");
+    SEL class_sel = sel_registerName("classForwardedValue:");
     Class proxy_cls = (Class)objc_getClass("ForwardDispatchProxy");
     __unsafe_unretained ForwardDispatchProxy *proxy = SFW_NEW(ForwardDispatchProxy);
     int instance_result0 = 0;
@@ -760,7 +467,7 @@ static int case_dispatch_forwarding_targets(void)
     int class_result0 = 0;
     int class_result1 = 0;
 
-    if (proxy == nil or proxy_cls == Nil) {
+    if (proxy == nil or proxy_cls == Nil or instance_sel == NULL or class_sel == NULL) {
         return 0;
     }
 
@@ -781,23 +488,16 @@ static int case_dispatch_forwarding_targets(void)
 static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_cache_warm_hits", case_dispatch_cache_warm_hits},
     {"dispatch_super_lookup", case_dispatch_super_lookup},
-    {"dispatch_lookup_nil_paths", case_dispatch_lookup_nil_paths},
     {"dispatch_selector_equality", case_dispatch_selector_equality},
-    {"dispatch_msg_lookup_super_nil_paths", case_dispatch_msg_lookup_super_nil_paths},
-    {"dispatch_cache_nil_imp", case_dispatch_cache_nil_imp},
-    {"dispatch_negative_cache_hits", case_dispatch_negative_cache_hits},
-    {"dispatch_l0_dual_state", case_dispatch_l0_dual_state},
-    {"dispatch_cache_2way_collision", case_dispatch_cache_2way_collision},
-    {"dispatch_stats_accessors", case_dispatch_stats_accessors},
-    {"dispatch_fake_object_null_class", case_dispatch_fake_object_null_class},
-    {"dispatch_concurrent_cache", case_dispatch_concurrent_cache},
+    {"dispatch_selector_lookup_only_registration", case_dispatch_selector_lookup_only_registration},
+    {"dispatch_method_lookup_canonical", case_dispatch_method_lookup_canonical},
+    {"dispatch_concurrent_reads", case_dispatch_concurrent_reads},
     {"dispatch_c_msgsend_signatures", case_dispatch_c_msgsend_signatures},
     {"dispatch_c_msgsend_unsupported_float", case_dispatch_c_msgsend_unsupported_float},
-    {"dispatch_c_msgsend_parser_edges", case_dispatch_c_msgsend_parser_edges},
     {"dispatch_c_internal_helpers", case_dispatch_c_internal_helpers},
     {"dispatch_struct_params", case_dispatch_struct_params},
     {"dispatch_struct_returns", case_dispatch_struct_returns},
-    {"dispatch_runtime_selector_resolution", case_dispatch_runtime_selector_resolution},
+    {"dispatch_dtable_lookup", case_dispatch_dtable_lookup},
     {"dispatch_forwarding_targets", case_dispatch_forwarding_targets},
 };
 

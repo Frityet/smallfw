@@ -45,40 +45,36 @@ local function _coverage_matrix()
             name = "asm_base",
             options = {
                 "--dispatch-backend=asm",
-                "--runtime-threadsafe=n",
-                "--dispatch-stats=n",
                 "--runtime-exceptions=y",
                 "--runtime-reflection=y",
+                "--runtime-forwarding=n",
             },
         },
         {
-            name = "asm_threadsafe",
+            name = "asm_forwarding",
             options = {
                 "--dispatch-backend=asm",
-                "--runtime-threadsafe=y",
-                "--dispatch-stats=y",
                 "--runtime-exceptions=y",
                 "--runtime-reflection=y",
+                "--runtime-forwarding=y",
             },
         },
         {
             name = "c_backend",
             options = {
                 "--dispatch-backend=c",
-                "--runtime-threadsafe=n",
-                "--dispatch-stats=y",
                 "--runtime-exceptions=y",
                 "--runtime-reflection=y",
+                "--runtime-forwarding=n",
             },
         },
         {
             name = "asm_min",
             options = {
                 "--dispatch-backend=asm",
-                "--runtime-threadsafe=n",
-                "--dispatch-stats=n",
                 "--runtime-exceptions=n",
                 "--runtime-reflection=n",
+                "--runtime-forwarding=n",
             },
         },
     }

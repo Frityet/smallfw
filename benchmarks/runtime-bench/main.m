@@ -102,19 +102,6 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_dispatch_nil_receiver_hot(int iters, volatile uint64_t *sink)
-{
-    BenchMono *obj = NULL;
-    int64_t local = 0;
-
-    for (int i = 0; i < iters; ++i) {
-        local += [obj calc:i];
-    }
-
-    *sink ^= (uint64_t)local;
-    return 1;
-}
-
 static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink)
 {
     BenchARC *obj = SFW_NEW(BenchARC);
@@ -230,7 +217,6 @@ typedef struct BenchCase {
 static const BenchCase g_benches[] = {
     {.name = "dispatch_monomorphic_hot", .fn = bench_dispatch_monomorphic_hot, .default_iters = 50000000},
     {.name = "dispatch_polymorphic_hot", .fn = bench_dispatch_polymorphic_hot, .default_iters = 50000000},
-    {.name = "dispatch_nil_receiver_hot", .fn = bench_dispatch_nil_receiver_hot, .default_iters = 50000000},
     {.name = "arc_retain_release_heap", .fn = bench_arc_retain_release_heap, .default_iters = 50000000},
     {.name = "arc_retain_release_round_robin", .fn = bench_arc_retain_release_round_robin, .default_iters = 20000000},
     {.name = "arc_store_strong_cycle", .fn = bench_arc_store_strong_cycle, .default_iters = 20000000},

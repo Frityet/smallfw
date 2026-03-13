@@ -573,6 +573,12 @@ static void child_stub_personality(void *ctx)
     (void)__gnustep_objc_personality_v0(0, (_Unwind_Action)0, 0, NULL, NULL);
 }
 
+static void child_stub_gnu_personality(void *ctx)
+{
+    (void)ctx;
+    (void)__gnu_objc_personality_v0(0, (_Unwind_Action)0, 0, NULL, NULL);
+}
+
 static int case_child_exceptions_stub_throw(void)
 {
     child_stub_throw(NULL);
@@ -603,6 +609,12 @@ static int case_child_exceptions_stub_personality(void)
     return 0;
 }
 
+static int case_child_exceptions_stub_gnu_personality(void)
+{
+    child_stub_gnu_personality(NULL);
+    return 0;
+}
+
 static int case_exceptions_stubs_abort(void)
 {
 #if defined(_WIN32)
@@ -610,13 +622,15 @@ static int case_exceptions_stubs_abort(void)
            sf_test_expect_signal_case("__child_exceptions_stub_begin_catch", SIGABRT) and
            sf_test_expect_signal_case("__child_exceptions_stub_end_catch", SIGABRT) and
            sf_test_expect_signal_case("__child_exceptions_stub_rethrow", SIGABRT) and
-           sf_test_expect_signal_case("__child_exceptions_stub_personality", SIGABRT);
+           sf_test_expect_signal_case("__child_exceptions_stub_personality", SIGABRT) and
+           sf_test_expect_signal_case("__child_exceptions_stub_gnu_personality", SIGABRT);
 #else
     return sf_test_expect_signal(child_stub_throw, NULL, SIGABRT) and
            sf_test_expect_signal(child_stub_begin_catch, NULL, SIGABRT) and
            sf_test_expect_signal(child_stub_end_catch, NULL, SIGABRT) and
            sf_test_expect_signal(child_stub_rethrow, NULL, SIGABRT) and
-           sf_test_expect_signal(child_stub_personality, NULL, SIGABRT);
+           sf_test_expect_signal(child_stub_personality, NULL, SIGABRT) and
+           sf_test_expect_signal(child_stub_gnu_personality, NULL, SIGABRT);
 #endif
 }
 
@@ -627,6 +641,7 @@ static const SFTestCase g_exception_cases[] = {
     {"__child_exceptions_stub_end_catch", case_child_exceptions_stub_end_catch},
     {"__child_exceptions_stub_rethrow", case_child_exceptions_stub_rethrow},
     {"__child_exceptions_stub_personality", case_child_exceptions_stub_personality},
+    {"__child_exceptions_stub_gnu_personality", case_child_exceptions_stub_gnu_personality},
 };
 #endif
 

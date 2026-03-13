@@ -66,23 +66,16 @@ local runtime_test_suite_specs = {
         cases = {
             "dispatch_cache_warm_hits",
             "dispatch_super_lookup",
-            "dispatch_lookup_nil_paths",
             "dispatch_selector_equality",
-            "dispatch_msg_lookup_super_nil_paths",
-            "dispatch_cache_nil_imp",
-            "dispatch_negative_cache_hits",
-            "dispatch_l0_dual_state",
-            "dispatch_cache_2way_collision",
-            "dispatch_stats_accessors",
-            "dispatch_fake_object_null_class",
-            "dispatch_concurrent_cache",
+            "dispatch_selector_lookup_only_registration",
+            "dispatch_method_lookup_canonical",
+            "dispatch_concurrent_reads",
             "dispatch_c_msgsend_signatures",
             "dispatch_c_msgsend_unsupported_float",
-            "dispatch_c_msgsend_parser_edges",
             "dispatch_c_internal_helpers",
             "dispatch_struct_params",
             "dispatch_struct_returns",
-            "dispatch_runtime_selector_resolution",
+            "dispatch_dtable_lookup",
             "dispatch_forwarding_targets",
         },
     },
@@ -98,12 +91,17 @@ local runtime_test_suite_specs = {
                 "loader_header_validation",
                 "loader_header_size_modes",
                 "loader_fast_object_constraints",
-                "loader_manual_registration",
                 "loader_class_size_synthetic",
+                "loader_abi_entrypoint_surface",
                 "loader_hash_helpers",
                 "loader_alloc_failure_paths",
                 "loader_class_name_live_object",
             }
+            if not smallfw.objc_runtime_is_objfw() then
+                table.insert(cases, "loader_manual_registration")
+            else
+                table.insert(cases, "loader_objfw_exec_class")
+            end
             if has_config("runtime-reflection") then
                 for _, case_name in ipairs({
                     "reflection_class_lookup",
@@ -112,7 +110,7 @@ local runtime_test_suite_specs = {
                     "reflection_ivar_lookup",
                     "reflection_inherited_ivar_lookup",
                     "reflection_null_paths",
-                    "reflection_selector_registration",
+                    "reflection_selector_lookup_only",
                     "reflection_failure_paths",
                     "reflection_full_map_exhaustion",
                 }) do

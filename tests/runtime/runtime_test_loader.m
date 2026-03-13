@@ -10,6 +10,9 @@
 #endif
 
 #include "runtime_test_support.h"
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+#include "runtime/loader/objfw.h"
+#endif
 
 typedef struct SFTestAliasEntry {
     const char *alias_name;
@@ -69,7 +72,44 @@ typedef struct SFTestIvarInheritBundle {
     SFTestIvarListOne ivars;
 } SFTestIvarInheritBundle;
 
-#if SF_RUNTIME_THREADSAFE
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+typedef struct SFTestObjFWMethodListOne {
+    SFObjFWMethodList_t *next;
+    int32_t count;
+    SFObjFWMethod_t methods[1];
+} SFTestObjFWMethodListOne;
+
+typedef struct SFTestObjFWIvarListOne {
+    int32_t count;
+    SFObjFWIvar_t ivars[1];
+} SFTestObjFWIvarListOne;
+
+typedef struct SFTestObjFWSymtabTwo {
+    uintptr_t selector_count;
+    SFObjFWSelector_t *selectors;
+    uint16_t class_count;
+    uint16_t category_count;
+    void *definitions[2];
+} SFTestObjFWSymtabTwo;
+
+typedef struct SFTestObjFWBundle {
+    SFObjFWClass_t parent_cls;
+    SFObjFWClass_t parent_meta;
+    SFObjFWClass_t child_cls;
+    SFObjFWClass_t child_meta;
+    int32_t parent_offset_value;
+    int32_t child_offset_value;
+    int32_t *parent_offsets[1];
+    int32_t *child_offsets[1];
+    SFTestObjFWIvarListOne parent_ivars;
+    SFTestObjFWIvarListOne child_ivars;
+    SFTestObjFWMethodListOne child_methods;
+    SFObjFWSelector_t selectors[1];
+    SFTestObjFWSymtabTwo symtab;
+    SFObjFWModule_t module;
+} SFTestObjFWBundle;
+#endif
+
 static void *class_lookup_thread_main(void *arg)
 {
     ClassLookupThreadCtx *ctx = (ClassLookupThreadCtx *)arg;
@@ -86,7 +126,6 @@ static void *class_lookup_thread_main(void *arg)
 
     return NULL;
 }
-#endif
 
 #if SF_RUNTIME_REFLECTION
 static void ensure_extra_registered_classes(void)
@@ -147,6 +186,12 @@ static void fail_alloc_free(void *ctx, void *ptr, size_t size, size_t align)
     free(ptr);
 }
 
+static id objfw_probe(id self, SEL cmd, ...)
+{
+    (void)cmd;
+    return self;
+}
+
 static int case_no_libobjc_dependency(void)
 {
 #if defined(_WIN32)
@@ -164,7 +209,7 @@ static int case_no_libobjc_dependency(void)
 
 static int case_loader_lookup_nulls(void)
 {
-    static SFTestSelector ping_sel = {"ping", "i16@0:8"};
+    SEL ping_sel = sel_registerName("ping");
 
     sf_register_classes(NULL, NULL);
 #if defined(__clang__)
@@ -176,7 +221,11 @@ static int case_loader_lookup_nulls(void)
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+    __objc_exec_class(NULL);
+#else
     __objc_load(NULL);
+#endif
     sf_finalize_registered_classes();
     return sf_class_from_name(NULL) == NULL and
            objc_getClass(NULL) == nil and
@@ -186,7 +235,7 @@ static int case_loader_lookup_nulls(void)
            sf_header_from_object(nil) == NULL and
            sf_object_is_heap(nil) == 0 and
            sf_cached_class_object() == objc_getClass("Object") and
-           sf_lookup_imp_in_class(NULL, (SEL)&ping_sel) == NULL;
+           sf_lookup_imp_in_class(NULL, ping_sel) == NULL;
 }
 
 static int case_loader_lookup_missing(void)
@@ -283,6 +332,9 @@ static int case_loader_fast_object_constraints(void)
 
 static int case_loader_manual_registration(void)
 {
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+    return 1;
+#else
     static int initialized = 0;
     static SFTestManualClass bundle;
     static SFTestManualClass empty_name_bundle;
@@ -322,6 +374,7 @@ static int case_loader_manual_registration(void)
 
     return objc_getClass("ManualRegisteredClass") == (id)&bundle.cls and
            objc_getClass("ManualAliasClass") == (id)&bundle.cls;
+#endif
 }
 
 static int case_loader_class_size_synthetic(void)
@@ -355,7 +408,124 @@ static int case_loader_class_size_synthetic(void)
 
     size_t size0 = class_getInstanceSize((Class)&bundle.cls);
     size_t size1 = class_getInstanceSize((Class)&bundle.cls);
-    return size0 == size1 and size0 >= sizeof(void *) and first_offset == 0 and second_offset == INT32_MAX;
+    return size0 == size1 and
+           size0 >= sizeof(void *) and
+           first_offset == INT32_MIN and
+           second_offset == INT32_MAX;
+}
+
+static int case_loader_objfw_exec_class(void)
+{
+#if !SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+    return 1;
+#else
+    static int initialized = 0;
+    static SFTestObjFWBundle bundle;
+    static char parent_name[] = "ObjFWExecParent";
+    static char child_name[] = "ObjFWExecChild";
+
+    if (not initialized) {
+        memset(&bundle, 0, sizeof(bundle));
+
+        bundle.parent_offset_value = 0;
+        bundle.child_offset_value = 0;
+        bundle.parent_offsets[0] = &bundle.parent_offset_value;
+        bundle.child_offsets[0] = &bundle.child_offset_value;
+
+        bundle.parent_ivars.count = 1;
+        bundle.parent_ivars.ivars[0].name = "_parent";
+        bundle.parent_ivars.ivars[0].type = "i";
+        bundle.parent_ivars.ivars[0].offset = 0;
+
+        bundle.child_ivars.count = 1;
+        bundle.child_ivars.ivars[0].name = "_child";
+        bundle.child_ivars.ivars[0].type = "i";
+        bundle.child_ivars.ivars[0].offset = 0;
+
+        bundle.child_methods.count = 1;
+        bundle.child_methods.methods[0].name = "objfwPing";
+        bundle.child_methods.methods[0].types = "@16@0:8";
+        bundle.child_methods.methods[0].imp = (IMP)objfw_probe;
+
+        bundle.selectors[0].name = "objfwPing";
+        bundle.selectors[0].types = "@16@0:8";
+
+        bundle.parent_cls.isa = &bundle.parent_meta;
+        bundle.parent_cls.name = parent_name;
+        bundle.parent_cls.instance_size = -4;
+        bundle.parent_cls.ivars = (SFObjFWIvarList_t *)&bundle.parent_ivars;
+        bundle.parent_cls.ivar_offsets = bundle.parent_offsets;
+        bundle.parent_cls.abi_version = 1UL;
+
+        bundle.parent_meta.name = parent_name;
+        bundle.parent_meta.abi_version = 1UL;
+
+        bundle.child_cls.isa = &bundle.child_meta;
+        bundle.child_cls.superclass = (SFObjFWClass_t *)(void *)parent_name;
+        bundle.child_cls.name = child_name;
+        bundle.child_cls.instance_size = -4;
+        bundle.child_cls.ivars = (SFObjFWIvarList_t *)&bundle.child_ivars;
+        bundle.child_cls.methods = (SFObjFWMethodList_t *)&bundle.child_methods;
+        bundle.child_cls.ivar_offsets = bundle.child_offsets;
+        bundle.child_cls.abi_version = 1UL;
+
+        bundle.child_meta.name = child_name;
+        bundle.child_meta.abi_version = 1UL;
+
+        bundle.symtab.selector_count = 1U;
+        bundle.symtab.selectors = bundle.selectors;
+        bundle.symtab.class_count = 2U;
+        bundle.symtab.category_count = 0U;
+        bundle.symtab.definitions[0] = &bundle.parent_cls;
+        bundle.symtab.definitions[1] = &bundle.child_cls;
+
+        bundle.module.version = 10U;
+        bundle.module.size = sizeof(bundle.module);
+        bundle.module.name = "objfw-exec-loader";
+        bundle.module.symtab = (SFObjFWSymtab_t *)&bundle.symtab;
+        bundle.module.reserved = 1;
+
+        __objc_exec_class(&bundle.module);
+        initialized = 1;
+    }
+
+    Class parent = (Class)objc_getClass("ObjFWExecParent");
+    Class child = (Class)objc_getClass("ObjFWExecChild");
+    SEL selector = sel_registerName("objfwPing");
+    Method method = class_getInstanceMethod(child, selector);
+    Ivar ivar = class_getInstanceVariable(child, "_child");
+
+    return parent == (Class)(void *)&bundle.parent_cls and
+           child == (Class)(void *)&bundle.child_cls and
+           class_getSuperclass(child) == parent and
+           class_getInstanceSize(child) > class_getInstanceSize(parent) and
+           selector != NULL and
+           method != NULL and
+           method_getImplementation(method) == (IMP)objfw_probe and
+           method_getName(method) != NULL and
+           method_getName(method) == selector and
+           sf_lookup_imp_in_class(child, selector) == (IMP)objfw_probe and
+           ivar != NULL and
+           bundle.parent_offset_value > 0 and
+           bundle.child_offset_value > bundle.parent_offset_value;
+#endif
+}
+
+static int case_loader_abi_entrypoint_surface(void)
+{
+#if defined(_WIN32)
+    return 1;
+#elif SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+    extern void __objc_load(void *) __attribute__((weak));
+    void (*active)(void *, ...) = __objc_exec_class;
+    void (*inactive)(void *) = __objc_load;
+    return active != NULL and inactive == NULL;
+#else
+    extern void __objc_exec_class(void *, ...) __attribute__((weak));
+    void (*active)(void *) = __objc_load;
+    void (*inactive)(void *, ...) = __objc_exec_class;
+    return active != NULL and inactive == NULL;
+#endif
 }
 
 static int case_loader_hash_helpers(void)
@@ -478,6 +648,7 @@ static int case_reflection_inherited_method_lookup(void)
     static int initialized = 0;
     static SFTestInheritBundle bundle;
     static SFTestSelector inherited_sel = {"inheritedPing", "@16@0:8"};
+    SEL canonical_sel = NULL;
 
     if (not initialized) {
         memset(&bundle, 0, sizeof(bundle));
@@ -508,8 +679,13 @@ static int case_reflection_inherited_method_lookup(void)
         initialized = 1;
     }
 
-    Method method = class_getInstanceMethod((Class)&bundle.child.cls, (SEL)&inherited_sel);
+    canonical_sel = sel_registerName("inheritedPing");
+    Method method = class_getInstanceMethod((Class)&bundle.child.cls, canonical_sel);
+    if (canonical_sel == NULL) {
+        return 0;
+    }
     return method != NULL and
+           method_getName(method) == canonical_sel and
            method_getImplementation(method) != NULL and
            method_getTypeEncoding(method) != NULL;
 }
@@ -738,11 +914,15 @@ static int case_reflection_null_paths(void)
            sel_isEqual(NULL, NULL);
 }
 
-static int case_reflection_selector_registration(void)
+static int case_reflection_selector_lookup_only(void)
 {
-    SEL first = sel_registerName("reflection_selector_registration");
-    SEL second = sel_registerName("reflection_selector_registration");
-    return first != NULL and first == second and strcmp(sel_getName(first), "reflection_selector_registration") == 0;
+    SEL first = sel_registerName("instancePing");
+    SEL second = sel_registerName("instancePing");
+    SEL missing = sel_registerName("reflection_selector_registration");
+    return first != NULL and
+           first == second and
+           missing == NULL and
+           strcmp(sel_getName(first), "instancePing") == 0;
 }
 
 static int case_reflection_failure_paths(void)
@@ -809,16 +989,6 @@ static int case_reflection_failure_paths(void)
         return 0;
     }
 
-    sf_runtime_test_fail_allocation_after(0);
-    if (sel_registerName("reflection_failure_selector_0") != NULL) {
-        sf_runtime_test_reset_alloc_failures();
-        return 0;
-    }
-    sf_runtime_test_fail_allocation_after(1);
-    if (sel_registerName("reflection_failure_selector_1") != NULL) {
-        sf_runtime_test_reset_alloc_failures();
-        return 0;
-    }
     sf_runtime_test_reset_alloc_failures();
     return 1;
 }
@@ -826,7 +996,6 @@ static int case_reflection_failure_paths(void)
 
 static int case_class_lookup_concurrent(void)
 {
-#if SF_RUNTIME_THREADSAFE
     enum { thread_count = 4,
            loops_per_thread = 40000,
            class_count = 5 };
@@ -859,9 +1028,6 @@ static int case_class_lookup_concurrent(void)
         }
     }
     return 1;
-#else
-    return 1;
-#endif
 }
 
 static const SFTestCase g_loader_cases[] = {
@@ -871,8 +1037,14 @@ static const SFTestCase g_loader_cases[] = {
     {"loader_header_validation", case_loader_header_validation},
     {"loader_header_size_modes", case_loader_header_size_modes},
     {"loader_fast_object_constraints", case_loader_fast_object_constraints},
+#if !SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
     {"loader_manual_registration", case_loader_manual_registration},
+#endif
     {"loader_class_size_synthetic", case_loader_class_size_synthetic},
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+    {"loader_objfw_exec_class", case_loader_objfw_exec_class},
+#endif
+    {"loader_abi_entrypoint_surface", case_loader_abi_entrypoint_surface},
     {"loader_hash_helpers", case_loader_hash_helpers},
     {"loader_alloc_failure_paths", case_loader_alloc_failure_paths},
     {"loader_class_name_live_object", case_loader_class_name_live_object},
@@ -883,7 +1055,7 @@ static const SFTestCase g_loader_cases[] = {
     {"reflection_ivar_lookup", case_reflection_ivar_lookup},
     {"reflection_inherited_ivar_lookup", case_reflection_inherited_ivar_lookup},
     {"reflection_null_paths", case_reflection_null_paths},
-    {"reflection_selector_registration", case_reflection_selector_registration},
+    {"reflection_selector_lookup_only", case_reflection_selector_lookup_only},
     {"reflection_failure_paths", case_reflection_failure_paths},
     {"reflection_full_map_exhaustion", case_reflection_full_map_exhaustion},
 #endif

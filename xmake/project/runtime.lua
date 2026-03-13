@@ -1,6 +1,5 @@
 smallfw = smallfw or {}
 
-smallfw.objc_runtime = "gnustep-2.3"
 local release_clang_tidy_ran = false
 
 local function add_objc_flags(...)
@@ -14,6 +13,18 @@ end
 
 function smallfw.runtime_dispatch_backend()
     return get_config("dispatch-backend") or "asm"
+end
+
+function smallfw.objc_runtime()
+    return get_config("objc-runtime") or "gnustep-2.3"
+end
+
+function smallfw.objc_runtime_is_gnustep()
+    return smallfw.objc_runtime() == "gnustep-2.3"
+end
+
+function smallfw.objc_runtime_is_objfw()
+    return smallfw.objc_runtime() == "objfw-1.5"
 end
 
 function smallfw.runtime_lto_mode()
@@ -37,6 +48,9 @@ end
 
 function smallfw.add_common_runtime_flags()
     set_warnings("everything", "error")
+    if smallfw.objc_runtime_is_objfw() and not is_plat("linux") then
+        raise("objc-runtime=objfw-1.5 is only supported on linux")
+    end
 
     add_objc_flags(
         "-Wpedantic",
@@ -97,7 +111,7 @@ function smallfw.add_common_runtime_flags()
     elseif is_plat("mingw") and is_mode("release") then
         add_ldflags("-Wl,--gc-sections", {force = true})
     end
-    add_objc_flags("-fobjc-runtime=" .. smallfw.objc_runtime, "-fobjc-arc")
+    add_objc_flags("-fobjc-runtime=" .. smallfw.objc_runtime(), "-fobjc-arc")
     add_objc_flags("-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable")
     add_objc_flags("-Wno-objc-root-class", "-Wno-objc-method-access", "-Winvalid-offsetof")
     if is_plat("mingw") then
@@ -106,24 +120,20 @@ function smallfw.add_common_runtime_flags()
 end
 
 function smallfw.add_runtime_mode_defines()
+    if smallfw.objc_runtime_is_objfw() then
+        add_defines("SF_RUNTIME_OBJC_FRAMEWORK_OBJFW=1")
+    else
+        add_defines("SF_RUNTIME_OBJC_FRAMEWORK_OBJFW=0")
+    end
+
     if has_config("runtime-validation") then
         add_defines("SF_RUNTIME_VALIDATION=1")
     else
         add_defines("SF_RUNTIME_VALIDATION=0")
     end
 
-    if has_config("runtime-threadsafe") then
-        add_defines("SF_RUNTIME_THREADSAFE=1")
-        add_syslinks("pthread")
-    else
-        add_defines("SF_RUNTIME_THREADSAFE=0")
-    end
-
-    if has_config("dispatch-stats") then
-        add_defines("SF_DISPATCH_STATS=1")
-    else
-        add_defines("SF_DISPATCH_STATS=0")
-    end
+    add_defines("SF_RUNTIME_THREADSAFE=0")
+    add_defines("SF_DISPATCH_STATS=0")
 
     if has_config("runtime-forwarding") then
         add_defines("SF_RUNTIME_FORWARDING=1", {public = true})
@@ -157,21 +167,9 @@ function smallfw.add_runtime_mode_defines()
     else
         add_defines("SF_RUNTIME_TAGGED_POINTERS=0", {public = true})
     end
-    if has_config("dispatch-l0-dual") then
-        add_defines("SF_DISPATCH_L0_DUAL=1")
-    else
-        add_defines("SF_DISPATCH_L0_DUAL=0")
-    end
-    if has_config("dispatch-cache-2way") then
-        add_defines("SF_DISPATCH_CACHE_2WAY=1")
-    else
-        add_defines("SF_DISPATCH_CACHE_2WAY=0")
-    end
-    if has_config("dispatch-cache-negative") then
-        add_defines("SF_DISPATCH_CACHE_NEGATIVE=1")
-    else
-        add_defines("SF_DISPATCH_CACHE_NEGATIVE=0")
-    end
+    add_defines("SF_DISPATCH_L0_DUAL=0")
+    add_defines("SF_DISPATCH_CACHE_2WAY=0")
+    add_defines("SF_DISPATCH_CACHE_NEGATIVE=0")
     if has_config("runtime-compact-headers") then
         add_defines("SF_RUNTIME_COMPACT_HEADERS=1", {public = true})
     else

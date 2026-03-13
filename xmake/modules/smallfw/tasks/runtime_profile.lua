@@ -390,6 +390,7 @@ end
 local function _write_metadata(filename, run_dir, builddir, binary, profiler, case_name, iters,
                                pgo_mode, bolt_mode, artifacts)
     local options = task_helpers.collect_runtime_option_values({
+        ["objc-runtime"] = _string_option("objc-runtime", "gnustep-2.3"),
         mode = _string_option("mode", "debug"),
         plat = _string_option("plat", "linux"),
         arch = _string_option("arch", "x86_64"),

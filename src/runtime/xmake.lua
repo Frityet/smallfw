@@ -5,10 +5,15 @@ local function add_runtime_implementation_files()
         "dispatch.c",
         "exceptions.c",
         "helpers.c",
-        "loader.c",
+        "loader/common.c",
         "object_header.c",
         "testhooks.c"
     )
+    if smallfw.objc_runtime_is_objfw() then
+        add_files("loader/objfw.c")
+    else
+        add_files("loader/gnustep.c")
+    end
     if is_plat("mingw") and has_config("runtime-exceptions") then
         add_files("exceptions_mingw.mm", {mxflags = {"-fno-objc-arc"}})
     end

@@ -20,6 +20,10 @@
 #define SF_RUNTIME_TAGGED_POINTERS 0
 #endif
 
+#ifndef SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+#define SF_RUNTIME_OBJC_FRAMEWORK_OBJFW 0
+#endif
+
 #if SF_RUNTIME_TAGGED_POINTERS && UINTPTR_MAX != UINT64_MAX
 #error "SF_RUNTIME_TAGGED_POINTERS requires 64-bit uintptr_t"
 #endif
@@ -66,7 +70,11 @@ struct sf_objc_super {
     Class super_class;
 };
 
+#if SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+SF_RUNTIME_EXPORT void __objc_exec_class(void *_Nullable module, ...);
+#else
 SF_RUNTIME_EXPORT void __objc_load(void *_Nullable init);
+#endif
 
 SF_RUNTIME_EXPORT id _Nullable objc_msgSend(id _Nullable receiver, SEL _Nullable op, ...) SF_NOT_TAIL_CALLED;
 #ifndef __OBJC__

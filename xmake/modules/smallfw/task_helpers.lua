@@ -5,9 +5,8 @@ import("lib.detect.find_tool")
 
 local runtime_config_keys = {
     "analysis-symbols",
-    "runtime-threadsafe",
+    "objc-runtime",
     "dispatch-backend",
-    "dispatch-stats",
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
@@ -17,9 +16,6 @@ local runtime_config_keys = {
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
-    "dispatch-l0-dual",
-    "dispatch-cache-2way",
-    "dispatch-cache-negative",
     "runtime-compact-headers",
     "runtime-fast-objects",
     "runtime-inline-value-storage",
@@ -456,9 +452,15 @@ function runtime_option_keys()
 end
 
 function collect_runtime_option_values(defaults)
-    local values = defaults or {}
+    local values = {}
+    for key, value in pairs(defaults or {}) do
+        values[key] = value
+    end
     for _, key in ipairs(runtime_config_keys) do
-        values[key] = option.get(key)
+        local value = config_value_string(option.get(key))
+        if value ~= nil then
+            values[key] = value
+        end
     end
     return values
 end
