@@ -166,20 +166,20 @@ static int sf_class_is_or_inherits_from(Class cls, Class expected)
     return class_getSuperclass(self.class);
 }
 
-- (int)isKindOfClass:(Class)cls
+- (bool)isKindOfClass:(Class)cls
 {
     if (cls == nullptr) {
-        return 0;
+        return false;
     }
     return sf_class_is_or_inherits_from(self.class, cls);
 }
 
-- (int)isMemberOfClass:(Class)cls
+- (bool)isMemberOfClass:(Class)cls
 {
     return cls != nullptr and self.class == cls;
 }
 
-- (int)isEqual:(Object *)other
+- (bool)isEqual:(Object *)other
 {
     return self == other;
 }
@@ -205,7 +205,7 @@ static int sf_class_is_or_inherits_from(Class cls, Class expected)
     return sf_tagged_pointer_payload(self);
 }
 
-- (int)isTaggedPointer
+- (bool)isTaggedPointer
 {
     return sf_is_tagged_pointer(self);
 }

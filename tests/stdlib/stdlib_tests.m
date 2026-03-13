@@ -1,7 +1,7 @@
-#include "framework/Array.h"
-#include "framework/Map.h"
-#include "framework/Number.h"
-#include "framework/String.h"
+#include "StandardLibrary/Array.h"
+#include "StandardLibrary/Map.h"
+#include "StandardLibrary/Number.h"
+#include "StandardLibrary/String.h"
 
 #include <iso646.h>
 #include <stdio.h>
@@ -10,13 +10,13 @@
 static int test_short_string_literal(void)
 {
     String *short_literal = @"hello";
-    String *heap_copy = [String stringWithUTF8String: "hello"];
-    if (short_literal == NULL) {
-        fprintf(stderr, "short literal was NULL\n");
+    String *heap_copy = [[String allocWithAllocator: nullptr] initWithUTF8String: "hello"];
+    if (short_literal == nullptr) {
+        fprintf(stderr, "short literal was nullptr\n");
         return 0;
     }
-    if (heap_copy == NULL) {
-        fprintf(stderr, "heap copy was NULL\n");
+    if (heap_copy == nullptr) {
+        fprintf(stderr, "heap copy was nullptr\n");
         return 0;
     }
     if (short_literal.length != 5U) {
@@ -46,14 +46,14 @@ static int test_long_and_unicode_strings(void)
 {
     String *long_literal = @"abcdefghi";
     String *unicode_literal = @"\u2603";
-    String *unicode_heap = [String stringWithUTF8String: "\xE2\x98\x83"];
+    String *unicode_heap = [[String allocWithAllocator: nullptr] initWithUTF8String: "\xE2\x98\x83"];
 
-    return long_literal != NULL and
+    return long_literal != nullptr and
            long_literal.length == 9U and
            [long_literal characterAtIndex: 8U] == (unsigned short)'i' and
            strcmp(long_literal.UTF8String, "abcdefghi") == 0 and
-           unicode_literal != NULL and
-           unicode_heap != NULL and
+           unicode_literal != nullptr and
+           unicode_heap != nullptr and
            unicode_literal.length == 1U and
            [unicode_literal characterAtIndex: 0U] == (unsigned short)0x2603U and
            strcmp(unicode_literal.UTF8String, "\xE2\x98\x83") == 0 and
@@ -99,7 +99,7 @@ static int test_framework_exceptions(void)
     }
 
     @try {
-        (void)[String stringWithBytes: "\xC0" length: 1U];
+        (void)[[String allocWithAllocator: nullptr] initWithBytes: "\xC0" length: 1U];
     }
     @catch (InvalidArgumentException *e) {
         caught_string = e != NULL;

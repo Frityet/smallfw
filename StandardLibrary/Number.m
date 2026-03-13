@@ -329,7 +329,7 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
     return self.doubleValue != 0.0;
 }
 
-- (int)isEqual: (Object *)other
+- (bool)isEqual: (Object *)other
 {
     uint8_t lhs_kind = 0U;
     uint8_t rhs_kind = 0U;
@@ -341,14 +341,14 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
     double rhs_double = 0.0;
 
     if ((id)self == (id)other) {
-        return 1;
+        return true;
     }
-    if ([(Object *)other isKindOfClass: Number.class] == 0) {
-        return 0;
+    if (not [other isKindOfClass: Number.class]) {
+        return false;
     }
     if (not sf_number_extract_payload(self, &lhs_kind, &lhs_signed, &lhs_unsigned, &lhs_double) or
         not sf_number_extract_payload(other, &rhs_kind, &rhs_signed, &rhs_unsigned, &rhs_double)) {
-        return 0;
+        return false;
     }
 
     if (lhs_kind == SF_NUMBER_KIND_DOUBLE or rhs_kind == SF_NUMBER_KIND_DOUBLE) {

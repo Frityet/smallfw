@@ -19,7 +19,7 @@
 #endif
 
 #if !defined(nullptr)
-#define nullptr ((void *_Nullable)0)
+#define nullptr 0
 #endif
 
 #if defined(__clang__) || defined(__GNUC__)

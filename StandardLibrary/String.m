@@ -16,9 +16,13 @@
   @private
     size_t _length;
     size_t _byte_count;
-    char *_Nullable _bytes;
+    const char *_Nullable _bytes;
+    int _owns_bytes;
 }
-- (instancetype _Nullable)initWithBytes: (const char *_Nonnull)bytes length: (size_t)length unitCount: (size_t)unit_count;
+- (instancetype _Nullable)initWithUTF8Storage: (const char *_Nonnull)bytes
+                                       length: (size_t)length
+                                    unitCount: (size_t)unit_count
+                                    copyBytes: (int)copy_bytes;
 @end
 
 static thread_local char g_tagged_string_buffers[4][9];
@@ -325,6 +329,34 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
     return 0U;
 }
 
+static String *sf_string_fail_init(String *self)
+{
+    [self release];
+#if SF_RUNTIME_EXCEPTIONS
+    @throw [InvalidArgumentException invalidArgumentException];
+#endif
+    return nullptr;
+}
+
+static SFUTF8String *sf_string_storage_receiver(String *self)
+{
+    SFAllocator_t *allocator = nullptr;
+    Object *parent = nullptr;
+
+    if (self.class == SFUTF8String.class) {
+        return (SFUTF8String *)self;
+    }
+
+    allocator = self.allocator;
+    parent = self.parent;
+    [self release];
+
+    if (parent != nullptr) {
+        return [SFUTF8String allocWithParent: parent];
+    }
+    return [SFUTF8String allocWithAllocator: allocator];
+}
+
 @implementation String
 
 #if SF_RUNTIME_TAGGED_POINTERS
@@ -334,47 +366,42 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
 }
 #endif
 
-+ (instancetype)stringWithUTF8String: (const char *)bytes
+- (instancetype)initWithUTF8String: (const char *)bytes
 {
-    size_t length = 0U;
     if (bytes == nullptr) {
-#if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
-#endif
-        return nullptr;
+        return sf_string_fail_init(self);
     }
-    length = strlen(bytes);
-    return [self stringWithBytes: bytes length: length];
+    return [self initWithBytes: bytes length: strlen(bytes)];
 }
 
-+ (instancetype)stringWithBytes: (const char *)bytes length: (size_t)length
+- (instancetype)initWithBytes: (const char *)bytes length: (size_t)length
 {
     size_t utf16_length = 0U;
     const char *nonnull_bytes = (bytes != nullptr) ? bytes : "";
+    SFUTF8String *storage = nullptr;
 
     if (bytes == nullptr and length > 0U) {
-#if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
-#endif
-        return nullptr;
+        return sf_string_fail_init(self);
     }
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (bytes != nullptr and sf_string_ascii_is_taggable(bytes, length)) {
-        id tagged = [self taggedPointerWithPayload: sf_string_tagged_payload(bytes, length)];
+    if (sf_string_ascii_is_taggable(nonnull_bytes, length)) {
+        id tagged = [String taggedPointerWithPayload: sf_string_tagged_payload(nonnull_bytes, length)];
         if (tagged != nullptr) {
+            [self release];
             return tagged;
         }
     }
 #endif
     if (not sf_string_utf8_measure_units(nonnull_bytes, length, &utf16_length, nullptr)) {
-#if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
-#endif
+        return sf_string_fail_init(self);
+    }
+
+    storage = sf_string_storage_receiver(self);
+    if (storage == nullptr) {
         return nullptr;
     }
-    SFUTF8String *string =
-        [[SFUTF8String allocWithAllocator: nullptr] initWithBytes: nonnull_bytes length: length unitCount: utf16_length];
-    return [string autorelease];
+
+    return [storage initWithUTF8Storage: nonnull_bytes length: length unitCount: utf16_length copyBytes: 1];
 }
 
 - (size_t)length
@@ -407,25 +434,25 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
     return "";
 }
 
-- (int)isEqual: (Object *)other
+- (bool)isEqual: (Object *)other
 {
     if ((id)self == (id)other) {
-        return 1;
+        return true;
     }
-    if ([(Object *)other isKindOfClass: String.class] == 0) {
-        return 0;
+    if (not [(Object *)other isKindOfClass: String.class]) {
+        return false;
     }
 
     size_t length = self.length;
     if (length != ((String *)other).length) {
-        return 0;
+        return false;
     }
     for (size_t i = 0U; i < length; ++i) {
         if ([self characterAtIndex: i] != [(String *)other characterAtIndex: i]) {
-            return 0;
+            return false;
         }
     }
-    return 1;
+    return true;
 }
 
 - (unsigned long)hash
@@ -446,8 +473,13 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
 
 @implementation SFUTF8String
 
-- (instancetype)initWithBytes: (const char *)bytes length: (size_t)length unitCount: (size_t)unit_count
+- (instancetype)initWithUTF8Storage: (const char *)bytes
+                             length: (size_t)length
+                          unitCount: (size_t)unit_count
+                          copyBytes: (int)copy_bytes
 {
+    char *owned_bytes = nullptr;
+
     self = [super init];
     if (self == nullptr) {
         return nullptr;
@@ -455,15 +487,23 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
 
     _length = unit_count;
     _byte_count = length;
-    _bytes = (char *)[self allocateMemoryWithSize: length + 1U alignment: alignof(char)];
-    if (_bytes == nullptr) {
+    _owns_bytes = copy_bytes != 0;
+
+    if (copy_bytes == 0) {
+        _bytes = bytes;
+        return self;
+    }
+
+    owned_bytes = (char *)[self allocateMemoryWithSize: length + 1U alignment: alignof(char)];
+    if (owned_bytes == nullptr) {
         [self release];
         return nullptr;
     }
     if (length > 0U) {
-        memcpy(_bytes, bytes, length);
+        memcpy(owned_bytes, bytes, length);
     }
-    _bytes[length] = '\0';
+    owned_bytes[length] = '\0';
+    _bytes = owned_bytes;
     return self;
 }
 
@@ -487,10 +527,10 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
 
 - (void)dealloc
 {
-    if (_bytes != nullptr) {
+    if (_owns_bytes and _bytes != nullptr) {
         SFAllocator_t *allocator = self.allocator;
         if (allocator != nullptr) {
-            allocator->free(allocator->ctx, _bytes, _byte_count + 1U, alignof(char));
+            allocator->free(allocator->ctx, (void *)(uintptr_t)_bytes, _byte_count + 1U, alignof(char));
         }
     }
     [super dealloc];
@@ -589,4 +629,3 @@ static unsigned short sf_objfw_string_character_at(const char *bytes, size_t len
 }
 
 @end
-

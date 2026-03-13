@@ -1,11 +1,22 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "runtime/sf_allocator.h"
 
 #ifndef SF_RUNTIME_TAGGED_POINTERS
 #define SF_RUNTIME_TAGGED_POINTERS 0
+#endif
+
+#if !defined(__cplusplus) && !defined(nullptr)
+#define nullptr 0
+#endif
+
+#if SF_RUNTIME_EXCEPTIONS
+#define SF_ERRORABLE(T) T _Nonnull
+#else
+#define SF_ERRORABLE(T) T _Nullable
 #endif
 
 
@@ -22,13 +33,8 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly) Class class;
 @property(nonatomic, readonly, nullable) Class superclass;
 @property(nonatomic, readonly) unsigned long hash;
-#if SF_RUNTIME_EXCEPTIONS
-+ (instancetype _Nonnull)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
-+ (instancetype _Nonnull)allocWithParent:(Object *_Nullable)parent;
-#else
-+ (instancetype _Nullable)allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
-+ (instancetype _Nullable)allocWithParent:(Object *_Nullable)parent;
-#endif
++ (SF_ERRORABLE(instancetype))allocWithAllocator:(SFAllocator_t *_Nullable)allocator;
++ (SF_ERRORABLE(instancetype))allocWithParent:(Object *_Nullable)parent;
 + (instancetype _Nullable)allocInPlace:(void *_Nullable)storage size:(size_t)size;
 + (Class _Nonnull)class;
 + (Class _Nullable)superclass;
@@ -39,9 +45,9 @@ __attribute__((objc_root_class))
 - (instancetype)autorelease;
 - (Class _Nonnull)class;
 - (Class _Nullable)superclass;
-- (int)isKindOfClass:(Class _Nullable)cls;
-- (int)isMemberOfClass:(Class _Nullable)cls;
-- (int)isEqual:(Object *_Nullable)other;
+- (bool)isKindOfClass:(Class _Nullable)cls;
+- (bool)isMemberOfClass:(Class _Nullable)cls;
+- (bool)isEqual:(Object *_Nullable)other;
 - (unsigned long)hash;
 #if SF_RUNTIME_FORWARDING
 + (id _Nullable)forwardingTargetForSelector:(SEL _Nullable)selector;
@@ -51,16 +57,12 @@ __attribute__((objc_root_class))
 + (uintptr_t)taggedPointerSlot;
 + (instancetype _Nullable)taggedPointerWithPayload:(uintptr_t)payload;
 @property(nonatomic, readonly) uintptr_t taggedPointerPayload;
-@property(nonatomic, readonly, getter=isTaggedPointer) int isTaggedPointer;
+@property(nonatomic, readonly, getter=isTaggedPointer) bool isTaggedPointer;
 - (uintptr_t)taggedPointerPayload;
-- (int)isTaggedPointer;
+- (bool)isTaggedPointer;
 #endif
 
-#if SF_RUNTIME_EXCEPTIONS
-- (void *_Nonnull)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment;
-#else
-- (void *_Nullable)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment;
-#endif
+- (SF_ERRORABLE(void *))allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment;
 
 @end
 

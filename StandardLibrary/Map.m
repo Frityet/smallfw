@@ -138,18 +138,18 @@ static int sf_map_keys_equal(id lhs, id rhs)
     return [self objectForKey: key];
 }
 
-- (int)isEqual: (Object *)other
+- (bool)isEqual: (Object *)other
 {
     if ((id)self == (id)other) {
-        return 1;
+        return true;
     }
-    if ([(Object *)other isKindOfClass: Map.class] == 0) {
-        return 0;
+    if (not [other isKindOfClass: Map.class]) {
+        return false;
     }
 
     Map *rhs = (Map *)other;
     if (_count != rhs.count) {
-        return 0;
+        return false;
     }
 
     for (size_t i = 0U; i < _count; ++i) {
@@ -157,16 +157,16 @@ static int sf_map_keys_equal(id lhs, id rhs)
         id rhs_value = [rhs objectForKey: _keys[i]];
 
         if (rhs_value == nullptr) {
-            return 0;
+            return false;
         }
         if (lhs_value == rhs_value) {
             continue;
         }
-        if (lhs_value == nullptr or [(Object *)lhs_value isEqual: rhs_value] == 0) {
-            return 0;
+        if (lhs_value == nullptr or [(Object *)lhs_value isEqual: rhs_value] == false) {
+            return false;
         }
     }
-    return 1;
+    return true;
 }
 
 - (unsigned long)hash

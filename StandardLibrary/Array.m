@@ -83,18 +83,18 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
     return [self objectAtIndex: idx];
 }
 
-- (int)isEqual: (Object *)other
+- (bool)isEqual: (Object *)other
 {
     if ((id)self == (id)other) {
-        return 1;
+        return true;
     }
-    if ([other isKindOfClass: Array.class] == 0) {
-        return 0;
+    if (not [other isKindOfClass: Array.class]) {
+        return false;
     }
 
     Array<Object *> *rhs = (Array *)other;
     if (_count != rhs.count) {
-        return 0;
+        return false;
     }
 
     for (size_t i = 0U; i < _count; ++i) {
@@ -103,8 +103,8 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
         if (lhs_obj == rhs_obj) {
             continue;
         }
-        if (lhs_obj == nullptr or rhs_obj == nullptr or [lhs_obj isEqual: rhs_obj] == 0) {
-            return 0;
+        if (lhs_obj == nullptr or rhs_obj == nullptr or [lhs_obj isEqual: rhs_obj] == false) {
+            return false;
         }
     }
     return 1;

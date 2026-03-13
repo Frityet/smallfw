@@ -15,13 +15,8 @@
 @property(nonatomic, readonly) size_t length;
 @property(nonatomic, readonly) const char *_Nonnull UTF8String;
 
-// #if SF_RUNTIME_EXCEPTIONS
-// // + (instancetype _Nonnull)stringWithUTF8String: (const char *_Nullable)bytes;
-// // + (instancetype _Nonnull)stringWithBytes: (const char *_Nullable)bytes length: (size_t)length;
-// #else
-// + (instancetype _Nullable)stringWithUTF8String: (const char *_Nullable)bytes;
-// + (instancetype _Nullable)stringWithBytes: (const char *_Nullable)bytes length: (size_t)length;
-// #endif
+- (SF_ERRORABLE(instancetype))initWithUTF8String: (const char *_Nullable)bytes;
+- (SF_ERRORABLE(instancetype))initWithBytes: (const char *_Nullable)bytes length: (size_t)length;
 
 #if SF_RUNTIME_TAGGED_POINTERS
 + (uintptr_t)taggedPointerSlot;
