@@ -11,6 +11,7 @@ add_moduledirs("xmake/modules")
 
 includes("xmake/project/options.lua")
 includes("xmake/project/runtime.lua")
+includes("src/blocksruntime")
 includes("src/runtime")
 includes("StandardLibrary")
 includes("tests/runtime")

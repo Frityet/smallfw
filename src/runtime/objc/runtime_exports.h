@@ -94,6 +94,7 @@ SF_RUNTIME_EXPORT id _Nullable objc_retainAutorelease(id _Nullable obj);
 SF_RUNTIME_EXPORT id _Nullable objc_retainAutoreleasedReturnValue(id _Nullable obj);
 SF_RUNTIME_EXPORT id _Nullable objc_autoreleaseReturnValue(id _Nullable obj);
 SF_RUNTIME_EXPORT id _Nullable objc_retainAutoreleaseReturnValue(id _Nullable obj);
+SF_RUNTIME_EXPORT id _Nullable objc_retainBlock(id _Nullable obj);
 SF_RUNTIME_EXPORT void objc_storeStrong(id _Nullable *_Nonnull dst, id _Nullable value);
 SF_RUNTIME_EXPORT void *_Nonnull objc_autoreleasePoolPush(void);
 SF_RUNTIME_EXPORT void objc_autoreleasePoolPop(void *_Nullable pool);

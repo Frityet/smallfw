@@ -47,7 +47,7 @@ function smallfw.runtime_binary_dependency()
 end
 
 function smallfw.add_common_runtime_flags()
-    set_warnings("everything", "error")
+    set_warnings("all")
     if smallfw.objc_runtime_is_objfw() and not is_plat("linux") then
         raise("objc-runtime=objfw-1.5 is only supported on linux")
     end
@@ -121,9 +121,10 @@ function smallfw.add_common_runtime_flags()
             add_ldflags("-Wl,--gc-sections", {force = true})
         end
     end
-    add_objc_flags("-fobjc-runtime=" .. smallfw.objc_runtime(), "-fobjc-arc")
+    add_objc_flags("-fobjc-runtime=" .. smallfw.objc_runtime(), "-fobjc-arc", "-fblocks")
     add_objc_flags("-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable")
     add_objc_flags("-Wno-objc-root-class", "-Wno-objc-method-access", "-Winvalid-offsetof")
+    add_objc_flags("-Wno-nullability-extension")
     if is_plat("mingw") then
         add_objc_flags("-Wno-used-but-marked-unused")
     end
@@ -255,6 +256,7 @@ function smallfw.configure_runtime_library_target()
         set_optimize("fastest")
     end
     add_options(smallfw.runtime_build_options)
+    add_deps("smallfw-blocksruntime")
     add_includedirs(smallfw.project_path("src"), {public = true})
     smallfw.add_common_runtime_flags()
     smallfw.add_runtime_mode_defines()

@@ -1,4 +1,6 @@
 #include "runtime/internal.h"
+#include "blocksruntime/Block.h"
+#include "blocksruntime/Block_private.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -25,6 +27,24 @@ static thread_local SFAutoreleaseState_t g_autorelease_state;
 static thread_local id g_last_header_obj;
 static thread_local SFObjHeader_t *g_last_header_ptr;
 static thread_local size_t g_pool_fallback_token;
+
+static inline int object_is_block(id obj)
+{
+    struct Block_layout *block = nullptr;
+    if (obj == nullptr) {
+        return 0;
+    }
+#if SF_RUNTIME_TAGGED_POINTERS
+    if (sf_is_tagged_pointer(obj)) {
+        return 0;
+    }
+#endif
+    block = (struct Block_layout *)(void *)obj;
+    // Blocks participate in ARC traffic through plain objc_retain/objc_release as well as objc_retainBlock.
+    return block->isa == _NSConcreteStackBlock or block->isa == _NSConcreteMallocBlock or
+           block->isa == _NSConcreteAutoBlock or block->isa == _NSConcreteFinalizingBlock or
+           block->isa == _NSConcreteGlobalBlock;
+}
 
 static inline uint32_t header_class_flags(SFObjHeader_t *hdr)
 {
@@ -476,6 +496,10 @@ static void release_object_now_known_header(id obj, SFObjHeader_t *hdr)
 
 static void release_object_now(id obj)
 {
+    if (header_from_heap_candidate(obj) == nullptr and object_is_block(obj)) {
+        _Block_release((const void *)obj);
+        return;
+    }
     release_object_now_known_header(obj, header_from_heap_candidate(obj));
 }
 
@@ -494,7 +518,11 @@ SF_ARC_RUNTIME_ENTRY id objc_retain(id obj)
             return obj;
         }
     }
-    return retain_known_heap_object(obj, hdr != nullptr ? hdr : header_from_heap_candidate(obj));
+    hdr = hdr != nullptr ? hdr : header_from_heap_candidate(obj);
+    if (hdr == nullptr and object_is_block(obj)) {
+        return (id)_Block_copy((const void *)obj);
+    }
+    return retain_known_heap_object(obj, hdr);
 }
 
 SF_ARC_RUNTIME_ENTRY void objc_release(id obj)
@@ -510,12 +538,17 @@ SF_ARC_RUNTIME_ENTRY void objc_release(id obj)
         }
 #endif
     }
-    release_object_now_known_header(obj, hdr != nullptr ? hdr : header_from_heap_candidate(obj));
+    hdr = hdr != nullptr ? hdr : header_from_heap_candidate(obj);
+    if (hdr == nullptr and object_is_block(obj)) {
+        _Block_release((const void *)obj);
+        return;
+    }
+    release_object_now_known_header(obj, hdr);
 }
 
 id sf_autorelease(id obj)
 {
-    if (header_from_heap_candidate(obj) == nullptr) {
+    if (header_from_heap_candidate(obj) == nullptr and not object_is_block(obj)) {
         return obj;
     }
     if (g_autorelease_state.marker_count == 0) {
@@ -590,6 +623,11 @@ SF_ARC_RUNTIME_ENTRY id objc_autoreleaseReturnValue(id obj)
 SF_ARC_RUNTIME_ENTRY id objc_retainAutoreleaseReturnValue(id obj)
 {
     return sf_autorelease(objc_retain(obj));
+}
+
+SF_ARC_RUNTIME_ENTRY id objc_retainBlock(id obj)
+{
+    return obj != nullptr ? (id)_Block_copy_with_pending_allocator((const void *)obj) : nullptr;
 }
 
 SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id *dst, id value)

@@ -1,0 +1,5 @@
+Vendored from:
+https://github.com/mackyle/blocksruntime
+
+Upstream commit:
+9cc93ae2b58676c23fd02cf0c686fa15b7a3ff81

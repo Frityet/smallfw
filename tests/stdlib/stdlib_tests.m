@@ -1,11 +1,40 @@
 #include "StandardLibrary/Array.h"
+#include "StandardLibrary/Block.h"
 #include "StandardLibrary/Map.h"
 #include "StandardLibrary/Number.h"
 #include "StandardLibrary/String.h"
 
 #include <iso646.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+typedef struct StdlibTestAllocatorState {
+    size_t alloc_calls;
+    size_t free_calls;
+} StdlibTestAllocatorState_t;
+
+static void *stdlib_test_alloc(void *ctx, size_t size, size_t align)
+{
+    StdlibTestAllocatorState_t *state = (StdlibTestAllocatorState_t *)ctx;
+    void *ptr = NULL;
+    size_t use_align = align < sizeof(void *) ? sizeof(void *) : align;
+
+    if (posix_memalign(&ptr, use_align, size) != 0) {
+        return NULL;
+    }
+    state->alloc_calls += 1U;
+    return ptr;
+}
+
+static void stdlib_test_free(void *ctx, void *ptr, size_t size, size_t align)
+{
+    StdlibTestAllocatorState_t *state = (StdlibTestAllocatorState_t *)ctx;
+    (void)size;
+    (void)align;
+    state->free_calls += 1U;
+    free(ptr);
+}
 
 static int test_short_string_literal(void)
 {
@@ -258,6 +287,50 @@ static int test_map_literal(void)
            ((Number *)[deduped objectForKey: @"beta"]).intValue == 2;
 }
 
+static int test_block_allocator_wrapper(void)
+{
+    StdlibTestAllocatorState_t allocator_state = {0U, 0U};
+    SFAllocator_t allocator = {
+        .alloc = stdlib_test_alloc,
+        .free = stdlib_test_free,
+        .ctx = &allocator_state,
+    };
+    int answer = 0;
+
+    {
+        int captured = 21;
+        Block<int (^)(int, int)> *adder =
+            [[Block<int (^)(int, int)> allocWithAllocator: &allocator] initWithBlock:^int(int lhs, int rhs) {
+                return lhs + rhs + captured;
+            }];
+
+        if (adder == NULL || adder.block == NULL) {
+            fprintf(stderr, "block wrapper construction failed\n");
+            return 0;
+        }
+        int (^native_adder)(int, int) = adder.block;
+        answer = native_adder(10, 11);
+        native_adder = NULL;
+        adder = nullptr;
+    }
+
+    if (answer != 42) {
+        fprintf(stderr, "block wrapper result mismatch: %d\n", answer);
+        return 0;
+    }
+    if (allocator_state.alloc_calls < 2U) {
+        fprintf(stderr, "custom allocator did not receive block copy: %zu\n", allocator_state.alloc_calls);
+        return 0;
+    }
+    if (allocator_state.free_calls != allocator_state.alloc_calls) {
+        fprintf(stderr, "custom allocator free mismatch: alloc=%zu free=%zu\n",
+                allocator_state.alloc_calls,
+                allocator_state.free_calls);
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     if (not test_object_runtime_api()) {
@@ -288,6 +361,10 @@ int main(void)
     }
     if (not test_map_literal()) {
         fprintf(stderr, "map literal test failed\n");
+        return 1;
+    }
+    if (not test_block_allocator_wrapper()) {
+        fprintf(stderr, "block allocator wrapper test failed\n");
         return 1;
     }
     return 0;

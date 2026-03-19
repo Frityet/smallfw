@@ -97,6 +97,8 @@ SmallFW is designed to be as fast as possible. See [benchmarks](./docs/PERFORMAN
 
 Unless you use the `asm` dispatch backend, SmallFW should be portable to any platform that Clang supports. The `asm` backend is currently only implemented for x86_64 Linux, but the non-asm backends should work on any platform (well... we are getting there...).
 
+SmallFW also vendors the upstream Blocks runtime sources in `src/blocksruntime`, so `-fblocks` code can link cleanly on non-Apple toolchains without requiring a separate system package. `StandardLibrary/Block.h` wraps those blocks as `Block<T>` objects where `T` is the block signature itself, and `[[Block<T> allocWithAllocator:&alloc] initWithBlock:^...]` copies the heap block through the same SmallFW allocator.
+
 ## **COOL UTILITIES AND FEATURES**
 
 ### ValueObject

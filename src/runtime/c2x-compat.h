@@ -1,6 +1,7 @@
 #pragma once
 
 #if !defined(__cplusplus)
+#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L
 
 #if !defined(alignas)
 #define alignas _Alignas
@@ -22,13 +23,11 @@
 #define nullptr 0
 #endif
 
+#endif
+
 #if defined(__clang__) || defined(__GNUC__)
 #if !defined(typeof)
 #define typeof __typeof__
-#endif
-
-#if !defined(auto)
-#define auto __auto_type
 #endif
 #endif
 

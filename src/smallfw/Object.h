@@ -9,7 +9,7 @@
 #define SF_RUNTIME_TAGGED_POINTERS 0
 #endif
 
-#if !defined(__cplusplus) && !defined(nullptr)
+#if !defined(__cplusplus) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L) && !defined(nullptr)
 #define nullptr 0
 #endif
 
