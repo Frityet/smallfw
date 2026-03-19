@@ -7,9 +7,8 @@
 #pragma clang assume_nonnull begin
 
 @interface Array<ObjectType> : Object {
-  @private
-    size_t _count;
-    id __unsafe_unretained _Nullable *_Nullable _items;
+  @private size_t _count;
+  @private id __unsafe_unretained _Nullable *_Nullable _items;
 }
 
 @property (nonatomic, readonly) size_t count;

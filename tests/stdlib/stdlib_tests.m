@@ -337,9 +337,17 @@ int main(void)
         fprintf(stderr, "object runtime api test failed\n");
         return 1;
     }
+    if (not test_exception_message()) {
+        fprintf(stderr, "exception message test failed\n");
+        return 1;
+    }
 #if SF_RUNTIME_EXCEPTIONS
     if (not test_framework_exceptions()) {
         fprintf(stderr, "framework exceptions test failed\n");
+        return 1;
+    }
+    if (not test_list_bounds_exception()) {
+        fprintf(stderr, "list bounds exception test failed\n");
         return 1;
     }
 #endif
