@@ -11,7 +11,7 @@
 @end
 
 @interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)invalidArgumentException;
++ (instancetype)exception;
 @end
 #endif
 
@@ -143,11 +143,20 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
 {
     if (object == nullptr) {
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
+        @throw [InvalidArgumentException exception];
 #else
         return false;
 #endif
     }
+#if SF_RUNTIME_GENERIC_METADATA
+    if ([object class] != (Class)self.genericTypeClass) {
+#if SF_RUNTIME_EXCEPTIONS
+        @throw [InvalidArgumentException exception];
+#else
+        return false;
+#endif
+    }
+#endif
 
     if (not [self growToFit: _count + 1U]) {
 #if SF_RUNTIME_EXCEPTIONS
@@ -201,7 +210,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
         if (lhs_obj == rhs_obj) {
             continue;
         }
-        if (lhs_obj == nullptr or rhs_obj == nullptr or [lhs_obj isEqual: rhs_obj] == false) {
+        if (lhs_obj == nullptr or rhs_obj == nullptr or not [lhs_obj isEqual: rhs_obj]) {
             return false;
         }
     }

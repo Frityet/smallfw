@@ -12,9 +12,30 @@
 
 __attribute__((sf_encode_generics))
 @interface LocalBox<T> : Object
+{
+  @public
+    Class _initObservedClass;
+}
+
+- (Class)observedClass;
 @end
 
 @implementation LocalBox
+- (instancetype)init
+{
+    self = [super init];
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    _initObservedClass = self.genericTypeClass;
+    return self;
+}
+
+- (Class)observedClass
+{
+    return _initObservedClass;
+}
 @end
 
 @interface PlainBox<T> : Object
@@ -27,11 +48,92 @@ __attribute__((sf_encode_generics))
 @interface EmbeddedBox<T> : ValueObject {
   @public
     int _payload;
+    Class _initObservedClass;
 }
+- (Class)observedClass;
 @end
 
 @implementation EmbeddedBox
+- (instancetype)init
+{
+    self = [super init];
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    _initObservedClass = self.genericTypeClass;
+    return self;
+}
+
+- (Class)observedClass
+{
+    return _initObservedClass;
+}
 @end
+
+@class ReplacementBox;
+
+static Class g_replacement_outer_observed_class = nullptr;
+static Class g_replacement_inner_observed_class = nullptr;
+static ReplacementBox *g_replacement_box = nullptr;
+
+static ReplacementBox *replacement_box_for_init(void);
+
+__attribute__((sf_encode_generics))
+@interface ReplacementBox<T> : Object {
+  @public
+    int _replacementTag;
+    Class _initObservedClass;
+}
+
+- (instancetype)initWithReplacementTag:(int)tag;
+- (Class)observedClass;
+- (int)replacementTag;
+@end
+
+@implementation ReplacementBox
+- (instancetype)init
+{
+    self = [super init];
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    g_replacement_outer_observed_class = self.genericTypeClass;
+    return replacement_box_for_init();
+}
+
+- (instancetype)initWithReplacementTag:(int)tag
+{
+    self = [super init];
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    g_replacement_inner_observed_class = self.genericTypeClass;
+    _initObservedClass = self.genericTypeClass;
+    _replacementTag = tag;
+    return self;
+}
+
+- (Class)observedClass
+{
+    return _initObservedClass;
+}
+
+- (int)replacementTag
+{
+    return _replacementTag;
+}
+@end
+
+static ReplacementBox *replacement_box_for_init(void)
+{
+    if (g_replacement_box == nullptr) {
+        g_replacement_box = [[ReplacementBox<String *> allocWithAllocator: nullptr] initWithReplacementTag: 1];
+    }
+    return g_replacement_box;
+}
 
 @interface EmbeddedHolder : Object {
   @public
@@ -112,7 +214,47 @@ static int test_local_generic_interfaces(void)
     PlainBox<String *> *plain = [[PlainBox<String *> allocWithAllocator: nullptr] init];
 
     return expect_generic_class("marked local box", (Object *)marked, String.class) &&
-           expect_generic_class("plain local box", (Object *)plain, nullptr);
+           expect_generic_class("plain local box", (Object *)plain, nullptr) &&
+           (marked.observedClass == String.class);
+}
+
+static int test_replacement_initializer_generic_metadata(void)
+{
+    ReplacementBox<String *> *replacement = [[ReplacementBox<String *> allocWithAllocator: nullptr] init];
+
+    if (replacement == nullptr) {
+        fprintf(stderr, "replacement box construction failed\n");
+        return 0;
+    }
+    if (!expect_generic_class("replacement box", (Object *)replacement, String.class)) {
+        return 0;
+    }
+    if (replacement.observedClass != String.class) {
+        fprintf(stderr,
+                "replacement box inner init observed class mismatch: expected %s, got %s\n",
+                class_name_or_nil(String.class),
+                class_name_or_nil(replacement.observedClass));
+        return 0;
+    }
+    if (replacement.replacementTag != 1) {
+        fprintf(stderr, "replacement box tag mismatch: expected 1, got %d\n", replacement.replacementTag);
+        return 0;
+    }
+    if (g_replacement_outer_observed_class != String.class) {
+        fprintf(stderr,
+                "replacement outer init observed class mismatch: expected %s, got %s\n",
+                class_name_or_nil(String.class),
+                class_name_or_nil(g_replacement_outer_observed_class));
+        return 0;
+    }
+    if (g_replacement_inner_observed_class != String.class) {
+        fprintf(stderr,
+                "replacement inner init observed class mismatch: expected %s, got %s\n",
+                class_name_or_nil(String.class),
+                class_name_or_nil(g_replacement_inner_observed_class));
+        return 0;
+    }
+    return 1;
 }
 
 static int test_alloc_in_place_generic_class(void)
@@ -138,7 +280,8 @@ static int test_alloc_with_parent_embedded_value(void)
     EmbeddedHolder *holder = [[EmbeddedHolder allocWithAllocator: nullptr] init];
     EmbeddedBox<String *> *child = [[EmbeddedBox<String *> allocWithParent: holder] init];
 
-    return expect_generic_class("embedded child", (Object *)child, String.class);
+    return expect_generic_class("embedded child", (Object *)child, String.class) &&
+           (child.observedClass == String.class);
 }
 
 int main(void)
@@ -150,6 +293,9 @@ int main(void)
         return 1;
     }
     if (!test_local_generic_interfaces()) {
+        return 1;
+    }
+    if (!test_replacement_initializer_generic_metadata()) {
         return 1;
     }
     if (!test_alloc_in_place_generic_class()) {

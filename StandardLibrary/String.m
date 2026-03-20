@@ -8,7 +8,7 @@
 
 #if SF_RUNTIME_EXCEPTIONS
 @interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)invalidArgumentException;
++ (instancetype)exception;
 @end
 #endif
 
@@ -333,7 +333,7 @@ static String *sf_string_fail_init(String *self)
 {
     [self release];
 #if SF_RUNTIME_EXCEPTIONS
-    @throw [InvalidArgumentException invalidArgumentException];
+    @throw [InvalidArgumentException exception];
 #endif
     return nullptr;
 }

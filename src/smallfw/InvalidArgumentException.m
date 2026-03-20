@@ -10,13 +10,9 @@ typedef struct SFStaticInvalidArgumentException {
     Class isa;
 } SFStaticInvalidArgumentException_t;
 
-@interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)invalidArgumentException;
-@end
-
 @implementation InvalidArgumentException
 
-+ (instancetype)invalidArgumentException
++ (instancetype)exception
 {
     static thread_local SFStaticInvalidArgumentException_t fallback;
 

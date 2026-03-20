@@ -6,7 +6,7 @@
 
 #if SF_RUNTIME_EXCEPTIONS
 @interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)invalidArgumentException;
++ (instancetype)exception;
 @end
 #endif
 
@@ -50,7 +50,7 @@ static int sf_map_keys_equal(id lhs, id rhs)
     if (count > 0U and (objects == nullptr or keys == nullptr)) {
         [self release];
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
+        @throw [InvalidArgumentException exception];
 #endif
         return nullptr;
     }

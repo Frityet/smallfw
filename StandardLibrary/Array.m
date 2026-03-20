@@ -6,7 +6,7 @@
 
 #if SF_RUNTIME_EXCEPTIONS
 @interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)invalidArgumentException;
++ (instancetype)exception;
 @end
 #endif
 
@@ -35,7 +35,7 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
     if (count > 0U and objects == nullptr) {
         [self release];
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException invalidArgumentException];
+        @throw [InvalidArgumentException exception];
 #endif
         return nullptr;
     }

@@ -84,6 +84,11 @@ static const Expr *stripNoOpWrappers(const Expr *expr)
     return expr;
 }
 
+static Expr *stripNoOpWrappers(Expr *expr)
+{
+    return const_cast<Expr *>(stripNoOpWrappers(static_cast<const Expr *>(expr)));
+}
+
 static bool isSupportedAllocSelector(const ObjCMessageExpr *message)
 {
     if (message == nullptr || !message->isClassMessage()) {
@@ -129,29 +134,36 @@ static bool extractSpecializedClassName(QualType type, std::string &class_name)
     return !class_name.empty();
 }
 
-static bool matchGenericConstruction(ASTContext &, const Expr *expr, std::string &class_name)
+static bool isInitFamilyMessage(const ObjCMessageExpr *message)
+{
+    return message != nullptr && message->isInstanceMessage() &&
+           llvm::StringRef(message->getSelector().getAsString()).starts_with("init");
+}
+
+static bool matchGenericAllocConstruction(const Expr *expr, std::string &class_name)
 {
     const auto *message = dyn_cast_or_null<ObjCMessageExpr>(stripNoOpWrappers(expr));
     if (message == nullptr) {
         return false;
     }
 
-    if (isSupportedAllocSelector(message)) {
-        return extractSpecializedClassName(message->getType(), class_name);
+    return isSupportedAllocSelector(message) && extractSpecializedClassName(message->getType(), class_name);
+}
+
+static bool matchGenericInitConstruction(Expr *expr, ObjCMessageExpr *&message, Expr *&receiver_expr,
+                                         std::string &class_name)
+{
+    message = dyn_cast_or_null<ObjCMessageExpr>(stripNoOpWrappers(expr));
+    if (!isInitFamilyMessage(message)) {
+        return false;
     }
 
-    if (!message->isInstanceMessage()) {
+    receiver_expr = message->getInstanceReceiver();
+    auto *receiver = dyn_cast_or_null<ObjCMessageExpr>(stripNoOpWrappers(receiver_expr));
+    if (!isSupportedAllocSelector(receiver) || !extractSpecializedClassName(receiver->getType(), class_name)) {
         return false;
     }
-    if (!llvm::StringRef(message->getSelector().getAsString()).starts_with("init")) {
-        return false;
-    }
-
-    const auto *receiver = dyn_cast_or_null<ObjCMessageExpr>(stripNoOpWrappers(message->getInstanceReceiver()));
-    if (!isSupportedAllocSelector(receiver)) {
-        return false;
-    }
-    return extractSpecializedClassName(message->getType(), class_name);
+    return true;
 }
 
 class GenericMetadataTransformer final {
@@ -202,8 +214,15 @@ private:
             return nullptr;
         }
 
+        ObjCMessageExpr *init_message = nullptr;
+        Expr *init_receiver = nullptr;
         std::string class_name;
-        if (matchGenericConstruction(context_, expr, class_name)) {
+        if (matchGenericInitConstruction(expr, init_message, init_receiver, class_name)) {
+            init_message->setInstanceReceiver(buildMarkerWrapper(init_receiver, class_name));
+            return buildMarkerWrapper(expr, class_name);
+        }
+
+        if (matchGenericAllocConstruction(expr, class_name)) {
             return buildMarkerWrapper(expr, class_name);
         }
 
@@ -470,24 +489,6 @@ static llvm::GlobalVariable *classReferenceGlobal(llvm::Module &module, llvm::St
                                     symbol_name);
 }
 
-static llvm::Instruction *previousNonDebugInstruction(llvm::Instruction *instruction)
-{
-    llvm::Instruction *cursor = instruction != nullptr ? instruction->getPrevNode() : nullptr;
-    while (cursor != nullptr && llvm::isa<llvm::DbgInfoIntrinsic>(cursor)) {
-        cursor = cursor->getPrevNode();
-    }
-    return cursor;
-}
-
-static llvm::Instruction *nextNonDebugInstruction(llvm::Instruction *instruction)
-{
-    llvm::Instruction *cursor = instruction != nullptr ? instruction->getNextNode() : nullptr;
-    while (cursor != nullptr && llvm::isa<llvm::DbgInfoIntrinsic>(cursor)) {
-        cursor = cursor->getNextNode();
-    }
-    return cursor;
-}
-
 static bool isArcHelperCall(const llvm::CallBase *call, llvm::StringRef name)
 {
     if (call == nullptr) {
@@ -498,14 +499,19 @@ static bool isArcHelperCall(const llvm::CallBase *call, llvm::StringRef name)
     return callee != nullptr && callee->getName() == name;
 }
 
-static bool isArcHelperInstruction(const llvm::Instruction *instruction)
+static void collectArcReleaseUsers(llvm::Value *value, llvm::SmallVectorImpl<llvm::Instruction *> &releases)
 {
-    const auto *call = llvm::dyn_cast_or_null<llvm::CallBase>(instruction);
-    if (call == nullptr) {
-        return false;
+    if (value == nullptr) {
+        return;
     }
-    const llvm::Function *callee = call->getCalledFunction();
-    return callee != nullptr && callee->getName().starts_with("llvm.objc.");
+
+    for (llvm::User *user : value->users()) {
+        auto *user_call = llvm::dyn_cast<llvm::CallBase>(user);
+        if (!isArcHelperCall(user_call, "llvm.objc.release")) {
+            continue;
+        }
+        releases.push_back(user_call);
+    }
 }
 
 class GenericMetadataLoweringPass final : public llvm::PassInfoMixin<GenericMetadataLoweringPass> {
@@ -544,6 +550,9 @@ public:
         llvm::FunctionCallee setter = module.getOrInsertFunction(
             kSetterFunctionName.data(),
             llvm::FunctionType::get(llvm::Type::getVoidTy(context), {ptr_type, ptr_type}, false));
+        if (auto *setter_function = llvm::dyn_cast<llvm::Function>(setter.getCallee()); setter_function != nullptr) {
+            setter_function->addFnAttr(llvm::Attribute::NoUnwind);
+        }
 
         for (llvm::CallBase *call : marker_calls) {
             auto class_name_info = extractStringLiteralInfo(call->getArgOperand(1));
@@ -557,39 +566,24 @@ public:
                 object = builder.CreatePointerCast(object, ptr_type);
             }
 
-            for (llvm::Instruction *previous = previousNonDebugInstruction(call);
-                 previous != nullptr && isArcHelperInstruction(previous);
-                 previous = previousNonDebugInstruction(previous)) {
-                auto *previous_call = llvm::dyn_cast<llvm::CallBase>(previous);
-                if (!isArcHelperCall(previous_call, "llvm.objc.release")) {
-                    continue;
-                }
-                llvm::Value *released = previous_call->getArgOperand(0);
-                if (released == object || released == call) {
-                    previous->eraseFromParent();
-                    break;
-                }
-            }
-            if (llvm::Instruction *next = nextNonDebugInstruction(call)) {
-                auto *next_call = llvm::dyn_cast<llvm::CallBase>(next);
-                if (isArcHelperCall(next_call, "llvm.objc.release") &&
-                    (next_call->getArgOperand(0) == object || next_call->getArgOperand(0) == call)) {
-                    next->eraseFromParent();
-                }
-            }
-
             llvm::GlobalVariable *class_ref = classReferenceGlobal(module, class_name_info->value);
             llvm::Value *class_value = builder.CreateLoad(ptr_type, class_ref);
             builder.CreateCall(setter, {object, class_value});
 
             llvm::SmallVector<llvm::Instruction *, 4> arc_cleanup;
+            bool had_retain_autoreleased_return = false;
             for (llvm::User *user : call->users()) {
                 auto *user_call = llvm::dyn_cast<llvm::CallBase>(user);
                 if (!isArcHelperCall(user_call, "llvm.objc.retainAutoreleasedReturnValue")) {
                     continue;
                 }
+                had_retain_autoreleased_return = true;
                 user_call->replaceAllUsesWith(object);
                 arc_cleanup.push_back(user_call);
+            }
+            if (had_retain_autoreleased_return) {
+                collectArcReleaseUsers(object, arc_cleanup);
+                collectArcReleaseUsers(call, arc_cleanup);
             }
 
             llvm::Value *replacement = call->getArgOperand(0);
@@ -597,6 +591,9 @@ public:
                 replacement = builder.CreateBitCast(replacement, call->getType());
             }
             call->replaceAllUsesWith(replacement);
+            if (auto *invoke = llvm::dyn_cast<llvm::InvokeInst>(call); invoke != nullptr) {
+                llvm::BranchInst::Create(invoke->getNormalDest(), invoke->getIterator());
+            }
             for (llvm::Instruction *instruction : arc_cleanup) {
                 instruction->eraseFromParent();
             }

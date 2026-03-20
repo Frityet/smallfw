@@ -82,7 +82,7 @@ __attribute__((objc_root_class))
 @end
 
 @interface InvalidArgumentException : Object
-
++ (instancetype)exception;
 @end
 
 // Parent-allocated ValueObjects are embedded into the owning object's hidden inline storage.

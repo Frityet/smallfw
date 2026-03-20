@@ -125,16 +125,16 @@ __attribute__((sf_encode_generics))
 
 `[[clang::sf_encode_generics]]` is the recommended bracket form. If you want strict standard C23 parsing rather than extension mode, compile the translation unit with a C23 language mode such as `-std=c23` or `-std=gnu23`.
 
-### Read the encoding from an instance
+### Read the class from an instance
 
 ```objc
 #if SF_RUNTIME_GENERIC_METADATA
 MyBox<String *> *box = [[MyBox<String *> allocWithAllocator: nullptr] init];
-printf("%s\n", box.genericTypeEncoding); // prints "MyBox<String *>"
+printf("%s\n", class_getName(box.genericTypeClass)); // prints "String"
 #endif
 ```
 
-When a marked interface is constructed, the runtime stores the full specialization spelling as a `const char *`. Typical values look like `Array<String *>`, `Map<String *, Number *>`, or `Block<int (^)(int, int)>`. Unmarked interfaces return `NULL`.
+When a marked interface is constructed, the runtime stores the specialized class in `genericTypeClass`. That value is available inside supported `init...` methods and after construction. Typical values are `String.class`, `Number.class`, or `nullptr` for unmarked interfaces.
 
 The current plugin only matches direct construction rooted in:
 
@@ -153,11 +153,11 @@ xmake test
 
 With the option enabled, the repository includes coverage for:
 
-- exact `genericTypeEncoding` strings on marked stdlib and test-local generic interfaces
+- exact `genericTypeClass` values on marked stdlib and test-local generic interfaces
 - `NULL` metadata for unmarked generic interfaces
 - `allocWithParent:` and inline `ValueObject` storage cases
 - compile-fail checks for invalid `sf_encode_generics` placement
-- IR checks that confirm the marker call is lowered to `sf_object_set_generic_type_encoding`
+- IR checks that confirm the marker call is lowered to `sf_object_set_generic_type_class`
 
 ## **FAST**
 
