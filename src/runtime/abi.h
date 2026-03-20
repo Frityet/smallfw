@@ -182,6 +182,9 @@ typedef struct SFInlineValueHeader {
     uint32_t reserved;
     uint32_t class_flags;
     uintptr_t tagged_parent;
+#if SF_RUNTIME_GENERIC_METADATA
+    Class _Nullable generic_type_class;
+#endif
 } SFInlineValueHeader_t;
 
 struct SFObjColdState {
@@ -190,6 +193,9 @@ struct SFObjColdState {
 #endif
     SFAllocator_t *_Nullable allocator;
     id _Nullable parent;
+#if SF_RUNTIME_GENERIC_METADATA
+    Class _Nullable generic_type_class;
+#endif
     struct SFObjHeader *_Nullable group_root;
     struct SFObjHeader *_Nullable group_next;
 #if SF_RUNTIME_THREADSAFE || !SF_RUNTIME_INLINE_GROUP_STATE
@@ -227,6 +233,9 @@ typedef struct SFObjHeader {
     uint32_t alloc_size;
     uint32_t reserved;
     SFAllocator_t *_Nullable allocator;
+#if SF_RUNTIME_GENERIC_METADATA
+    Class _Nullable generic_type_class;
+#endif
     id _Nullable parent;
     SFGroupState_t *_Nullable group;
     struct SFObjHeader *_Nullable group_next;
@@ -333,7 +342,7 @@ void sf_register_classes(SFObjCClass_t *_Nullable *_Nullable start,
 void sf_finalize_registered_classes(void);
 
 Class _Nullable sf_object_class(id _Nullable obj);
-int sf_object_is_heap(id _Nullable obj);
+bool sf_object_is_heap(id _Nullable obj);
 
 SFObjHeader_t *_Nullable sf_header_from_object(id _Nullable obj);
 id _Nullable sf_alloc_object(Class _Nullable cls, SFAllocator_t *_Nullable allocator);

@@ -5,6 +5,9 @@
 
 #pragma clang assume_nonnull begin
 
+#if SF_RUNTIME_GENERIC_METADATA
+__attribute__((sf_encode_generics))
+#endif
 @interface List<T> : Object {
     @private size_t _count, _capacity;
     @private id __unsafe_unretained  *_items;

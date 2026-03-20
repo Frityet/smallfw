@@ -62,6 +62,12 @@ id _Nullable sf_alloc_object_with_parent(Class _Nullable cls, id _Nullable paren
 int sf_default_allocator_returns_zeroed(size_t size, size_t align);
 SFAllocator_t *_Nullable sf_header_allocator(SFObjHeader_t *_Nullable hdr);
 int sf_header_set_allocator(SFObjHeader_t *_Nullable hdr, SFAllocator_t *_Nullable allocator);
+#if SF_RUNTIME_GENERIC_METADATA
+Class _Nullable sf_header_generic_type_class(SFObjHeader_t *_Nullable hdr);
+int sf_header_set_generic_type_class(SFObjHeader_t *_Nullable hdr, Class _Nullable cls);
+void sf_object_set_generic_type_class(id _Nullable obj, Class _Nullable cls);
+Class _Nullable sf_object_generic_type_class(id _Nullable obj);
+#endif
 id _Nullable sf_header_object(SFObjHeader_t *_Nullable hdr);
 int sf_header_is_inline_value_prefix(SFObjHeader_t *_Nullable hdr);
 SFObjHeader_t *_Nullable sf_header_live_next(SFObjHeader_t *_Nullable hdr);

@@ -87,7 +87,77 @@ SmallFW is EXTREMLEY configurable!
         --runtime-inline-value-storage=[y|n]    Use compact inline prefixes for embedded ValueObjects.
         --runtime-inline-group-state=[y|n]      Store non-threadsafe parent/group bookkeeping inline in the root allocation.
         --runtime-compact-headers=[y|n]         Use a compact runtime header with cold state stored out-of-line.
+        --runtime-generic-metadata=[y|n]        Enable the SmallFW generics compiler/plugin and per-instance generic type encoding.
 ```
+
+## Generic Metadata Plugin
+
+SmallFW can optionally attach the written generic specialization to each constructed object instance. This feature is disabled by default and is only supported on Linux with Clang/LLVM 21 tooling available on `PATH` such as `clang-21`, `opt-21`, and `llvm-config-21`. If those requirements are not met, `xmake` will automatically disable the option.
+
+### Enable it
+
+```sh
+xmake f --cc=clang-21 --cxx=clang++-21 --mm=clang-21 --mxx=clang++-21 --runtime-generic-metadata=y
+xmake
+```
+
+When `runtime-generic-metadata` is enabled, `xmake` builds the shared `smallfw-generics-plugin` target and injects both the Clang frontend plugin and LLVM pass plugin flags automatically. You do not need to add `-fplugin`, `-Xclang`, or `-fpass-plugin` flags yourself.
+
+### Mark a generic interface
+
+```objc
+#if SF_RUNTIME_GENERIC_METADATA
+[[clang::sf_encode_generics]]
+#endif
+@interface MyBox<T> : Object
+@end
+```
+
+`sf_encode_generics` only applies to generic Objective-C interfaces. It is only available when `runtime-generic-metadata` is enabled, so code that uses the attribute or reads the runtime metadata API should usually be wrapped in `#if SF_RUNTIME_GENERIC_METADATA`.
+
+The plugin accepts all of these spellings:
+
+```objc
+__attribute__((sf_encode_generics))
+[[sf_encode_generics]]
+[[clang::sf_encode_generics]]
+```
+
+`[[clang::sf_encode_generics]]` is the recommended bracket form. If you want strict standard C23 parsing rather than extension mode, compile the translation unit with a C23 language mode such as `-std=c23` or `-std=gnu23`.
+
+### Read the encoding from an instance
+
+```objc
+#if SF_RUNTIME_GENERIC_METADATA
+MyBox<String *> *box = [[MyBox<String *> allocWithAllocator: nullptr] init];
+printf("%s\n", box.genericTypeEncoding); // prints "MyBox<String *>"
+#endif
+```
+
+When a marked interface is constructed, the runtime stores the full specialization spelling as a `const char *`. Typical values look like `Array<String *>`, `Map<String *, Number *>`, or `Block<int (^)(int, int)>`. Unmarked interfaces return `NULL`.
+
+The current plugin only matches direct construction rooted in:
+
+- `[T allocWithAllocator: ...]`
+- `[T allocWithParent: ...]`
+- `[T allocInPlace:size: ...]`
+- the outer `init...` send directly wrapped around one of those alloc calls
+
+If allocation is hidden behind another helper or factory function, no generic metadata is attached in this first version.
+
+### Verify it
+
+```sh
+xmake test
+```
+
+With the option enabled, the repository includes coverage for:
+
+- exact `genericTypeEncoding` strings on marked stdlib and test-local generic interfaces
+- `NULL` metadata for unmarked generic interfaces
+- `allocWithParent:` and inline `ValueObject` storage cases
+- compile-fail checks for invalid `sf_encode_generics` placement
+- IR checks that confirm the marker call is lowered to `sf_object_set_generic_type_encoding`
 
 ## **FAST**
 

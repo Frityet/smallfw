@@ -947,7 +947,7 @@ static int sf_class_is_value_object_unlocked(Class cls)
 #if SF_RUNTIME_TAGGED_POINTERS
 static IMP sf_lookup_method_imp_local(Class cls, SEL sel)
 {
-    return sf_lookup_dtable_imp(cls, sel);
+    return sf_lookup_method_imp_exact(cls, sel);
 }
 
 static void sf_reset_tagged_pointer_classes_unlocked(void)
@@ -1427,16 +1427,16 @@ size_t sf_class_instance_size_fast(Class cls)
     return size;
 }
 
-int sf_object_is_heap(id obj)
+bool sf_object_is_heap(id obj)
 {
     SFObjHeader_t *hdr = nullptr;
 
     if (obj == nullptr) {
-        return 0;
+        return false;
     }
 #if SF_RUNTIME_TAGGED_POINTERS
     if (sf_is_tagged_pointer(obj)) {
-        return 0;
+        return false;
     }
 #endif
     hdr = sf_header_from_object(obj);
@@ -1900,7 +1900,21 @@ uint64_t sf_hash_ptr(const void *p)
 
 static IMP sf_lookup_method_imp_exact(Class cls, SEL sel)
 {
-    return sf_lookup_dtable_imp(cls, sel);
+    SFObjCClass_t *cursor = (SFObjCClass_t *)cls;
+
+    if (cursor == nullptr or sel == nullptr) {
+        return nullptr;
+    }
+
+    for (SFObjCMethodList_t *list = cursor->methods; list != nullptr; list = list->next) {
+        for (int32_t i = 0; i < list->count; ++i) {
+            SFObjCMethod_t *method = &list->methods[i];
+            if (sf_selector_equal(method->selector, sel)) {
+                return method->imp;
+            }
+        }
+    }
+    return nullptr;
 }
 
 static void sf_cache_class_meta(Class cls)

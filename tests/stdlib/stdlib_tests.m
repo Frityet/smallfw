@@ -1,8 +1,11 @@
 #include "StandardLibrary/Array.h"
 #include "StandardLibrary/Block.h"
+#include "StandardLibrary/Exception.h"
+#include "StandardLibrary/List.h"
 #include "StandardLibrary/Map.h"
 #include "StandardLibrary/Number.h"
 #include "StandardLibrary/String.h"
+#include "runtime/objc/runtime_exports.h"
 
 #include <iso646.h>
 #include <stdlib.h>
@@ -13,6 +16,40 @@ typedef struct StdlibTestAllocatorState {
     size_t alloc_calls;
     size_t free_calls;
 } StdlibTestAllocatorState_t;
+
+#if SF_RUNTIME_GENERIC_METADATA
+__attribute__((sf_encode_generics))
+@interface StdlibGenericBox<T> : Object
+@end
+
+@implementation StdlibGenericBox
+@end
+
+@interface StdlibPlainGenericBox<T> : Object
+@end
+
+@implementation StdlibPlainGenericBox
+@end
+
+__attribute__((sf_encode_generics))
+@interface StdlibInlineGenericValue<T> : ValueObject {
+  @public
+    int _payload;
+}
+@end
+
+@implementation StdlibInlineGenericValue
+@end
+
+@interface StdlibInlineGenericHolder : Object {
+  @public
+    StdlibInlineGenericValue<String *> *_value;
+}
+@end
+
+@implementation StdlibInlineGenericHolder
+@end
+#endif
 
 static void *stdlib_test_alloc(void *ctx, size_t size, size_t align)
 {
@@ -34,6 +71,19 @@ static void stdlib_test_free(void *ctx, void *ptr, size_t size, size_t align)
     (void)align;
     state->free_calls += 1U;
     free(ptr);
+}
+
+static int expect_utf8_equal(const char *label, const char *actual, const char *expected)
+{
+    if (actual == NULL || expected == NULL) {
+        fprintf(stderr, "%s string pointer mismatch\n", label);
+        return 0;
+    }
+    if (strcmp(actual, expected) != 0) {
+        fprintf(stderr, "%s string mismatch: expected '%s', got '%s'\n", label, expected, actual);
+        return 0;
+    }
+    return 1;
 }
 
 static int test_short_string_literal(void)
@@ -106,6 +156,18 @@ static int test_number_literals(void)
            real.doubleValue == 1.5;
 }
 
+static int test_exception_message(void)
+{
+    Exception *with_message = [Exception exceptionWithMessage: @"boom"];
+    Exception *without_message = [Exception exceptionWithMessage: nullptr];
+
+    return with_message != nullptr and
+           with_message.message != nullptr and
+           strcmp(with_message.message.UTF8String, "boom") == 0 and
+           without_message != nullptr and
+           without_message.message == nullptr;
+}
+
 #if SF_RUNTIME_EXCEPTIONS
 static int test_framework_exceptions(void)
 {
@@ -135,6 +197,26 @@ static int test_framework_exceptions(void)
     }
 
     return caught_array != 0 and caught_map != 0 and caught_string != 0;
+}
+
+static int test_list_bounds_exception(void)
+{
+    List<Number *> *list = [[List<Number *> allocWithAllocator: nullptr] initWithCapacity: 1U];
+    int caught = 0;
+
+    if (list == nullptr) {
+        fprintf(stderr, "list construction failed\n");
+        return 0;
+    }
+
+    @try {
+        (void)[list objectAtIndex: 0U];
+    }
+    @catch (IndexOutOfBoundsException *e) {
+        caught = (e != nullptr);
+    }
+
+    return caught != 0;
 }
 #endif
 
@@ -331,6 +413,99 @@ static int test_block_allocator_wrapper(void)
     return 1;
 }
 
+#if SF_RUNTIME_GENERIC_METADATA
+static const char *generic_class_name_or_nil(Class cls)
+{
+    return cls != NULL ? class_getName(cls) : "(nil)";
+}
+
+static int expect_generic_class(const char *label, Object *obj, Class expected)
+{
+    Class actual = NULL;
+
+    if (obj == NULL) {
+        fprintf(stderr, "%s object was NULL\n", label);
+        return 0;
+    }
+
+    actual = obj.genericTypeClass;
+    if (actual != expected) {
+        fprintf(stderr,
+                "%s genericTypeClass mismatch: expected %s, got %s\n",
+                label,
+                generic_class_name_or_nil(expected),
+                generic_class_name_or_nil(actual));
+        return 0;
+    }
+    return 1;
+}
+
+static int test_runtime_generic_metadata(void)
+{
+    Array<String *> *array = [[Array<String *> allocWithAllocator: nullptr]
+        initWithObjects: (id[]){@"one"}
+                  count: 1U];
+    List<Number *> *list = [[List<Number *> allocWithAllocator: nullptr] initWithCapacity: 2U];
+    Map<String *, Number *> *map = [[Map<String *, Number *> allocWithAllocator: nullptr]
+        initWithObjects: (id[]){@1}
+                forKeys: (id[]){@"one"}
+                  count: 1U];
+    Block<int (^)(int, int)> *block =
+        [[Block<int (^)(int, int)> allocWithAllocator: nullptr] initWithBlock:^int(int lhs, int rhs) {
+            return lhs + rhs;
+        }];
+    StdlibGenericBox<String *> *box = [[StdlibGenericBox<String *> allocWithAllocator: nullptr] init];
+    StdlibPlainGenericBox<String *> *plain = [[StdlibPlainGenericBox<String *> allocWithAllocator: nullptr] init];
+    StdlibInlineGenericHolder *holder = [[StdlibInlineGenericHolder allocWithAllocator: nullptr] init];
+    StdlibInlineGenericValue<String *> *inline_value =
+        [[StdlibInlineGenericValue<String *> allocWithParent: holder] init];
+
+#if SF_RUNTIME_EXCEPTIONS
+    [list addObject: @1];
+#else
+    if (![list addObject: @1]) {
+        fprintf(stderr, "list addObject failed\n");
+        return 0;
+    }
+#endif
+
+    if (!expect_generic_class("array", (Object *)array, String.class)) {
+        return 0;
+    }
+    if (!expect_generic_class("list", (Object *)list, Number.class)) {
+        return 0;
+    }
+    Number *first = [list objectAtIndex: 0U];
+    if (first == nullptr or first.intValue != 1) {
+        fprintf(stderr, "generic list element mismatch\n");
+        return 0;
+    }
+    if (!expect_generic_class("map", (Object *)map, NULL)) {
+        return 0;
+    }
+    if (!expect_generic_class("block", (Object *)block, NULL)) {
+        return 0;
+    }
+    if (!expect_generic_class("box", (Object *)box, String.class)) {
+        return 0;
+    }
+    if (!expect_generic_class("inline value", (Object *)inline_value, String.class)) {
+        return 0;
+    }
+    if (plain == NULL) {
+        fprintf(stderr, "plain generic box was NULL\n");
+        return 0;
+    }
+    if (plain.genericTypeClass != NULL) {
+        fprintf(stderr,
+                "plain generic box unexpectedly had metadata: %s\n",
+                generic_class_name_or_nil(plain.genericTypeClass));
+        return 0;
+    }
+    return 1;
+}
+#endif
+
 int main(void)
 {
     if (not test_object_runtime_api()) {
@@ -375,5 +550,11 @@ int main(void)
         fprintf(stderr, "block allocator wrapper test failed\n");
         return 1;
     }
+#if SF_RUNTIME_GENERIC_METADATA
+    if (not test_runtime_generic_metadata()) {
+        fprintf(stderr, "runtime generic metadata test failed\n");
+        return 1;
+    }
+#endif
     return 0;
 }

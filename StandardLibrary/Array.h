@@ -6,6 +6,9 @@
 
 #pragma clang assume_nonnull begin
 
+#if SF_RUNTIME_GENERIC_METADATA
+__attribute__((sf_encode_generics))
+#endif
 @interface Array<ObjectType> : Object {
   @private size_t _count;
   @private id __unsafe_unretained _Nullable *_Nullable _items;

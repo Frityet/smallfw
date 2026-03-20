@@ -87,6 +87,49 @@ static SFAllocator_t *sf_header_allocator_local(SFObjHeader_t *hdr)
     return cold != nullptr ? cold->allocator : nullptr;
 }
 
+#if SF_RUNTIME_GENERIC_METADATA
+static Class sf_header_generic_type_class_local(SFObjHeader_t *hdr)
+{
+    if (sf_header_is_inline_value_prefix(hdr)) {
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+        SFInlineValueHeader_t *inline_hdr = (SFInlineValueHeader_t *)(void *)hdr;
+        return inline_hdr->generic_type_class;
+#else
+        return nullptr;
+#endif
+    }
+    SFObjColdState_t *cold = sf_header_cold_state(hdr);
+    return cold != nullptr ? cold->generic_type_class : nullptr;
+}
+
+static int sf_header_set_generic_type_class_local(SFObjHeader_t *hdr, Class cls)
+{
+    SFObjColdState_t *cold = nullptr;
+
+    if (hdr == nullptr) {
+        return 0;
+    }
+    if (sf_header_is_inline_value_prefix(hdr)) {
+#if SF_RUNTIME_INLINE_VALUE_STORAGE
+        SFInlineValueHeader_t *inline_hdr = (SFInlineValueHeader_t *)(void *)hdr;
+        inline_hdr->generic_type_class = cls;
+        return 1;
+#else
+        return cls == nullptr;
+#endif
+    }
+
+    cold = (cls != nullptr) ? sf_header_ensure_cold_state(hdr) : sf_header_cold_state(hdr);
+    if (cls != nullptr and cold == nullptr) {
+        return 0;
+    }
+    if (cold != nullptr) {
+        cold->generic_type_class = cls;
+    }
+    return 1;
+}
+#endif
+
 static int sf_header_set_allocator_local(SFObjHeader_t *hdr, SFAllocator_t *allocator)
 {
     SFObjColdState_t *cold = nullptr;
@@ -407,6 +450,59 @@ int sf_header_set_allocator(SFObjHeader_t *hdr, SFAllocator_t *allocator)
     return 1;
 #endif
 }
+
+#if SF_RUNTIME_GENERIC_METADATA
+Class sf_header_generic_type_class(SFObjHeader_t *hdr)
+{
+    if (hdr == nullptr) {
+        return nullptr;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    return sf_header_generic_type_class_local(hdr);
+#else
+    return hdr->generic_type_class;
+#endif
+}
+
+int sf_header_set_generic_type_class(SFObjHeader_t *hdr, Class cls)
+{
+    if (hdr == nullptr) {
+        return 0;
+    }
+#if SF_RUNTIME_COMPACT_HEADERS
+    return sf_header_set_generic_type_class_local(hdr, cls);
+#else
+    hdr->generic_type_class = cls;
+    return 1;
+#endif
+}
+
+void sf_object_set_generic_type_class(id obj, Class cls)
+{
+    SFObjHeader_t *hdr = nullptr;
+
+    if (obj == nullptr or not sf_object_is_heap(obj)) {
+        return;
+    }
+
+    hdr = sf_header_from_object(obj);
+    if (hdr != nullptr) {
+        (void)sf_header_set_generic_type_class(hdr, cls);
+    }
+}
+
+Class sf_object_generic_type_class(id obj)
+{
+    SFObjHeader_t *hdr = nullptr;
+
+    if (obj == nullptr or not sf_object_is_heap(obj)) {
+        return nullptr;
+    }
+
+    hdr = sf_header_from_object(obj);
+    return hdr != nullptr ? sf_header_generic_type_class(hdr) : nullptr;
+}
+#endif
 
 id sf_header_parent(SFObjHeader_t *hdr)
 {

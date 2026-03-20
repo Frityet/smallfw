@@ -194,6 +194,56 @@ option("runtime-inline-group-state")
     end)
 option_end()
 
+smallfw.add_runtime_boolean_option("runtime-generic-metadata",
+                                   "Enable the SmallFW generics compiler/pass plugin and per-instance generic class emission.",
+                                   "runtime/experimental")
+option("runtime-generic-metadata")
+    after_check(function (option)
+        import("lib.detect.find_tool")
+
+        local function runtime_tool_major(tool_name, programs)
+            for _, program in ipairs(programs) do
+                local opt = {version = true}
+                if program ~= nil then
+                    opt.program = program
+                end
+
+                local tool = find_tool(tool_name, opt)
+                if tool ~= nil and tool.version ~= nil then
+                    return tonumber((tool.version or ""):match("^(%d+)"))
+                end
+            end
+            return nil
+        end
+
+        if not option:enabled() then
+            return
+        end
+        if not is_plat("linux") then
+            option:enable(false)
+            return
+        end
+
+        local clang_major = runtime_tool_major("clang", {
+            get_config("mm"),
+            get_config("cc"),
+            "clang-21",
+            "clang",
+        })
+        local opt_major = runtime_tool_major("opt", {
+            "opt-21",
+            "opt",
+        })
+        local llvm_config_major = runtime_tool_major("llvm-config", {
+            "llvm-config-21",
+            "llvm-config",
+        })
+        if clang_major ~= 21 or opt_major ~= 21 or llvm_config_major ~= 21 then
+            option:enable(false)
+        end
+    end)
+option_end()
+
 smallfw.runtime_build_options = {
     "objc-runtime",
     "dispatch-backend",
@@ -210,4 +260,5 @@ smallfw.runtime_build_options = {
     "runtime-compact-headers",
     "runtime-inline-value-storage",
     "runtime-inline-group-state",
+    "runtime-generic-metadata",
 }

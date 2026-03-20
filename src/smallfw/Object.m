@@ -225,6 +225,13 @@ static int sf_class_is_or_inherits_from(Class cls, Class expected)
 }
 #endif
 
+#if SF_RUNTIME_GENERIC_METADATA
+- (Class)genericTypeClass
+{ 
+    return sf_object_generic_type_class(self);
+}
+#endif
+
 - (void *)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
 {
     void *ptr = self.allocator->alloc(self.allocator->ctx, size, alignment);

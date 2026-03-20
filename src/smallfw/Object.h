@@ -9,6 +9,10 @@
 #define SF_RUNTIME_TAGGED_POINTERS 0
 #endif
 
+#ifndef SF_RUNTIME_GENERIC_METADATA
+#define SF_RUNTIME_GENERIC_METADATA 0
+#endif
+
 #if !defined(__cplusplus) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L) && !defined(nullptr)
 #define nullptr 0
 #endif
@@ -60,6 +64,11 @@ __attribute__((objc_root_class))
 @property(nonatomic, readonly, getter=isTaggedPointer) bool isTaggedPointer;
 - (uintptr_t)taggedPointerPayload;
 - (bool)isTaggedPointer;
+#endif
+
+#if SF_RUNTIME_GENERIC_METADATA
+@property(nonatomic, readonly, nullable) Class genericTypeClass;
+- (Class _Nullable)genericTypeClass;
 #endif
 
 - (SF_ERRORABLE(void *))allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment;

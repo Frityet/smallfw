@@ -10,6 +10,7 @@ local runtime_config_keys = {
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
+    "runtime-generic-metadata",
     "runtime-validation",
     "runtime-tagged-pointers",
     "runtime-sanitize",

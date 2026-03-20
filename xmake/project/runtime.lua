@@ -46,6 +46,45 @@ function smallfw.runtime_binary_dependency()
     return "smallfw-runtime"
 end
 
+function smallfw.runtime_generic_metadata_enabled()
+    return has_config("runtime-generic-metadata")
+end
+
+function smallfw.add_generic_plugin_settings()
+    if not smallfw.runtime_generic_metadata_enabled() then
+        return
+    end
+
+    add_deps("smallfw-generics-plugin", {order = true})
+    after_load(function (target)
+        if target:name() == "smallfw-generics-plugin" then
+            return
+        end
+
+        local plugin = target:dep("smallfw-generics-plugin")
+        assert(plugin ~= nil, "smallfw-generics-plugin dependency was not created")
+        local pluginfile = path.absolute(plugin:targetfile())
+        assert(pluginfile ~= nil and pluginfile ~= "", "smallfw-generics-plugin target file is unavailable")
+
+        local frontend_flags = {
+            "-fplugin=" .. pluginfile,
+            "-fpass-plugin=" .. pluginfile,
+        }
+
+        local function add_flagset(key)
+            local args = {}
+            for _, flag in ipairs(frontend_flags) do
+                table.insert(args, flag)
+            end
+            table.insert(args, {force = true})
+            target:add(key, table.unpack(args))
+        end
+
+        add_flagset("mflags")
+        add_flagset("mxflags")
+    end)
+end
+
 function smallfw.add_common_runtime_flags()
     set_warnings("all")
     if smallfw.objc_runtime_is_objfw() and not is_plat("linux") then
@@ -196,6 +235,11 @@ function smallfw.add_runtime_mode_defines()
     else
         add_defines("SF_RUNTIME_INLINE_GROUP_STATE=0")
     end
+    if smallfw.runtime_generic_metadata_enabled() then
+        add_defines("SF_RUNTIME_GENERIC_METADATA=1", {public = true})
+    else
+        add_defines("SF_RUNTIME_GENERIC_METADATA=0", {public = true})
+    end
     add_defines("SF_RUNTIME_SLIM_ALLOC=0")
 end
 
@@ -259,6 +303,7 @@ function smallfw.configure_runtime_library_target()
     add_deps("smallfw-blocksruntime")
     add_includedirs(smallfw.project_path("src"), {public = true})
     smallfw.add_common_runtime_flags()
+    smallfw.add_generic_plugin_settings()
     smallfw.add_runtime_mode_defines()
     smallfw.add_analysis_symbol_settings()
     smallfw.add_runtime_sanitizer_settings()
@@ -286,6 +331,7 @@ function smallfw.configure_runtime_binary_target(opt)
     end
 
     smallfw.add_common_runtime_flags()
+    smallfw.add_generic_plugin_settings()
     smallfw.add_runtime_mode_defines()
     smallfw.add_analysis_symbol_settings()
     smallfw.add_runtime_sanitizer_settings()

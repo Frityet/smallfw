@@ -15,6 +15,7 @@ function smallfw.runtime_config_menu_options(extra_options, defaults)
         {nil, "runtime-exceptions", "kv", nil, "Override runtime-exceptions.", " - y", " - n"},
         {nil, "runtime-reflection", "kv", nil, "Override runtime-reflection.", " - y", " - n"},
         {nil, "runtime-forwarding", "kv", nil, "Override runtime-forwarding.", " - y", " - n"},
+        {nil, "runtime-generic-metadata", "kv", nil, "Override runtime-generic-metadata.", " - y", " - n"},
         {nil, "runtime-validation", "kv", nil, "Override runtime-validation.", " - y", " - n"},
         {nil, "runtime-tagged-pointers", "kv", nil, "Override runtime-tagged-pointers.", " - y", " - n"},
         {nil, "runtime-sanitize", "kv", nil, "Override runtime-sanitize.", " - y", " - n"},
