@@ -33,4 +33,10 @@
 #endif
 #endif
 
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+#if defined(thread_local)
+#undef thread_local
+#endif
+#define thread_local
+#endif
 #endif

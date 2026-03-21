@@ -12,10 +12,28 @@ local function add_objc_flags(...)
 end
 
 function smallfw.runtime_dispatch_backend()
+    if smallfw.is_wasm() then
+        return "c"
+    end
     return get_config("dispatch-backend") or "asm"
 end
 
+function smallfw.is_wasm()
+    return is_plat("wasm")
+end
+
+function smallfw.is_wasm32()
+    return smallfw.is_wasm() and is_arch("wasm32")
+end
+
+function smallfw.is_wasm64()
+    return smallfw.is_wasm() and is_arch("wasm64")
+end
+
 function smallfw.objc_runtime()
+    if smallfw.is_wasm() then
+        return "objfw-1.5"
+    end
     return get_config("objc-runtime") or "gnustep-2.3"
 end
 
@@ -47,7 +65,110 @@ function smallfw.runtime_binary_dependency()
 end
 
 function smallfw.runtime_generic_metadata_enabled()
-    return has_config("runtime-generic-metadata")
+    return has_config("runtime-generic-metadata") and not smallfw.is_wasm()
+end
+
+function smallfw.runtime_exceptions_enabled()
+    return has_config("runtime-exceptions") and not smallfw.is_wasm()
+end
+
+function smallfw.runtime_tagged_pointers_enabled()
+    return has_config("runtime-tagged-pointers") and not smallfw.is_wasm32()
+end
+
+function smallfw.node_program()
+    import("lib.detect.find_program")
+
+    local node = find_program("node")
+    assert(node ~= nil, "node is required to run wasm targets")
+    return node
+end
+
+function smallfw.add_wasm_binary_settings()
+    if not smallfw.is_wasm() then
+        return
+    end
+
+    set_extension(".js")
+    if smallfw.is_wasm64() then
+        add_ldflags("-sMEMORY64=1", {force = true})
+    end
+    add_ldflags(
+        "-sENVIRONMENT=web,node",
+        "-sWASM_BIGINT=1",
+        "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$stackAlloc",
+        {force = true}
+    )
+end
+
+function smallfw.add_wasm_node_run_script()
+    if not smallfw.is_wasm() then
+        return
+    end
+
+    on_run(function (target)
+        import("lib.detect.find_program")
+
+        local node = find_program("node")
+        assert(node ~= nil, "node is required to run wasm targets")
+        os.execv(node, {path.absolute(target:targetfile())})
+    end)
+end
+
+function smallfw.add_wasm_node_test_script()
+    if not smallfw.is_wasm() then
+        return
+    end
+
+    on_test(function (target, opt)
+        import("lib.detect.find_program")
+
+        local node = find_program("node")
+        assert(node ~= nil, "node is required to run wasm targets")
+        local argv = {path.absolute(target:targetfile())}
+        for _, arg in ipairs(opt.runargs or {}) do
+            table.insert(argv, arg)
+        end
+
+        local ok, errors = pcall(function ()
+            os.execv(node, argv)
+        end)
+        if ok then
+            return true
+        end
+        return false, errors
+    end)
+end
+
+function smallfw.add_wasm_browser_smoke_page(opt)
+    opt = opt or {}
+    if not smallfw.is_wasm() then
+        return
+    end
+
+    after_build(function (target)
+        local targetfile = path.absolute(target:targetfile())
+        if targetfile == nil or path.extension(targetfile) ~= ".js" then
+            return
+        end
+
+        local htmlfile = path.join(path.directory(targetfile), path.basename(targetfile) .. ".html")
+        local title = opt.title or target:name()
+        local script_name = path.filename(targetfile)
+        io.writefile(htmlfile, string.format([[
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>%s</title>
+</head>
+<body>
+<pre>Open the developer console to inspect target output.</pre>
+<script src="%s"></script>
+</body>
+</html>
+]], title, script_name))
+    end)
 end
 
 function smallfw.add_generic_plugin_settings()
@@ -87,11 +208,19 @@ end
 
 function smallfw.add_common_runtime_flags()
     set_warnings("all")
-    if smallfw.objc_runtime_is_objfw() and not is_plat("linux") then
-        raise("objc-runtime=objfw-1.5 is only supported on linux")
+    if smallfw.is_wasm32() and is_mode("release") then
+        set_optimize("none")
+    end
+    if smallfw.objc_runtime_is_objfw() and not is_plat("linux") and not smallfw.is_wasm() then
+        raise("objc-runtime=objfw-1.5 is only supported on linux and wasm")
     end
     if is_plat("linux") then
         add_defines("_POSIX_C_SOURCE=200809L", {force = true})
+    end
+    if smallfw.is_wasm() then
+        if smallfw.is_wasm64() then
+            add_objc_flags("-sMEMORY64=1")
+        end
     end
 
     add_objc_flags(
@@ -197,7 +326,7 @@ function smallfw.add_runtime_mode_defines()
         add_defines("SF_DISPATCH_BACKEND_ASM=1")
     end
 
-    if has_config("runtime-exceptions") then
+    if smallfw.runtime_exceptions_enabled() then
         add_defines("SF_RUNTIME_EXCEPTIONS=1", {public = true})
         set_exceptions("objc")
         add_objc_flags("-fobjc-exceptions")
@@ -212,7 +341,7 @@ function smallfw.add_runtime_mode_defines()
         add_defines("SF_RUNTIME_REFLECTION=0", {public = true})
     end
 
-    if has_config("runtime-tagged-pointers") then
+    if smallfw.runtime_tagged_pointers_enabled() then
         add_defines("SF_RUNTIME_TAGGED_POINTERS=1", {public = true})
     else
         add_defines("SF_RUNTIME_TAGGED_POINTERS=0", {public = true})
@@ -287,6 +416,9 @@ function smallfw.add_release_clang_tidy_hook()
 end
 
 function smallfw.add_runtime_binary_links()
+    if smallfw.is_wasm() then
+        return
+    end
     if is_plat("mingw") then
         add_links("pthread")
     else
@@ -313,6 +445,7 @@ function smallfw.configure_runtime_binary_target(opt)
     opt = opt or {}
 
     set_kind(opt.kind or "binary")
+    smallfw.add_wasm_binary_settings()
     if opt.default ~= nil then
         set_default(opt.default)
     else
@@ -344,6 +477,7 @@ function smallfw.configure_runtime_binary_target(opt)
     if opt.add_links ~= false then
         smallfw.add_runtime_binary_links()
     end
+    smallfw.add_wasm_node_run_script()
 end
 
 if is_plat("linux") then

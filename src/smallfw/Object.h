@@ -17,6 +17,10 @@
 #define nullptr 0
 #endif
 
+#ifndef nil
+#define nil ((id)0)
+#endif
+
 #if SF_RUNTIME_EXCEPTIONS
 #define SF_ERRORABLE(T) T _Nonnull
 #else

@@ -38,45 +38,55 @@ local runtime_test_suite_specs = {
         name = "parent",
         provider = "sf_runtime_parent_cases",
         sourcefile = "runtime_test_parent.m",
-        cases = {
-            "value_parent_layout_hidden_storage",
-            "value_parent_alloc_embeds_in_parent",
-            "value_parent_nontrivial_inline_rejected",
-            "value_parent_duplicate_slots_reuse",
-            "value_parent_child_expires_with_parent",
-            "value_parent_standalone_heap_alloc",
-            "value_parent_slot_exhaustion",
-            "value_parent_oversized_subclass_rejected",
-            "parent_group_inheritance",
-            "parent_allocator_propagation",
-            "parent_getter_lifecycle",
-            "parent_child_outlives_parent",
-            "parent_group_frees_on_last_release",
-            "parent_nested_allocation_same_root",
-            "parent_alloc_with_nil_parent",
-            "parent_dead_parent_rejects_new_child",
-            "parent_concurrent_alloc_release",
-        },
+        cases = function ()
+            local cases = {
+                "value_parent_layout_hidden_storage",
+                "value_parent_alloc_embeds_in_parent",
+                "value_parent_nontrivial_inline_rejected",
+                "value_parent_duplicate_slots_reuse",
+                "value_parent_child_expires_with_parent",
+                "value_parent_standalone_heap_alloc",
+                "value_parent_slot_exhaustion",
+                "value_parent_oversized_subclass_rejected",
+                "parent_group_inheritance",
+                "parent_allocator_propagation",
+                "parent_getter_lifecycle",
+                "parent_child_outlives_parent",
+                "parent_group_frees_on_last_release",
+                "parent_nested_allocation_same_root",
+                "parent_alloc_with_nil_parent",
+                "parent_dead_parent_rejects_new_child",
+            }
+            if not smallfw.is_wasm() then
+                table.insert(cases, "parent_concurrent_alloc_release")
+            end
+            return cases
+        end,
     },
     {
         name = "dispatch",
         provider = "sf_runtime_dispatch_cases",
         sourcefile = "runtime_test_dispatch.m",
-        cases = {
-            "dispatch_cache_warm_hits",
-            "dispatch_super_lookup",
-            "dispatch_selector_equality",
-            "dispatch_selector_lookup_only_registration",
-            "dispatch_method_lookup_canonical",
-            "dispatch_concurrent_reads",
-            "dispatch_c_msgsend_signatures",
-            "dispatch_c_msgsend_unsupported_float",
-            "dispatch_c_internal_helpers",
-            "dispatch_struct_params",
-            "dispatch_struct_returns",
-            "dispatch_dtable_lookup",
-            "dispatch_forwarding_targets",
-        },
+        cases = function ()
+            local cases = {
+                "dispatch_cache_warm_hits",
+                "dispatch_super_lookup",
+                "dispatch_selector_equality",
+                "dispatch_selector_lookup_only_registration",
+                "dispatch_method_lookup_canonical",
+                "dispatch_c_msgsend_signatures",
+                "dispatch_c_msgsend_unsupported_float",
+                "dispatch_c_internal_helpers",
+                "dispatch_struct_params",
+                "dispatch_struct_returns",
+                "dispatch_dtable_lookup",
+                "dispatch_forwarding_targets",
+            }
+            if not smallfw.is_wasm() then
+                table.insert(cases, "dispatch_concurrent_reads")
+            end
+            return cases
+        end,
     },
     {
         name = "loader",
@@ -84,7 +94,6 @@ local runtime_test_suite_specs = {
         sourcefile = "runtime_test_loader.m",
         cases = function ()
             local cases = {
-                "no_libobjc_dependency",
                 "loader_lookup_nulls",
                 "loader_lookup_missing",
                 "loader_header_validation",
@@ -99,6 +108,9 @@ local runtime_test_suite_specs = {
                 table.insert(cases, "loader_manual_registration")
             else
                 table.insert(cases, "loader_objfw_exec_class")
+            end
+            if not smallfw.is_wasm() then
+                table.insert(cases, 1, "no_libobjc_dependency")
             end
             if has_config("runtime-reflection") then
                 for _, case_name in ipairs({
@@ -115,7 +127,9 @@ local runtime_test_suite_specs = {
                     table.insert(cases, case_name)
                 end
             end
-            table.insert(cases, "class_lookup_concurrent")
+            if not smallfw.is_wasm() then
+                table.insert(cases, "class_lookup_concurrent")
+            end
             return cases
         end,
     },
@@ -140,6 +154,9 @@ local runtime_test_suite_specs = {
         provider = "sf_runtime_exception_cases",
         sourcefile = "runtime_test_exceptions.m",
         cases = function ()
+            if smallfw.is_wasm() then
+                return {}
+            end
             if not has_config("runtime-exceptions") then
                 return {"exceptions_stubs_abort"}
             end
@@ -186,22 +203,51 @@ local function runtime_test_cases_for_suite(suite)
     return runtime_test_case_cache[suite.name]
 end
 
+local function runtime_test_sourcefiles()
+    local files = {"runtime_tests.m", "runtime_test_support.m"}
+    for _, suite in ipairs(runtime_test_suite_specs) do
+        if #runtime_test_cases_for_suite(suite) > 0 then
+            table.insert(files, suite.sourcefile)
+        end
+    end
+    return files
+end
+
+local function runtime_test_suite_define_name(suite)
+    return "SF_TEST_ENABLE_SUITE_" .. suite.name:upper()
+end
+
 target("runtime-tests")
     set_group("tests/runtime")
     smallfw.configure_runtime_binary_target({includedirs = runtime_test_includedirs})
-    add_files("runtime_tests.m", "runtime_test_*.m", {mflags = {"-fno-objc-arc"}})
+    smallfw.add_wasm_node_test_script()
+    for _, suite in ipairs(runtime_test_suite_specs) do
+        if #runtime_test_cases_for_suite(suite) > 0 then
+            add_defines(runtime_test_suite_define_name(suite))
+        end
+    end
+    for _, sourcefile in ipairs(runtime_test_sourcefiles()) do
+        add_files(sourcefile, {mflags = {"-fno-objc-arc"}})
+    end
 
 for _, suite in ipairs(runtime_test_suite_specs) do
-    target("runtime-tests-" .. suite.name)
-        set_group("tests/runtime/" .. suite.name)
-        smallfw.configure_runtime_binary_target({includedirs = runtime_test_includedirs})
-        add_defines("SF_TEST_SUITE_LABEL=" .. suite.name, "SF_TEST_SUITE_PROVIDER=" .. suite.provider)
-        add_files("runtime_tests.m", "runtime_test_support.m", suite.sourcefile, {mflags = {"-fno-objc-arc"}})
-        for _, case_name in ipairs(runtime_test_cases_for_suite(suite)) do
-            add_tests(case_name, {
-                group = "runtime/" .. suite.name,
-                realtime_output = true,
-                runargs = {"--case", case_name},
-            })
-        end
+    local suite_cases = runtime_test_cases_for_suite(suite)
+    if #suite_cases > 0 then
+        target("runtime-tests-" .. suite.name)
+            set_group("tests/runtime/" .. suite.name)
+            smallfw.configure_runtime_binary_target({includedirs = runtime_test_includedirs})
+            smallfw.add_wasm_node_test_script()
+            add_defines("SF_TEST_SUITE_LABEL=" .. suite.name, "SF_TEST_SUITE_PROVIDER=" .. suite.provider)
+            add_files("runtime_tests.m", "runtime_test_support.m", suite.sourcefile, {mflags = {"-fno-objc-arc"}})
+            if smallfw.is_wasm() and suite.name == "dispatch" then
+                smallfw.add_wasm_browser_smoke_page({title = "runtime-tests-dispatch"})
+            end
+            for _, case_name in ipairs(suite_cases) do
+                add_tests(case_name, {
+                    group = "runtime/" .. suite.name,
+                    realtime_output = true,
+                    runargs = {"--case", case_name},
+                })
+            end
+    end
 end

@@ -73,9 +73,13 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
 - (id)objectAtIndex: (size_t)idx
 {
     if (idx >= _count or _items == nullptr) {
+#if SF_RUNTIME_EXCEPTIONS
+        @throw [InvalidArgumentException exception];
+#else
         return nullptr;
+#endif
     }
-    return _items[idx];
+    return (id)_items[idx];
 }
 
 - (id)objectAtIndexedSubscript: (size_t)idx
@@ -103,7 +107,7 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
         if (lhs_obj == rhs_obj) {
             continue;
         }
-        if (lhs_obj == nullptr or rhs_obj == nullptr or [lhs_obj isEqual: rhs_obj] == false) {
+        if (lhs_obj == nullptr or rhs_obj == nullptr or not [lhs_obj isEqual: rhs_obj]) {
             return false;
         }
     }

@@ -14,7 +14,9 @@ typedef struct SFObjFWClassEntry {
     int32_t *runtime_ivar_offsets;
 } SFObjFWClassEntry_t;
 
-enum { SF_OBJFW_CLASS_MAP_CAPACITY = 2048U };
+// ObjFW normalization tracks both classes and metaclasses, so the generated JS
+// surface needs substantially more than the raw class count during module load.
+enum { SF_OBJFW_CLASS_MAP_CAPACITY = 4096U };
 
 enum {
     SF_OBJFW_CLASS_STATE_NORMALIZED = 1UL << 0U,

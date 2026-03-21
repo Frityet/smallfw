@@ -39,8 +39,7 @@ static int sf_map_keys_equal(id lhs, id rhs)
                               forKeys: (const id _Nonnull * _Nullable)keys
                                 count: (size_t)count
 {
-    Map *map = [[self allocWithAllocator: nullptr] initWithObjects: objects forKeys: keys count: count];
-    return [map autorelease];
+    return [[[self allocWithAllocator: nullptr] initWithObjects: objects forKeys: keys count: count] autorelease];
 }
 
 - (instancetype)initWithObjects: (const id _Nonnull * _Nullable)objects
@@ -122,14 +121,12 @@ static int sf_map_keys_equal(id lhs, id rhs)
 
 - (id)objectForKey: (id)key
 {
-    if (key == nullptr) {
-        return nullptr;
-    }
     for (size_t i = 0U; i < _count; ++i) {
         if (sf_map_keys_equal(_keys[i], key)) {
-            return _values[i];
+            return (id)_values[i];
         }
     }
+
     return nullptr;
 }
 
@@ -162,7 +159,7 @@ static int sf_map_keys_equal(id lhs, id rhs)
         if (lhs_value == rhs_value) {
             continue;
         }
-        if (lhs_value == nullptr or [(Object *)lhs_value isEqual: rhs_value] == false) {
+        if (lhs_value == nullptr or not [(Object *)lhs_value isEqual: rhs_value]) {
             return false;
         }
     }

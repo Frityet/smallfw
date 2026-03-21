@@ -2,6 +2,7 @@
 #include "runtime/loader/common.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -77,8 +78,9 @@ typedef struct SFInlineLiveEntry {
 } SFInlineLiveEntry_t;
 #endif
 
-enum { SF_CLASS_MAP_CAPACITY = 2048 };
-enum { SF_CLASS_META_CAPACITY = 4096 };
+// Keep enough headroom for runtime classes, aliases, tests, and future generated surfaces on wasm.
+enum { SF_CLASS_MAP_CAPACITY = 4096 };
+enum { SF_CLASS_META_CAPACITY = 8192 };
 enum { SF_LIVE_OBJECT_BUCKETS = 8192U };
 enum { SF_SELECTOR_BUCKETS = 256U };
 
@@ -88,6 +90,34 @@ static SFValueSlotEntry_t g_value_slot_map[SF_CLASS_MAP_CAPACITY];
 static SFObjCClass_t *g_layout_fixed_map[SF_CLASS_MAP_CAPACITY];
 static SFObjCClass_t *g_layout_active_stack[SF_CLASS_MAP_CAPACITY];
 static size_t g_layout_active_count;
+static int g_trace_class_layout = -1;
+
+static size_t sf_compiler_instance_size(const SFObjCClass_t *cls)
+{
+    if (cls == nullptr) {
+        return sizeof(void *);
+    }
+
+    if (cls->instance_size < 0) {
+        size_t size = (size_t)(-cls->instance_size);
+        return size < sizeof(void *) ? sizeof(void *) : size;
+    }
+
+    if (cls->instance_size == 0) {
+        return sizeof(void *);
+    }
+
+    return (size_t)cls->instance_size;
+}
+
+static int sf_trace_class_layout_enabled(void)
+{
+    if (g_trace_class_layout < 0) {
+        const char *value = getenv("SF_TRACE_CLASS_LAYOUT");
+        g_trace_class_layout = (value != nullptr && value[0] != '\0' && strcmp(value, "0") != 0) ? 1 : 0;
+    }
+    return g_trace_class_layout != 0;
+}
 #if SF_RUNTIME_VALIDATION
 static SFRuntimeRwlock_t g_live_object_lock = SF_RUNTIME_RWLOCK_INITIALIZER;
 static SFObjHeader_t *g_live_object_buckets[SF_LIVE_OBJECT_BUCKETS];
@@ -1024,23 +1054,25 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
 {
     if (cls == nullptr)
         return sizeof(void *);
+    if (sf_trace_class_layout_enabled()) {
+        const char *class_name = (cls->name != nullptr) ? cls->name : "<null>";
+        const char *super_name =
+            (cls->superclass != nullptr && cls->superclass->name != nullptr) ? cls->superclass->name : "<null>";
+        fprintf(stderr, "[layout] class=%s super=%s size=%u ivars=%p\n",
+                class_name,
+                super_name,
+                (unsigned)sf_compiler_instance_size(cls),
+                (void *)cls->ivars);
+        fflush(stderr);
+    }
     if (layout_fixed_contains(cls)) {
-        if (cls->instance_size > 0) {
-            return (size_t)cls->instance_size;
-        }
-        return sizeof(void *);
+        return sf_compiler_instance_size(cls);
     }
     if (layout_active_contains(cls)) {
-        if (cls->instance_size > 0) {
-            return (size_t)cls->instance_size;
-        }
-        return sizeof(void *);
+        return sf_compiler_instance_size(cls);
     }
     if (not layout_active_push(cls)) {
-        if (cls->instance_size > 0) {
-            return (size_t)cls->instance_size;
-        }
-        return sizeof(void *);
+        return sf_compiler_instance_size(cls);
     }
 
     size_t super_size = sizeof(void *);
@@ -1058,6 +1090,15 @@ static size_t sf_fix_class_layout(SFObjCClass_t *cls)
     size_t local_slot_count = 0;
     int disable_local_slots = 0;
     SFObjCIvarList_t *list = (SFObjCIvarList_t *)cls->ivars;
+    if (sf_trace_class_layout_enabled() && list != nullptr) {
+        fprintf(stderr,
+                "[layout] ivars class=%s list=%p count=%u item_size=%u\n",
+                (cls->name != nullptr) ? cls->name : "<null>",
+                (void *)list,
+                (unsigned)list->count,
+                (unsigned)list->item_size);
+        fflush(stderr);
+    }
     if (list != nullptr and list->count > 0) {
         size_t stride = (size_t)list->item_size;
         if (stride < sizeof(SFObjCIvar_t)) {
@@ -1266,6 +1307,20 @@ static void class_map_insert_unlocked(const char *name, SFObjCClass_t *cls)
     }
 }
 
+static int class_map_contains_pointer_unlocked(const SFObjCClass_t *cls)
+{
+    if (cls == nullptr) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
+        if (g_class_map[i].cls == cls) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 SFObjCClass_t *sf_loader_class_lookup_unlocked(const char *name)
 {
     if (name == nullptr) {
@@ -1345,6 +1400,13 @@ void sf_finalize_registered_classes(void)
     for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
         SFClassEntry_t *slot = &g_class_map[i];
         SFObjCClass_t *cls = slot->cls;
+        if (slot->name == nullptr or cls == nullptr) {
+            continue;
+        }
+    }
+    for (size_t i = 0; i < SF_CLASS_MAP_CAPACITY; ++i) {
+        SFClassEntry_t *slot = &g_class_map[i];
+        SFObjCClass_t *cls = slot->cls;
         if (slot->name == nullptr or cls == nullptr or cls->isa == nullptr) {
             continue;
         }
@@ -1407,7 +1469,7 @@ size_t class_getInstanceSize(Class cls)
         return sizeof(void *);
     }
 
-    size = (c->instance_size > 0) ? (size_t)c->instance_size : sizeof(void *);
+    size = sf_compiler_instance_size(c);
 
     if (size < sizeof(void *))
         return sizeof(void *);
@@ -1419,7 +1481,7 @@ size_t sf_class_instance_size_fast(Class cls)
     SFObjCClass_t *c = (SFObjCClass_t *)cls;
     size_t size = sizeof(void *);
     if (c != nullptr) {
-        size = (c->instance_size > 0) ? (size_t)c->instance_size : class_getInstanceSize(cls);
+        size = sf_compiler_instance_size(c);
     }
     if (size < sizeof(void *)) {
         size = sizeof(void *);

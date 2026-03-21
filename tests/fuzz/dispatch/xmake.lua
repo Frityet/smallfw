@@ -1,4 +1,4 @@
-if not is_plat("mingw") then
+if not is_plat("mingw") and not is_plat("wasm") then
     target("runtime-fuzz-dispatch")
         set_group("tests/fuzz/dispatch")
         smallfw.configure_runtime_binary_target({

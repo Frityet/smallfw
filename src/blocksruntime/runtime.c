@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 #include "config.h"
+#include "runtime/c2x-compat.h"
 
 #ifdef HAVE_AVAILABILITY_MACROS_H
 #include <AvailabilityMacros.h>
@@ -95,7 +96,7 @@ static int _Byref_flag_initial_value = BLOCK_NEEDS_FREE | 2;
 static const int WANTS_ONE = (1 << 16);
 
 static bool isGC = false;
-static _Thread_local SFAllocator_t *g_block_allocator_override = NULL;
+static thread_local SFAllocator_t *g_block_allocator_override = NULL;
 
 typedef struct Block_smallfw_allocator_override {
     const void *owner;
@@ -103,7 +104,7 @@ typedef struct Block_smallfw_allocator_override {
     struct Block_smallfw_allocator_override *next;
 } Block_smallfw_allocator_override_t;
 
-static _Thread_local Block_smallfw_allocator_override_t *g_block_allocator_overrides = NULL;
+static thread_local Block_smallfw_allocator_override_t *g_block_allocator_overrides = NULL;
 
 enum {
     BLOCK_SMALLFW_ALLOC_MAGIC = 0x5346424cU

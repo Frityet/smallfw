@@ -462,6 +462,8 @@ static int case_dispatch_forwarding_targets(void)
     SEL class_sel = sel_registerName("classForwardedValue:");
     Class proxy_cls = (Class)objc_getClass("ForwardDispatchProxy");
     __unsafe_unretained ForwardDispatchProxy *proxy = SFW_NEW(ForwardDispatchProxy);
+    IMP instance_imp = nullptr;
+    IMP class_imp = nullptr;
     int instance_result0 = 0;
     int instance_result1 = 0;
     int class_result0 = 0;
@@ -471,10 +473,17 @@ static int case_dispatch_forwarding_targets(void)
         return 0;
     }
 
-    instance_result0 = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 5);
-    instance_result1 = ((int (*)(id, SEL, int))objc_msgSend)(proxy, instance_sel, 6);
-    class_result0 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 7);
-    class_result1 = ((int (*)(id, SEL, int))objc_msgSend)((id)proxy_cls, class_sel, 8);
+    instance_imp = objc_msg_lookup(proxy, instance_sel);
+    class_imp = objc_msg_lookup((id)proxy_cls, class_sel);
+    if (instance_imp == nullptr or class_imp == nullptr) {
+        objc_release(proxy);
+        return 0;
+    }
+
+    instance_result0 = ((int (*)(id, SEL, int))instance_imp)(proxy, instance_sel, 5);
+    instance_result1 = ((int (*)(id, SEL, int))instance_imp)(proxy, instance_sel, 6);
+    class_result0 = ((int (*)(id, SEL, int))class_imp)((id)proxy_cls, class_sel, 7);
+    class_result1 = ((int (*)(id, SEL, int))class_imp)((id)proxy_cls, class_sel, 8);
     objc_release(proxy);
     return instance_result0 == 105 and
            instance_result1 == 106 and
@@ -491,7 +500,9 @@ static const SFTestCase g_dispatch_cases[] = {
     {"dispatch_selector_equality", case_dispatch_selector_equality},
     {"dispatch_selector_lookup_only_registration", case_dispatch_selector_lookup_only_registration},
     {"dispatch_method_lookup_canonical", case_dispatch_method_lookup_canonical},
+#if !defined(__EMSCRIPTEN__)
     {"dispatch_concurrent_reads", case_dispatch_concurrent_reads},
+#endif
     {"dispatch_c_msgsend_signatures", case_dispatch_c_msgsend_signatures},
     {"dispatch_c_msgsend_unsupported_float", case_dispatch_c_msgsend_unsupported_float},
     {"dispatch_c_internal_helpers", case_dispatch_c_internal_helpers},

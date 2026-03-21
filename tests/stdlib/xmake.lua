@@ -9,6 +9,10 @@ target("stdlib-tests")
         deps = {"smallfw-stdlib"},
         includedirs = stdlib_test_includedirs,
     })
+    smallfw.add_wasm_node_test_script()
+    if smallfw.is_wasm() then
+        smallfw.add_wasm_browser_smoke_page({title = "stdlib-tests"})
+    end
     add_files("stdlib_tests.m")
     add_tests("stdlib-core", {
         group = "stdlib",

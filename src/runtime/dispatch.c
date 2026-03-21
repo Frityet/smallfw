@@ -116,28 +116,16 @@ IMP objc_msg_lookup_stret(id receiver, SEL op)
 
 IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
 {
-    id current_receiver = nullptr;
-    SEL current_sel = nullptr;
-
-    // if (receiver == nullptr or op == nullptr) {
-    //     return nullptr;
-    // }
-
-    current_receiver = *receiver;
-    current_sel = *op;
+    id current_receiver = *receiver;
+    SEL current_sel = *op;
 
 #if SF_RUNTIME_FORWARDING
     {
         SEL forwarding_sel = sf_cached_selector_forwarding_target();
         int forward_hops_remaining = 8;
 
-        for (;;) {
-            IMP imp = nullptr;
-            Class cls = nullptr;
-            SFObjCMethod_t *forward_method = nullptr;
-            id target = nullptr;
-
-            imp = sf_lookup_imp(current_receiver, current_sel);
+        while (true) {
+            IMP imp = sf_lookup_imp(current_receiver, current_sel);
             if (imp != nullptr) {
                 *receiver = current_receiver;
                 *op = current_sel;
@@ -148,13 +136,13 @@ IMP sf_resolve_message_dispatch(id *receiver, SEL *op)
                 break;
             }
 
-            cls = sf_object_class(current_receiver);
-            forward_method = lookup_method_in_class_local(cls, forwarding_sel);
+            Class cls = sf_object_class(current_receiver);
+            SFObjCMethod_t *forward_method = lookup_method_in_class_local(cls, forwarding_sel);
             if (forward_method == nullptr or forward_method->imp == nullptr) {
                 break;
             }
 
-            target = ((id (*)(id, SEL, SEL))forward_method->imp)(current_receiver, forwarding_sel, current_sel);
+            id target = ((id (*)(id, SEL, SEL))forward_method->imp)(current_receiver, forwarding_sel, current_sel);
             if (target == nullptr or target == current_receiver) {
                 break;
             }

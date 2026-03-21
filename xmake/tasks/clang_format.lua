@@ -6,7 +6,7 @@ task("clang-format")
         options = {
             {"c", "check", "k", nil, "Check formatting without modifying files."},
             {},
-            {nil, "files", "vs", nil, "Files or glob patterns to format. Defaults to src/tests/benchmarks/examples."},
+            {nil, "files", "vs", nil, "Files or glob patterns to format. Defaults to src/tests/benchmarks."},
         }
     }
     on_run(function ()

@@ -575,6 +575,14 @@ static id return_word_as_id(const SFCWordStorage_t *storage, char code)
 static int direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
                                       const SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS], size_t argc)
 {
+#if defined(__EMSCRIPTEN__)
+    // Wasm traps on function pointer ABI mismatches that native targets often tolerate.
+    // Keep wasm on the libffi path instead of using the uintptr_t/id direct-call shortcut.
+    (void)ret_info;
+    (void)arg_infos;
+    (void)argc;
+    return 0;
+#else
     if (ret_info == nullptr or argc > SF_C_FALLBACK_MAX_ARGS) {
         return 0;
     }
@@ -587,6 +595,7 @@ static int direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
         }
     }
     return 1;
+#endif
 }
 
 static id call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_FALLBACK_MAX_ARGS], size_t argc)
@@ -886,6 +895,78 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
         return;
     }
 
+#if SF_DISPATCH_C_USE_LIBFFI
+    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
+    va_list ap;
+    va_start(ap, op);
+    for (size_t i = 0; i < argc; ++i) {
+        args[i] = read_call_arg(&ap, &arg_infos[i]);
+    }
+    va_end(ap);
+
+    ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
+    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
+    SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
+    SFCStructFFIType_t ret_struct_type;
+    SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
+    const char *ret_token = dispatch_op != nullptr ? dispatch_op->types : nullptr;
+
+    if (ret_token == nullptr or not build_struct_ffi_type(ret_token, &ret_struct_type)) {
+        return;
+    }
+
+    memset(arg_storage, 0, sizeof(arg_storage));
+    memset(struct_arg_types, 0, sizeof(struct_arg_types));
+    for (size_t i = 0; i < argc; ++i) {
+        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+            const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
+            const char *p = types;
+            int arg_index = 0;
+            if (p == nullptr) {
+                return;
+            }
+            p = skip_type_token(p);
+            while (is_digit_char(*p)) {
+                ++p;
+            }
+            while (*p != '\0') {
+                const char *token = p;
+                p = skip_type_token(p);
+                while (*p == '-' or is_digit_char(*p)) {
+                    ++p;
+                }
+                if (arg_index >= 2 and (size_t)(arg_index - 2) == i) {
+                    if (not build_struct_ffi_type(token, &struct_arg_types[i])) {
+                        return;
+                    }
+                    arg_types[i + 2] = &struct_arg_types[i].type;
+                    arg_values[i + 2] = (void *)(uintptr_t)args[i];
+                    break;
+                }
+                arg_index += 1;
+            }
+            if (arg_types[i + 2] == nullptr) {
+                return;
+            }
+            continue;
+        }
+
+        arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
+        if (arg_types[i + 2] == nullptr) {
+            return;
+        }
+        store_word_arg(&arg_storage[i], arg_infos[i].code, args[i]);
+        arg_values[i + 2] = &arg_storage[i];
+    }
+
+    ffi_cif cif;
+    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)(argc + 2U), &ret_struct_type.type, arg_types) != FFI_OK) {
+        return;
+    }
+
+    ffi_call(&cif, FFI_FN(imp), out, arg_values);
+    return;
+#else
     uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
     va_list ap;
     va_start(ap, op);
@@ -917,6 +998,7 @@ void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
         default:
             return;
     }
+#endif
 }
 
 id objc_msgSend(id receiver, SEL op, ...)

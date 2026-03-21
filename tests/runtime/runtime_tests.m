@@ -19,12 +19,24 @@ static const SFTestSuite g_suites[] = {
 };
 #else
 static const SFTestSuite g_suites[] = {
+#ifdef SF_TEST_ENABLE_SUITE_ARC
     {"arc", sf_runtime_arc_cases},
+#endif
+#ifdef SF_TEST_ENABLE_SUITE_PARENT
     {"parent", sf_runtime_parent_cases},
+#endif
+#ifdef SF_TEST_ENABLE_SUITE_DISPATCH
     {"dispatch", sf_runtime_dispatch_cases},
+#endif
+#ifdef SF_TEST_ENABLE_SUITE_LOADER
     {"loader", sf_runtime_loader_cases},
+#endif
+#ifdef SF_TEST_ENABLE_SUITE_TAGGED
     {"tagged", sf_runtime_tagged_cases},
+#endif
+#ifdef SF_TEST_ENABLE_SUITE_EXCEPTIONS
     {"exceptions", sf_runtime_exception_cases},
+#endif
 };
 #endif
 

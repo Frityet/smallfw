@@ -16,10 +16,10 @@ __attribute__((sf_encode_generics))
 
 @property (nonatomic, readonly) size_t count;
 
-+ (SF_ERRORABLE(instancetype))arrayWithObjects: (const id __unsafe_unretained _Nonnull * _Nullable)objects count: (size_t)count;
-- (SF_ERRORABLE(instancetype))initWithObjects: (const id __unsafe_unretained _Nonnull * _Nullable)objects count: (size_t)count;
-- (ObjectType _Nullable)objectAtIndex: (size_t)idx;
-- (ObjectType _Nullable)objectAtIndexedSubscript: (size_t)idx;
++ (SF_ERRORABLE(instancetype))arrayWithObjects: (const id __unsafe_unretained _Nonnull *_Nullable)objects count: (size_t)count;
+- (SF_ERRORABLE(instancetype))initWithObjects: (const id __unsafe_unretained _Nonnull *_Nullable)objects count: (size_t)count;
+- (SF_ERRORABLE(ObjectType))objectAtIndex: (size_t)idx;
+- (SF_ERRORABLE(ObjectType))objectAtIndexedSubscript: (size_t)idx;
 
 @end
 

@@ -7,7 +7,6 @@ import("smallfw.task_helpers")
 local DEFAULT_TARGETS = {
     "runtime-tests",
     "runtime-bench",
-    "particle-sim",
 }
 
 local CHECKER_CACHE = nil

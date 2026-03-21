@@ -6,7 +6,7 @@ task("run-scan-build")
         options = smallfw.runtime_config_menu_options({
             {},
             {"O", "outdir", "kv", "build/scan-build", "Set the scan-build report directory."},
-            {nil, "targets", "kv", "runtime-tests:runtime-bench:particle-sim",
+            {nil, "targets", "kv", "runtime-tests:runtime-bench",
                 "Colon-separated target list to analyze."},
             {nil, "report-format", "kv", "html", "Set the scan-build report format.",
                 " - html", " - plist", " - plist-html", " - sarif"},

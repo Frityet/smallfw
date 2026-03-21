@@ -250,7 +250,7 @@ static void clear_object_ivars(id obj, Class cls)
 
                 IMP imp = sf_class_cached_dealloc_imp(old_cls);
                 if (imp != nullptr and dealloc_sel != nullptr) {
-                    (void)imp(old, dealloc_sel);
+                    ((void (*)(id, SEL))imp)(old, dealloc_sel);
                 }
                 if (has_object_ivars) {
                     clear_object_ivars(old, old_cls);
@@ -262,7 +262,7 @@ static void clear_object_ivars(id obj, Class cls)
                     if (cxx_destruct_sel != nullptr) {
                         IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(old_cls);
                         if (cxx_destruct_imp != nullptr) {
-                            (void)cxx_destruct_imp(old, cxx_destruct_sel);
+                            ((void (*)(id, SEL))cxx_destruct_imp)(old, cxx_destruct_sel);
                         }
                     }
                 }
@@ -434,7 +434,7 @@ static void release_object_nontrivial(id obj, SFObjHeader_t *hdr)
 
     IMP imp = sf_class_cached_dealloc_imp(cls);
     if (imp != nullptr and dealloc_sel != nullptr) {
-        (void)imp(obj, dealloc_sel);
+        ((void (*)(id, SEL))imp)(obj, dealloc_sel);
     }
     if (has_object_ivars) {
         clear_object_ivars(obj, cls);
@@ -446,7 +446,7 @@ static void release_object_nontrivial(id obj, SFObjHeader_t *hdr)
         if (cxx_destruct_sel != nullptr) {
             IMP cxx_destruct_imp = sf_class_cached_cxx_destruct_imp(cls);
             if (cxx_destruct_imp != nullptr) {
-                (void)cxx_destruct_imp(obj, cxx_destruct_sel);
+                ((void (*)(id, SEL))cxx_destruct_imp)(obj, cxx_destruct_sel);
             }
         }
     }

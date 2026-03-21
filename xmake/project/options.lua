@@ -4,6 +4,10 @@ function smallfw.project_path(...)
     return path.join(os.projectdir(), ...)
 end
 
+function smallfw.config_is_wasm()
+    return get_config("plat") == "wasm" or is_plat("wasm")
+end
+
 function smallfw.add_runtime_boolean_option(name, description, category)
     option(name)
         set_default(false)
@@ -14,11 +18,16 @@ function smallfw.add_runtime_boolean_option(name, description, category)
 end
 
 option("objc-runtime")
-    set_default("gnustep-2.3")
+    set_default(smallfw.config_is_wasm() and "objfw-1.5" or "gnustep-2.3")
     set_showmenu(true)
     set_category("runtime/core")
     set_values("gnustep-2.3", "objfw-1.5")
     set_description("Select the Objective-C runtime ABI/compiler mode")
+    after_check(function (option)
+        if is_plat("wasm") and option:value() ~= "objfw-1.5" then
+            option:set_value("objfw-1.5")
+        end
+    end)
 option_end()
 
 option("dispatch-backend")
@@ -34,6 +43,11 @@ option("runtime-exceptions")
     set_showmenu(true)
     set_category("runtime/core")
     set_description("Enable Objective-C exceptions support in runtime")
+    after_check(function (option)
+        if option:enabled() and is_plat("wasm") then
+            option:enable(false)
+        end
+    end)
 option_end()
 
 option("runtime-reflection")
@@ -62,6 +76,11 @@ option("runtime-tagged-pointers")
     set_showmenu(true)
     set_category("runtime/core")
     set_description("Enable tagged pointer runtime support for user-defined classes and GNUstep NSString/NSNumber literals")
+    after_check(function (option)
+        if option:enabled() and is_plat("wasm") and is_arch("wasm32") then
+            option:enable(false)
+        end
+    end)
 option_end()
 
 option("analysis-symbols")
@@ -217,6 +236,10 @@ option("runtime-generic-metadata")
         end
 
         if not option:enabled() then
+            return
+        end
+        if is_plat("wasm") then
+            option:enable(false)
             return
         end
         if not is_plat("linux") then

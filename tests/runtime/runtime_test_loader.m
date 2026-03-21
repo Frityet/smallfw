@@ -263,6 +263,23 @@ static int case_loader_header_validation(void)
 
 static int case_loader_header_size_modes(void)
 {
+#if UINTPTR_MAX == UINT32_MAX
+#if SF_RUNTIME_COMPACT_HEADERS
+#if SF_RUNTIME_VALIDATION
+    return sizeof(SFObjHeader_t) >= 40 and sizeof(SFObjHeader_t) < 56 and
+           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#else
+    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
+           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#endif
+#else
+#if SF_RUNTIME_VALIDATION
+    return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
+#else
+    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48;
+#endif
+#endif
+#else
 #if SF_RUNTIME_COMPACT_HEADERS
 #if SF_RUNTIME_VALIDATION
     return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64 and
@@ -276,6 +293,7 @@ static int case_loader_header_size_modes(void)
     return sizeof(SFObjHeader_t) >= 64;
 #else
     return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
+#endif
 #endif
 #endif
 }
@@ -1008,7 +1026,9 @@ static const SFTestCase g_loader_cases[] = {
     {"reflection_failure_paths", case_reflection_failure_paths},
     {"reflection_full_map_exhaustion", case_reflection_full_map_exhaustion},
 #endif
+#if !defined(__EMSCRIPTEN__)
     {"class_lookup_concurrent", case_class_lookup_concurrent},
+#endif
 };
 
 const SFTestCase *sf_runtime_loader_cases(size_t *count)

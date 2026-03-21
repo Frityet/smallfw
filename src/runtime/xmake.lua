@@ -1,4 +1,13 @@
 local function add_runtime_implementation_files()
+    local function add_c_dispatch_files()
+        add_files("dispatch_c.c")
+        if smallfw.is_wasm() then
+            add_packages("libffi", {public = true})
+        elseif not is_plat("mingw") then
+            add_links("ffi", {public = true})
+        end
+    end
+
     add_files(
         "allocator.c",
         "arc.c",
@@ -21,21 +30,15 @@ local function add_runtime_implementation_files()
     if smallfw.runtime_dispatch_backend() == "asm" then
         if is_arch("x86_64") then
             if is_plat("mingw") then
-                add_files("dispatch_c.c")
+                add_c_dispatch_files()
             else
                 add_files("dispatch_x86_64.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
             end
         else
-            add_files("dispatch_c.c")
-            if not is_plat("mingw") then
-                add_links("ffi", {public = true})
-            end
+            add_c_dispatch_files()
         end
     else
-        add_files("dispatch_c.c")
-        if not is_plat("mingw") then
-            add_links("ffi", {public = true})
-        end
+        add_c_dispatch_files()
     end
 
     add_files("../smallfw/**.m", {mflags = {"-fno-objc-arc"}})

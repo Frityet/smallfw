@@ -16,10 +16,6 @@ local DEFAULT_PATTERNS = {
     "benchmarks/**.h",
     "benchmarks/**.m",
     "benchmarks/**.mm",
-    "examples/**.c",
-    "examples/**.h",
-    "examples/**.m",
-    "examples/**.mm",
 }
 
 local function _is_supported_file(file)

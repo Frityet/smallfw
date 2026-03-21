@@ -6,7 +6,7 @@
 
 @synthesize message = _message;
 
-+ (instancetype)exceptionWithMessage: (String *_Nullable)message
++ (SF_ERRORABLE(instancetype))exceptionWithMessage: (String *_Nullable)message
 {
     Exception *exception = [[self allocWithAllocator: nullptr] initWithMessage: message];
     return [exception autorelease];
@@ -17,7 +17,7 @@
     return [self initWithMessage: nullptr];
 }
 
-- (instancetype)initWithMessage: (String *_Nullable)message
+- (SF_ERRORABLE(instancetype))initWithMessage: (String *_Nullable)message
 {
     self = [super init];
     if (self == nullptr) {
@@ -44,7 +44,7 @@
 
 @implementation IndexOutOfBoundsException
 
-+ (instancetype)indexOutOfBoundsException
++ (SF_ERRORABLE(instancetype))indexOutOfBoundsException
 {
     return [self exceptionWithMessage: @"Index out of bounds"];
 }

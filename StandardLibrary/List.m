@@ -48,7 +48,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
     return [self initWithCapacity: 0U];
 }
 
-- (instancetype)initWithCapacity: (size_t)capacity
+- (SF_ERRORABLE(instancetype))initWithCapacity: (size_t)capacity
 {
     size_t bytes = 0U;
 
@@ -173,7 +173,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
 #endif
 }
 
-- (id)objectAtIndex: (size_t)idx
+- (SF_ERRORABLE(id))objectAtIndex: (size_t)idx
 {
     if (idx >= _count or _items == nullptr) {
 #if SF_RUNTIME_EXCEPTIONS
@@ -185,7 +185,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
     return _items[idx];
 }
 
-- (id)objectAtIndexedSubscript: (size_t)idx
+- (SF_ERRORABLE(id))objectAtIndexedSubscript: (size_t)idx
 {
     return [self objectAtIndex: idx];
 }
