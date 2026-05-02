@@ -40,7 +40,7 @@ function main()
     local configure_args = task_helpers.collect_configure_args({
         "--analysis-symbols=y",
         "--runtime-validation=y",
-        "--runtime-sanitize=y",
+        "--policies=build.sanitizer.address,build.sanitizer.undefined",
         "--dispatch-backend=c",
     }, {mode = mode_name, plat = "linux", arch = "x86_64", builddir = builddir})
 

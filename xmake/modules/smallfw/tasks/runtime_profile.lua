@@ -390,7 +390,6 @@ end
 local function _write_metadata(filename, run_dir, builddir, binary, profiler, case_name, iters,
                                pgo_mode, bolt_mode, artifacts)
     local options = task_helpers.collect_runtime_option_values({
-        ["objc-runtime"] = _string_option("objc-runtime", "gnustep-2.3"),
         mode = _string_option("mode", "debug"),
         plat = _string_option("plat", "linux"),
         arch = _string_option("arch", "x86_64"),
@@ -572,7 +571,7 @@ function main()
     if backend == "asm" and llvm_mca ~= nil and llvm_mca.program ~= nil then
         local asm_input = path.join(run_dir, "objc_msgSend.s")
         local mca_output = path.join(run_dir, "objc_msgSend.llvm-mca.txt")
-        local asm_source = path.join(task_helpers.projectdir(), "src", "runtime", "dispatch_x86_64.asm")
+        local asm_source = path.join(task_helpers.projectdir(), "Runtime", "SFRuntime", "src", "runtime", "dispatch-x86-64.asm")
         if _extract_asm_symbol("objc_msgSend", asm_source, asm_input) then
             local ok = _write_optional_output(mca_output, llvm_mca.program, {
                 "-mtriple=x86_64-unknown-linux-gnu",

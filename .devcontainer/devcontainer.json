@@ -19,24 +19,20 @@
 			"userGid": "automatic"
 		},
 		"./llvm": {
-			"version": "21"
+			"version": "22"
 		},
 		"./xmake": {},
-		// // "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
-		// "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/wasmtime-wasi:0": {
-		// 	"version": "24",
-		// 	"wasmtime_version": "v24.0.0",
-		// 	"wit_version": "0.30.0",
-		// 	"wasm_tools_version": "1.214.0",
-		// 	"location": "/usr/local"
-		// }
+		"./wine": {}
 	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"llvm-vs-code-extensions.vscode-clangd",
 				"openai.chatgpt"
-			]
+			],
+			"settings": {
+				"clangd.path": "/usr/bin/clangd"
+			}
 		}
 	},
 	// Features to add to the dev container. More info: https://containers.dev/features.

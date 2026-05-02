@@ -5,7 +5,6 @@ import("lib.detect.find_tool")
 
 local runtime_config_keys = {
     "analysis-symbols",
-    "objc-runtime",
     "dispatch-backend",
     "runtime-exceptions",
     "runtime-reflection",
@@ -13,7 +12,6 @@ local runtime_config_keys = {
     "runtime-generic-metadata",
     "runtime-validation",
     "runtime-tagged-pointers",
-    "runtime-sanitize",
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
@@ -324,6 +322,7 @@ function collect_configure_args(extra_args, defaults)
     _append_config_arg(args, "-p", option.get("plat") or defaults.plat)
     _append_config_arg(args, "-a", option.get("arch") or defaults.arch)
     _append_config_arg(args, "-o", option.get("builddir") or defaults.builddir)
+    _append_config_arg(args, "--policies", option.get("policies") or defaults.policies)
     append_runtime_toolchain_args(args)
 
     for _, key in ipairs(runtime_config_keys) do

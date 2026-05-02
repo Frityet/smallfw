@@ -2,6 +2,8 @@ import("core.base.json")
 import("core.base.option")
 import("smallfw.task_helpers")
 
+local SANITIZER_POLICIES = "build.sanitizer.address,build.sanitizer.undefined"
+
 local CASE_ORDER = {
     "dispatch_monomorphic_hot",
     "dispatch_polymorphic_hot",
@@ -29,11 +31,6 @@ local ABI_ENTRIES = {
         id = "gnustep-2.3",
         slug = "gnustep",
         label = "GNUstep ABI",
-    },
-    {
-        id = "objfw-1.5",
-        slug = "objfw",
-        label = "ObjFW ABI",
     },
 }
 
@@ -248,8 +245,8 @@ local FULL_VARIANTS = {
         id = "debug-sanitize",
         mode = "debug",
         category = "Instrumentation",
-        options = {["runtime-sanitize"] = "y"},
-        note = "Enables ASan and UBSan for analysis builds.",
+        policies = SANITIZER_POLICIES,
+        note = "Enables xmake ASan and UBSan policies for analysis builds.",
     },
     {
         id = "release-default",
@@ -358,14 +355,12 @@ local FULL_VARIANTS = {
 
 local DISPLAY_OPTION_ORDER = {
     "analysis-symbols",
-    "objc-runtime",
     "dispatch-backend",
     "runtime-exceptions",
     "runtime-reflection",
     "runtime-forwarding",
     "runtime-validation",
     "runtime-tagged-pointers",
-    "runtime-sanitize",
     "runtime-native-tuning",
     "runtime-thinlto",
     "runtime-full-lto",
@@ -450,18 +445,7 @@ local function _table_clone(src)
 end
 
 local function _selected_abis()
-    local selected = _string_option("objc-runtimes", "both")
-    if selected == "both" then
-        return ABI_ENTRIES
-    end
-
-    for _, abi in ipairs(ABI_ENTRIES) do
-        if abi.id == selected then
-            return {abi}
-        end
-    end
-
-    raise("option --objc-runtimes must be one of: both, gnustep-2.3, objfw-1.5")
+    return ABI_ENTRIES
 end
 
 local function _matrix_kind()
@@ -506,17 +490,13 @@ local function _expanded_variants(abi_entries, variant_templates)
 end
 
 local function _selected_abis_value(abi_entries)
-    if #(abi_entries or {}) == #ABI_ENTRIES then
-        return "both"
-    end
     local abi = abi_entries and abi_entries[1] or nil
-    return abi and abi.id or "both"
+    return abi and abi.id or "gnustep-2.3"
 end
 
 local function _effective_options(variant)
     local options = {
         ["analysis-symbols"] = "n",
-        ["objc-runtime"] = variant.objc_runtime or "gnustep-2.3",
     }
     for key, value in pairs(variant.options or {}) do
         options[key] = value
@@ -537,6 +517,9 @@ local function _visible_changed_options(variant)
         if include then
             table.insert(entries, string.format("`%s=%s`", key, value))
         end
+    end
+    if variant.policies ~= nil and variant.policies ~= "" then
+        table.insert(entries, string.format("`policies=%s`", variant.policies))
     end
     if #entries == 0 then
         return "-"
@@ -678,12 +661,14 @@ local function _bench_command_args(rootdir, samples, warmups, variant)
     for _, key in ipairs(_ordered_option_keys(_effective_options(variant))) do
         table.insert(args, "--" .. key .. "=" .. tostring(_effective_options(variant)[key]))
     end
+    if variant.policies ~= nil and variant.policies ~= "" then
+        table.insert(args, "--policies=" .. variant.policies)
+    end
     return args
 end
 
 local function _variant_envs(variant)
-    local options = _effective_options(variant)
-    if options["runtime-sanitize"] ~= "y" then
+    if not tostring(variant.policies or ""):find("build.sanitizer", 1, true) then
         return nil
     end
 
@@ -719,6 +704,7 @@ local function _run_variant(rootdir, samples, warmups, variant)
         mode = variant.mode or "release",
         pgo = variant.pgo or "off",
         bolt = variant.bolt or "off",
+        policies = variant.policies,
         objc_runtime = variant.objc_runtime or "gnustep-2.3",
         abi_label = variant.abi_label or (variant.objc_runtime or "gnustep-2.3"),
         abi_slug = variant.abi_slug or (variant.objc_runtime or "gnustep-2.3"),
@@ -817,56 +803,7 @@ local function _derive_relative_metrics(results_by_id, variants, abi_entries)
 end
 
 local function _derive_abi_comparisons(results_by_id, abi_entries, variant_templates)
-    local comparisons = {}
-    local gnustep = _find_abi_entry(abi_entries, "gnustep-2.3")
-    local objfw = _find_abi_entry(abi_entries, "objfw-1.5")
-    if gnustep == nil or objfw == nil then
-        return comparisons
-    end
-
-    for _, variant in ipairs(variant_templates or {}) do
-        local gnustep_result = results_by_id[variant.id .. "-" .. gnustep.slug]
-        local objfw_result = results_by_id[variant.id .. "-" .. objfw.slug]
-        if gnustep_result ~= nil and objfw_result ~= nil then
-            local objfw_speedups = {}
-            local best = nil
-            local worst = nil
-
-            for _, case_name in ipairs(CASE_ORDER) do
-                local gnustep_case = gnustep_result.cases[case_name]
-                local objfw_case = objfw_result.cases[case_name]
-                local speedup = gnustep_case.mean_ns_per / objfw_case.mean_ns_per
-                table.insert(objfw_speedups, speedup)
-
-                if best == nil or speedup > best.speedup then
-                    best = {case = case_name, speedup = speedup}
-                end
-                if worst == nil or speedup < worst.speedup then
-                    worst = {case = case_name, speedup = speedup}
-                end
-            end
-
-            table.insert(comparisons, {
-                base_id = variant.id,
-                note = variant.note,
-                mode = variant.mode or "release",
-                gnustep = gnustep_result,
-                objfw = objfw_result,
-                objfw_geomean_speedup = _geomean(objfw_speedups),
-                best_case = best,
-                worst_case = worst,
-            })
-        end
-    end
-
-    table.sort(comparisons, function (a, b)
-        if a.objfw_geomean_speedup == b.objfw_geomean_speedup then
-            return a.base_id < b.base_id
-        end
-        return a.objfw_geomean_speedup > b.objfw_geomean_speedup
-    end)
-
-    return comparisons
+    return {}
 end
 
 local function _markdown_header(lines, level, text)
@@ -927,8 +864,7 @@ local function _render_markdown(matrix_kind, doc_path, outroot, samples, warmups
     local host_info = (host_metadata and host_metadata.host) or {}
     local successful_variants = 0
     local benchmark_labels = {}
-    local has_sanitize_rows = _result_present(results_by_id, "debug-sanitize-gnustep") or
-        _result_present(results_by_id, "debug-sanitize-objfw")
+    local has_sanitize_rows = _result_present(results_by_id, "debug-sanitize-gnustep")
     for _, case_name in ipairs(CASE_ORDER) do
         table.insert(benchmark_labels, string.format("`%s`", CASE_TITLES[case_name]))
     end
@@ -950,8 +886,8 @@ local function _render_markdown(matrix_kind, doc_path, outroot, samples, warmups
         "Relative speedups are computed against the matching mode baseline inside the same ABI: `debug-default` for debug rows and `release-default` for release rows.")
     table.insert(lines, "")
     table.insert(lines, string.format("Generated at: `%s`", generated_at_utc))
-    table.insert(lines, string.format("Regenerate with: `xmake run-runtime-performance-matrix --matrix=%s --samples=%d --warmups=%d --objc-runtimes=%s --outdir=%s --doc=%s`",
-        matrix_kind, samples, warmups, selected_abis, outroot, doc_path))
+    table.insert(lines, string.format("Regenerate with: `xmake run-runtime-performance-matrix --matrix=%s --samples=%d --warmups=%d --outdir=%s --doc=%s`",
+        matrix_kind, samples, warmups, outroot, doc_path))
     table.insert(lines, "")
 
     _markdown_header(lines, 2, "Environment")
@@ -961,7 +897,7 @@ local function _render_markdown(matrix_kind, doc_path, outroot, samples, warmups
     for _, abi in ipairs(abi_entries or {}) do
         table.insert(abi_labels, string.format("`%s`", abi.id))
     end
-    table.insert(lines, string.format("- Objective-C runtimes benchmarked: %s", table.concat(abi_labels, ", ")))
+    table.insert(lines, string.format("- Objective-C runtime benchmarked: %s", table.concat(abi_labels, ", ")))
     if host_info.uname ~= nil then
         table.insert(lines, string.format("- `uname -srvm`: `%s`", host_info.uname))
     end
@@ -1047,35 +983,6 @@ local function _render_markdown(matrix_kind, doc_path, outroot, samples, warmups
         end
     end
 
-    if #abi_comparisons > 0 then
-        _markdown_header(lines, 2, "ObjFW vs GNUstep")
-        for _, mode in ipairs(MODE_ORDER) do
-            local abi_rows = {}
-            for _, comparison in ipairs(abi_comparisons) do
-                if comparison.mode == mode then
-                    local winner = "tie"
-                    if comparison.objfw_geomean_speedup > 1.01 then
-                        winner = "ObjFW ABI"
-                    elseif comparison.objfw_geomean_speedup < 0.99 then
-                        winner = "GNUstep ABI"
-                    end
-                    table.insert(abi_rows, {
-                        "`" .. comparison.base_id .. "`",
-                        _format_speedup(comparison.objfw_geomean_speedup),
-                        winner,
-                        string.format("`%s` (%s)", comparison.best_case.case, _format_speedup(comparison.best_case.speedup)),
-                        string.format("`%s` (%s)", comparison.worst_case.case, _format_speedup(comparison.worst_case.speedup)),
-                        comparison.note,
-                    })
-                end
-            end
-            if #abi_rows > 0 then
-                _markdown_header(lines, 3, _mode_label(mode))
-                _append_table(lines, {"Variant", "ObjFW vs GNUstep", "Winner", "Best ObjFW Case", "Worst ObjFW Case", "Notes"}, abi_rows)
-            end
-        end
-    end
-
     _markdown_header(lines, 2, "Fastest Variant Per Benchmark")
     local fastest_rows = {}
     for _, case_name in ipairs(CASE_ORDER) do
@@ -1091,9 +998,7 @@ local function _render_markdown(matrix_kind, doc_path, outroot, samples, warmups
     end
     _append_table(lines, {"Benchmark", "Fastest Variant", "Mode", "ABI", "Mean", "Speedup vs matching baseline"}, fastest_rows)
 
-    local gnustep = _find_abi_entry(abi_entries, "gnustep-2.3")
-    local objfw = _find_abi_entry(abi_entries, "objfw-1.5")
-    if gnustep ~= nil or objfw ~= nil then
+    if _find_abi_entry(abi_entries, "gnustep-2.3") ~= nil then
         _markdown_header(lines, 2, "ASM vs C Backend")
         local asm_rows = {}
         for _, mode in ipairs(MODE_ORDER) do
@@ -1298,8 +1203,6 @@ function main()
             note = comparison.note,
             mode = comparison.mode,
             gnustep_run_id = comparison.gnustep.id,
-            objfw_run_id = comparison.objfw.id,
-            objfw_geomean_speedup = comparison.objfw_geomean_speedup,
             best_case = comparison.best_case,
             worst_case = comparison.worst_case,
         })

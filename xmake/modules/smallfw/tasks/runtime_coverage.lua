@@ -82,33 +82,35 @@ end
 
 local function _coverage_targets()
     local root = task_helpers.projectdir()
+    local runtime_root = path.join(root, "Runtime", "SFRuntime", "src")
     return {
         direct = {
-            path.join(root, "src/runtime/arc.c"),
-            path.join(root, "src/runtime/dispatch.c"),
-            path.join(root, "src/runtime/exceptions.c"),
-            path.join(root, "src/runtime/helpers.c"),
-            path.join(root, "src/runtime/loader.c"),
+            path.join(runtime_root, "runtime/arc.c"),
+            path.join(runtime_root, "runtime/dispatch.c"),
+            path.join(runtime_root, "runtime/exceptions.c"),
+            path.join(runtime_root, "runtime/helpers.c"),
+            path.join(runtime_root, "runtime/loader/common.c"),
+            path.join(runtime_root, "runtime/loader/gnustep.c"),
         },
         wrappers = {
             {
-                path = path.join(root, "src/runtime/allocator.c"),
-                suffixes = {"/src/runtime/__cpp_allocator.c.c"},
+                path = path.join(runtime_root, "runtime/allocator.c"),
+                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_allocator.c.c"},
                 ignore_locks = false,
             },
             {
-                path = path.join(root, "src/runtime/dispatch_c.c"),
-                suffixes = {"/src/runtime/__cpp_dispatch_c.c.c", "/src/runtime/dispatch_c.c"},
+                path = path.join(runtime_root, "runtime/dispatch-c.c"),
+                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_dispatch-c.c.c", "/Runtime/SFRuntime/src/runtime/dispatch-c.c"},
                 ignore_locks = true,
             },
             {
-                path = path.join(root, "src/runtime/testhooks.c"),
-                suffixes = {"/src/runtime/__cpp_testhooks.c.c"},
+                path = path.join(runtime_root, "runtime/testhooks.c"),
+                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_testhooks.c.c"},
                 ignore_locks = true,
             },
             {
-                path = path.join(root, "src/smallfw/Object.m"),
-                suffixes = {"/src/smallfw/__cpp_Object.m.m"},
+                path = path.join(runtime_root, "smallfw/Object.m"),
+                suffixes = {"/Runtime/SFRuntime/src/smallfw/__cpp_Object.m.m"},
                 ignore_locks = true,
             },
         },
@@ -176,7 +178,7 @@ local function _export_coverage(llvm_cov, binaries, profile, summary_only)
         table.insert(args, binaries[index])
     end
     table.insert(args, "-instr-profile=" .. profile)
-    table.insert(args, "--ignore-filename-regex=.*/dispatch_x86_64\\.S$")
+    table.insert(args, "--ignore-filename-regex=.*/dispatch-x86-64\\.S$")
     if summary_only then
         table.insert(args, "--summary-only")
     end

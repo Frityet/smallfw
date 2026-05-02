@@ -1,0 +1,17 @@
+{
+    "name": "Wine",
+    "id": "wine",
+    "version": "0.0.5",
+    "description": "Installs Wine.",
+    "documentationURL": "https://github.com/Maks1mS/devcontainers-features/tree/main/src/wine",
+    "options": {
+        "version": {
+            "type": "string",
+            "default": "latest",
+            "description": "Version of Wine"
+        }
+    },
+    "installsAfter": [
+        "ghcr.io/devcontainers/features/common-utils"
+    ]
+}
