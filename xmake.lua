@@ -8,7 +8,9 @@ add_rules("plugin.compile_commands.autoupdate")
 
 add_moduledirs("xmake/modules")
 add_repositories("smallfw-local .", {rootdir = os.scriptdir()})
-add_requires("libffi 3.5.2", {plat = "wasm"})
+if get_config("plat") == "wasm" then
+    add_requires("libffi 3.5.2")
+end
 
 includes("xmake/project/options.lua")
 includes("xmake/project/runtime.lua")

@@ -2,6 +2,90 @@ smallfw = smallfw or {}
 
 local release_clang_tidy_ran = false
 
+rule("smallfw.macos.objc_ir_workaround")
+    set_extensions(".m")
+    on_build_file(function (target, sourcefile, opt)
+        import("core.base.option")
+        import("core.project.depend")
+        import("core.tool.compiler")
+        import("utils.progress")
+        import("lib.detect.find_tool")
+
+        local objectfile = opt.objectfile or target:objectfile(sourcefile)
+        local dependfile = opt.dependfile or target:dependfile(objectfile)
+        local sourcekind = opt.sourcekind or target:sourcekind_of(sourcefile)
+        local compinst = compiler.load(sourcekind, {target = target})
+        local compflags = compinst:compflags({target = target, sourcefile = sourcefile, configs = opt.configs})
+        local dependinfo = target:is_rebuilt() and {} or (depend.load(dependfile, {target = target}) or {})
+        local depvalues = {compinst:program(), compflags, "smallfw.macos.objc_ir_workaround.v4"}
+        local dryrun = option.get("dry-run")
+        local lastmtime = os.isfile(objectfile) and os.mtime(dependfile) or 0
+
+        if not dryrun and not depend.is_changed(dependinfo, {lastmtime = lastmtime, values = depvalues, timecache = true}) then
+            return
+        end
+
+        if not opt.quiet then
+            local filepath = sourcefile
+            if target:namespace() then
+                filepath = target:namespace() .. "::" .. filepath
+            end
+            progress.show(opt.progress, "${color.build.object}compiling.$(mode) %s", filepath)
+        end
+        if dryrun then
+            return
+        end
+
+        os.mkdir(path.directory(objectfile))
+
+        local llvmfile = objectfile .. ".ll"
+        local fixedllvmfile = objectfile .. ".fixed.ll"
+        local gccdepfile = objectfile .. ".d"
+        local llvm_bindir = path.directory(compinst:program())
+        local llc = nil
+        for _, candidate in ipairs({
+            path.join(llvm_bindir, "llc"),
+            "/usr/local/opt/llvm/bin/llc",
+            "/opt/homebrew/opt/llvm/bin/llc",
+        }) do
+            if os.isfile(candidate) then
+                llc = find_tool("llc", {program = candidate})
+                if llc ~= nil then
+                    break
+                end
+            end
+        end
+        llc = llc or find_tool("llc")
+        local perl = find_tool("perl")
+        assert(llc ~= nil, "llc is required for the macOS Objective-C build workaround")
+        assert(perl ~= nil, "perl is required for the macOS Objective-C build workaround")
+
+        os.vrunv(compinst:program(),
+                 table.join(compflags, {"-MMD", "-MF", gccdepfile, "-S", "-emit-llvm", sourcefile, "-o", llvmfile}))
+
+        os.cp(llvmfile, fixedllvmfile)
+        os.vrunv(perl.program, {
+            "-0pi",
+            "-e",
+            "s/^\\$[^\\n]+ = comdat any\\n\\n//mg; s/, comdat//g; s/linkonce_odr hidden/private/g; s/linkonce_odr/private/g; s/br i1 icmp ne \\(ptr \\@class_registerAlias_np, ptr null\\), label ([^,]+), label ([^\\n]+)/%smallfw.icmp.class_registerAlias_np = icmp ne ptr \\@class_registerAlias_np, null\\n  br i1 %smallfw.icmp.class_registerAlias_np, label $1, label $2/g",
+            fixedllvmfile,
+        }, {envs = {LC_ALL = "C"}})
+
+        os.vrunv(llc.program, {"-filetype=obj", fixedllvmfile, "-o", objectfile})
+
+        if not table.contains(target:objectfiles(), objectfile) then
+            table.insert(target:objectfiles(), objectfile)
+        end
+
+        dependinfo.files = {sourcefile}
+        dependinfo.values = depvalues
+        if os.isfile(gccdepfile) then
+            dependinfo.depfiles_format = "gcc"
+            dependinfo.depfiles = io.readfile(gccdepfile, {continuation = "\\"})
+        end
+        depend.save(dependinfo, dependfile)
+    end)
+
 local function add_objc_flags(...)
     local flags = {...}
     table.insert(flags, {force = true})
@@ -16,6 +100,10 @@ function smallfw.runtime_dispatch_backend()
         return "c"
     end
     return get_config("dispatch-backend") or "asm"
+end
+
+function smallfw.needs_macos_objc_ir_workaround()
+    return is_plat("macosx") and smallfw.objc_runtime_is_objfw()
 end
 
 function smallfw.is_wasm()
@@ -211,8 +299,8 @@ function smallfw.add_common_runtime_flags()
     if smallfw.is_wasm32() and is_mode("release") then
         set_optimize("none")
     end
-    if smallfw.objc_runtime_is_objfw() and not is_plat("linux") and not smallfw.is_wasm() then
-        raise("objc-runtime=objfw-1.5 is only supported on linux and wasm")
+    if smallfw.objc_runtime_is_objfw() and not is_plat("linux") and not is_plat("macosx") and not smallfw.is_wasm() then
+        raise("objc-runtime=objfw-1.5 is only supported on linux, macosx, and wasm")
     end
     if is_plat("linux") then
         add_defines("_POSIX_C_SOURCE=200809L", {force = true})
@@ -295,6 +383,24 @@ function smallfw.add_common_runtime_flags()
     add_objc_flags("-Wno-nullability-extension")
     if is_plat("mingw") then
         add_objc_flags("-Wno-used-but-marked-unused")
+    end
+end
+
+function smallfw.add_macos_objc_build_workaround()
+    if smallfw.needs_macos_objc_ir_workaround() then
+        add_rules("smallfw.macos.objc_ir_workaround", {override = true})
+        after_load(function (target)
+            for _, sourcebatch in pairs(target:sourcebatches()) do
+                for _, sourcefile in ipairs(sourcebatch.sourcefiles or {}) do
+                    if path.extension(sourcefile) == ".m" then
+                        local objectfile = target:objectfile(sourcefile)
+                        if not table.contains(target:objectfiles(), objectfile) then
+                            table.insert(target:objectfiles(), objectfile)
+                        end
+                    end
+                end
+            end
+        end)
     end
 end
 
@@ -419,7 +525,9 @@ function smallfw.add_runtime_binary_links()
     if smallfw.is_wasm() then
         return
     end
-    if is_plat("mingw") then
+    if is_plat("macosx") then
+        add_links("pthread")
+    elseif is_plat("mingw") then
         add_links("pthread")
     else
         add_links("dl", "pthread")
@@ -434,6 +542,7 @@ function smallfw.configure_runtime_library_target()
     add_options(smallfw.runtime_build_options)
     add_deps("smallfw-blocksruntime")
     add_includedirs(smallfw.project_path("src"), {public = true})
+    smallfw.add_macos_objc_build_workaround()
     smallfw.add_common_runtime_flags()
     smallfw.add_generic_plugin_settings()
     smallfw.add_runtime_mode_defines()
@@ -463,6 +572,7 @@ function smallfw.configure_runtime_binary_target(opt)
         add_includedirs(includedir)
     end
 
+    smallfw.add_macos_objc_build_workaround()
     smallfw.add_common_runtime_flags()
     smallfw.add_generic_plugin_settings()
     smallfw.add_runtime_mode_defines()

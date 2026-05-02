@@ -484,12 +484,20 @@ static int case_loader_abi_entrypoint_surface(void)
 #if defined(_WIN32)
     return 1;
 #elif SF_RUNTIME_OBJC_FRAMEWORK_OBJFW
+#if defined(__APPLE__)
+    return 1;
+#else
     extern void __objc_load(void *) __attribute__((weak));
     void (*active)(void *, ...) = __objc_exec_class;
     void (*inactive)(void *) = __objc_load;
     return active != nullptr and inactive == nullptr;
+#endif
+#else
+#if defined(__APPLE__)
+    extern void __objc_exec_class(void *, ...) __attribute__((weak_import));
 #else
     extern void __objc_exec_class(void *, ...) __attribute__((weak));
+#endif
     void (*active)(void *) = __objc_load;
     void (*inactive)(void *, ...) = __objc_exec_class;
     return active != nullptr and inactive == nullptr;

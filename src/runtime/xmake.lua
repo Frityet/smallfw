@@ -31,6 +31,8 @@ local function add_runtime_implementation_files()
         if is_arch("x86_64") then
             if is_plat("mingw") then
                 add_c_dispatch_files()
+            elseif is_plat("macosx") then
+                add_files("dispatch_x86_64_macos.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
             else
                 add_files("dispatch_x86_64.asm", {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
             end
@@ -50,6 +52,7 @@ target("smallfw-runtime-objects")
     set_kind("object")
     add_options(smallfw.runtime_build_options)
     add_includedirs(smallfw.project_path("src"), {public = true})
+    smallfw.add_macos_objc_build_workaround()
     smallfw.add_common_runtime_flags()
     smallfw.add_runtime_mode_defines()
     smallfw.add_analysis_symbol_settings()
@@ -60,3 +63,21 @@ target("smallfw-runtime")
     set_group("runtime")
     smallfw.configure_runtime_library_target()
     add_runtime_implementation_files()
+    after_build(function (target)
+        if get_config("plat") ~= "macosx" or get_config("objc-runtime") ~= "objfw-1.5" then
+            return
+        end
+
+        local objc_objects = {}
+        for _, sourcefile in ipairs(os.files(path.join(os.projectdir(), "src", "smallfw", "*.m"))) do
+            local objectfile = target:objectfile(sourcefile)
+            if os.isfile(objectfile) then
+                table.insert(objc_objects, objectfile)
+            end
+        end
+        if #objc_objects == 0 then
+            return
+        end
+
+        os.vrunv(target:linker():program(), table.join({"rs", target:targetfile()}, objc_objects))
+    end)

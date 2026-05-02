@@ -12,7 +12,7 @@ local function find_llvm_config()
     return "llvm-config-21"
 end
 
-if not is_plat("wasm") then
+if not is_plat("wasm") and has_config("runtime-generic-metadata") then
     target("smallfw-generics-plugin")
         set_group("plugins")
         set_kind("shared")

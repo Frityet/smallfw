@@ -120,6 +120,7 @@ SF_RUNTIME_EXPORT size_t class_getInstanceSize(Class _Nullable cls);
 SF_RUNTIME_EXPORT Class _Nullable objc_lookup_class(const char *_Nullable name);
 SF_RUNTIME_EXPORT Class _Nullable objc_get_class(const char *_Nullable name);
 SF_RUNTIME_EXPORT id _Nullable objc_getClass(const char *_Nullable name);
+SF_RUNTIME_EXPORT void class_registerAlias_np(Class _Nullable cls, const char *_Nullable name);
 
 SF_RUNTIME_EXPORT const char *_Nullable class_getName(Class _Nullable cls);
 SF_RUNTIME_EXPORT Class _Nullable class_getSuperclass(Class _Nullable cls);

@@ -1380,6 +1380,14 @@ void sf_loader_register_class_aliases(SFObjCAliasEntry_t *start, SFObjCAliasEntr
     }
 }
 
+void class_registerAlias_np(Class cls, const char *name)
+{
+    if (cls == nullptr or name == nullptr or name[0] == '\0') {
+        return;
+    }
+    class_map_insert_unlocked(name, (SFObjCClass_t *)cls);
+}
+
 void sf_finalize_registered_classes(void)
 {
     sf_loader_prepare_registered_classes_unlocked();

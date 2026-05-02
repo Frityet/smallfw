@@ -18,13 +18,13 @@ function smallfw.add_runtime_boolean_option(name, description, category)
 end
 
 option("objc-runtime")
-    set_default(smallfw.config_is_wasm() and "objfw-1.5" or "gnustep-2.3")
+    set_default((smallfw.config_is_wasm() or get_config("plat") == "macosx") and "objfw-1.5" or "gnustep-2.3")
     set_showmenu(true)
     set_category("runtime/core")
     set_values("gnustep-2.3", "objfw-1.5")
     set_description("Select the Objective-C runtime ABI/compiler mode")
     after_check(function (option)
-        if is_plat("wasm") and option:value() ~= "objfw-1.5" then
+        if (is_plat("wasm") or is_plat("macosx")) and option:value() ~= "objfw-1.5" then
             option:set_value("objfw-1.5")
         end
     end)

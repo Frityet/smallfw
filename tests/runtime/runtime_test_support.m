@@ -21,7 +21,11 @@ int g_counter_deallocs = 0;
 static int g_c_dispatch_probe_argc = 0;
 static uintptr_t g_c_dispatch_probe_values[4] = {0U, 0U, 0U, 0U};
 
+#if defined(__APPLE__)
+static int (*sf_test_llvm_profile_write_file)(void) = 0;
+#else
 extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
+#endif
 
 #if not defined(_WIN32)
 static void sf_test_flush_profile_and_reraise(int sig)
