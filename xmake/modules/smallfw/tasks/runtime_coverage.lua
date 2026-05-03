@@ -89,8 +89,7 @@ local function _coverage_targets()
             path.join(runtime_root, "dispatch/dispatch.c"),
             path.join(runtime_root, "exceptions/exceptions.c"),
             path.join(runtime_root, "helpers.c"),
-            path.join(runtime_root, "loader-common.c"),
-            path.join(runtime_root, "loader-gnustep.c"),
+            path.join(runtime_root, "loader.c"),
         },
         wrappers = {
             {

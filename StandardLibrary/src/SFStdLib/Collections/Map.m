@@ -6,10 +6,12 @@
 #include <stdint.h>
 
 #if SF_RUNTIME_EXCEPTIONS
-@interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)exception;
-@end
+    @interface InvalidArgumentException (SmallFWInternal)
+    + (instancetype)exception;
+    @end
 #endif
+
+#pragma clang assume_nonnull begin
 
 static uint64_t sf_map_hash_word(uint64_t hash, uintptr_t word)
 {
@@ -21,7 +23,7 @@ static uint64_t sf_map_hash_word(uint64_t hash, uintptr_t word)
     return hash;
 }
 
-static int sf_map_keys_equal(id lhs, id rhs)
+static bool sf_map_keys_equal(id nillable lhs, id nillable rhs)
 {
     if (lhs == rhs) {
         return 1;
@@ -36,16 +38,16 @@ static int sf_map_keys_equal(id lhs, id rhs)
 
 @synthesize count = _count;
 
-+ (instancetype)dictionaryWithObjects:(const id nonnil *nillable)objects
-                              forKeys:(const id nonnil *nillable)keys
-                                count:(size_t)count
++ (SF_ERRORABLE(instancetype))dictionaryWithObjects:(const id nonnil *nillable)objects
+                                           forKeys:(const id nonnil *nillable)keys
+                                             count:(size_t)count
 {
     return [[[self allocWithAllocator:nullptr] initWithObjects:objects forKeys:keys count:count] autorelease];
 }
 
-- (instancetype)initWithObjects:(const id nonnil *nillable)objects
-                        forKeys:(const id nonnil *nillable)keys
-                          count:(size_t)count
+- (SF_ERRORABLE(instancetype))initWithObjects:(const id nonnil *nillable)objects
+                                      forKeys:(const id nonnil *nillable)keys
+                                        count:(size_t)count
 {
     if (count > 0U and (objects == nullptr or keys == nullptr)) {
         [self release];
@@ -117,7 +119,7 @@ static int sf_map_keys_equal(id lhs, id rhs)
     return self;
 }
 
-- (id)objectForKey:(id)key
+- (id nillable)objectForKey:(id nillable)key
 {
     for (size_t i = 0U; i < _count; ++i) {
         if (sf_map_keys_equal(_keys[i], key)) {
@@ -128,12 +130,12 @@ static int sf_map_keys_equal(id lhs, id rhs)
     return nullptr;
 }
 
-- (id)objectForKeyedSubscript:(id)key
+- (id nillable)objectForKeyedSubscript:(id nillable)key
 {
     return [self objectForKey:key];
 }
 
-- (bool)isEqual:(Object *)other
+- (bool)isEqual:(Object *nillable)other
 {
     if ((id)self == (id)other) {
         return true;
@@ -201,3 +203,4 @@ static int sf_map_keys_equal(id lhs, id rhs)
 }
 
 @end
+#pragma clang assume_nonnull end

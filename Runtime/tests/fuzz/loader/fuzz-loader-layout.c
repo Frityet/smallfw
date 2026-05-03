@@ -87,11 +87,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     (void)class_getInstanceSize((Class)&parent.cls);
     (void)class_getInstanceSize((Class)&child.cls);
 #if SF_RUNTIME_REFLECTION
-    (void)class_getInstanceVariable((Class)&child.cls, k_ivar_names[data[0] & 3U]);
-    ivars = class_copyIvarList((Class)&child.cls, &ivar_count);
-    free(ivars);
+        (void)class_getInstanceVariable((Class)&child.cls, k_ivar_names[data[0] & 3U]);
+        ivars = class_copyIvarList((Class)&child.cls, &ivar_count);
+        free(ivars);
 #else
-    (void)ivar_count;
+        (void)ivar_count;
 #endif
     return 0;
 }

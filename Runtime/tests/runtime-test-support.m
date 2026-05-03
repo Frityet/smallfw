@@ -2,69 +2,70 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(_WIN32)
-#include <malloc.h>
-#include <stdio.h>
-#include <windows.h>
+#    include <malloc.h>
+#    include <stdio.h>
+#    include <windows.h>
+#    if defined(interface)
+#        undef interface
+#    endif
 #else
-#include <sys/wait.h>
-#include <unistd.h>
+#    include <sys/wait.h>
+#    include <unistd.h>
 #endif
 
 #include "runtime-test-support.h"
 
-#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
-#endif
 
 int g_counter_deallocs = 0;
 static int g_c_dispatch_probe_argc = 0;
 static uintptr_t g_c_dispatch_probe_values[4] = {0U, 0U, 0U, 0U};
 
 #if defined(__APPLE__)
-static int (*sf_test_llvm_profile_write_file)(void) = 0;
+    static int (*sf_test_llvm_profile_write_file)(void) = 0;
 #else
-extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
+    extern int sf_test_llvm_profile_write_file(void) __asm__("__llvm_profile_write_file") __attribute__((weak));
 #endif
 
 #if not defined(_WIN32)
-static void sf_test_flush_profile_and_reraise(int sig)
-{
-    if (sf_test_llvm_profile_write_file != nullptr) {
-        (void)sf_test_llvm_profile_write_file();
+    static void sf_test_flush_profile_and_reraise(int sig)
+    {
+        if (sf_test_llvm_profile_write_file != nullptr) {
+            (void)sf_test_llvm_profile_write_file();
+        }
+        signal(sig, SIG_DFL);
+        raise(sig);
     }
-    signal(sig, SIG_DFL);
-    raise(sig);
-}
 #endif
 
 static void *sf_test_aligned_alloc(size_t size, size_t align)
 {
 #if not defined(_WIN32)
-    void *ptr = nullptr;
+        void *ptr = nullptr;
 #endif
     if (align <= sizeof(void *)) {
         return malloc(size);
     }
 #if defined(_WIN32)
-    return _aligned_malloc(size, align);
+        return _aligned_malloc(size, align);
 #else
-    if (posix_memalign(&ptr, align, size) != 0) {
-        return nullptr;
-    }
-    return ptr;
+        if (posix_memalign(&ptr, align, size) != 0) {
+            return nullptr;
+        }
+        return ptr;
 #endif
 }
 
 static void sf_test_aligned_free(void *ptr, size_t align)
 {
 #if defined(_WIN32)
-    if (align > sizeof(void *)) {
-        _aligned_free(ptr);
-        return;
-    }
+        if (align > sizeof(void *)) {
+            _aligned_free(ptr);
+            return;
+        }
 #else
-    (void)align;
+        (void)align;
 #endif
     free(ptr);
 }
@@ -330,107 +331,107 @@ static ForwardDispatchTarget *sf_test_forward_dispatch_target(void)
 @end
 
 #if SF_RUNTIME_TAGGED_POINTERS
-static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
-{
-    uintptr_t payload = 0U;
-    if (bytes == nullptr or length > 6U) {
-        return UINTPTR_MAX;
+    static uintptr_t sf_test_pack_short_string(const char *bytes, size_t length)
+    {
+        uintptr_t payload = 0U;
+        if (bytes == nullptr or length > 6U) {
+            return UINTPTR_MAX;
+        }
+
+        payload = (uintptr_t)length;
+        for (size_t i = 0; i < length; ++i) {
+            payload |= ((uintptr_t)(uint8_t)bytes[i]) << (3U + (i * 8U));
+        }
+        return payload;
     }
 
-    payload = (uintptr_t)length;
-    for (size_t i = 0; i < length; ++i) {
-        payload |= ((uintptr_t)(uint8_t)bytes[i]) << (3U + (i * 8U));
+    @implementation TaggedNumberProbe
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 1U;
     }
-    return payload;
-}
 
-@implementation TaggedNumberProbe
-+ (uintptr_t)taggedPointerSlot
-{
-    return 1U;
-}
-
-+ (instancetype)numberWithValue:(uintptr_t)value
-{
-    return [self taggedPointerWithPayload:value];
-}
-
-- (uintptr_t)value
-{
-    return self.taggedPointerPayload;
-}
-
-- (TaggedNumberProbe *)plus:(uintptr_t)delta
-{
-    return (TaggedNumberProbe *)sf_make_tagged_pointer(sf_object_class(self), self.taggedPointerPayload + delta);
-}
-@end
-
-@implementation TaggedStringProbe
-+ (uintptr_t)taggedPointerSlot
-{
-    return 2U;
-}
-
-+ (instancetype)stringWithBytes:(const char *)bytes length:(size_t)length
-{
-    uintptr_t payload = sf_test_pack_short_string(bytes, length);
-    if (payload == UINTPTR_MAX) {
-        return nil;
+    + (instancetype)numberWithValue:(uintptr_t)value
+    {
+        return [self taggedPointerWithPayload:value];
     }
-    return [self taggedPointerWithPayload:payload];
-}
 
-- (unsigned long)length
-{
-    return (unsigned long)(self.taggedPointerPayload & (uintptr_t)7U);
-}
-
-- (unsigned int)characterAtIndex:(unsigned long)index
-{
-    uintptr_t payload = self.taggedPointerPayload;
-    if (index >= self.length) {
-        return 0U;
+    - (uintptr_t)value
+    {
+        return self.taggedPointerPayload;
     }
-    return (unsigned int)((payload >> (3U + ((uintptr_t)index * 8U))) & (uintptr_t)0xffU);
-}
-@end
 
-@implementation TaggedDuplicateA
-+ (uintptr_t)taggedPointerSlot
-{
-    return 3U;
-}
-@end
+    - (TaggedNumberProbe *)plus:(uintptr_t)delta
+    {
+        return (TaggedNumberProbe *)sf_make_tagged_pointer(sf_object_class(self), self.taggedPointerPayload + delta);
+    }
+    @end
 
-@implementation TaggedDuplicateB
-+ (uintptr_t)taggedPointerSlot
-{
-    return 3U;
-}
-@end
+    @implementation TaggedStringProbe
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 2U;
+    }
 
-@implementation TaggedInvalidSlotProbe
-+ (uintptr_t)taggedPointerSlot
-{
-    return 8U;
-}
-@end
+    + (instancetype)stringWithBytes:(const char *)bytes length:(size_t)length
+    {
+        uintptr_t payload = sf_test_pack_short_string(bytes, length);
+        if (payload == UINTPTR_MAX) {
+            return nil;
+        }
+        return [self taggedPointerWithPayload:payload];
+    }
 
-@implementation TaggedValueProbe
-+ (uintptr_t)taggedPointerSlot
-{
-    return 4U;
-}
-@end
+    - (unsigned long)length
+    {
+        return (unsigned long)(self.taggedPointerPayload & (uintptr_t)7U);
+    }
+
+    - (unsigned int)characterAtIndex:(unsigned long)index
+    {
+        uintptr_t payload = self.taggedPointerPayload;
+        if (index >= self.length) {
+            return 0U;
+        }
+        return (unsigned int)((payload >> (3U + ((uintptr_t)index * 8U))) & (uintptr_t)0xffU);
+    }
+    @end
+
+    @implementation TaggedDuplicateA
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 3U;
+    }
+    @end
+
+    @implementation TaggedDuplicateB
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 3U;
+    }
+    @end
+
+    @implementation TaggedInvalidSlotProbe
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 8U;
+    }
+    @end
+
+    @implementation TaggedValueProbe
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 4U;
+    }
+    @end
 #endif
 
 #if SF_RUNTIME_EXCEPTIONS
-@implementation ExceptionBase
-@end
+    @implementation ExceptionBase
+    @end
 
-@implementation ExceptionChild
-@end
+    @implementation ExceptionChild
+    @end
 #endif
 
 void sf_test_reset_common_state(void)
@@ -501,77 +502,75 @@ uintptr_t sf_test_c_dispatch_probe_value(int index)
     return g_c_dispatch_probe_values[index];
 }
 
-int sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal)
+bool sf_test_expect_signal(SFTestChildFn fn, void *ctx, int expected_signal)
 {
 #if defined(_WIN32)
-    (void)fn;
-    (void)ctx;
-    (void)expected_signal;
-    return 0;
+        (void)fn;
+        (void)ctx;
+        (void)expected_signal;
+        return false;
 #else
-    pid_t pid = fork();
-    if (pid < 0) {
-        return 0;
-    }
-    if (pid == 0) {
-        (void)signal(expected_signal, sf_test_flush_profile_and_reraise);
-        fn(ctx);
-        _exit(0);
-    }
+        pid_t pid = fork();
+        if (pid < 0) {
+            return false;
+        }
+        if (pid == 0) {
+            (void)signal(expected_signal, sf_test_flush_profile_and_reraise);
+            fn(ctx);
+            _exit(0);
+        }
 
-    int status = 0;
-    if (waitpid(pid, &status, 0) != pid) {
-        return 0;
-    }
-    return WIFSIGNALED(status) and WTERMSIG(status) == expected_signal;
+        int status = 0;
+        if (waitpid(pid, &status, 0) != pid) {
+            return false;
+        }
+        return WIFSIGNALED(status) and WTERMSIG(status) == expected_signal;
 #endif
 }
 
-int sf_test_expect_signal_case(const char *case_name, int expected_signal)
+bool sf_test_expect_signal_case(const char *case_name, int expected_signal)
 {
 #if defined(_WIN32)
-    char exe_path[MAX_PATH];
-    char command_line[1024];
-    STARTUPINFOA startup_info;
-    PROCESS_INFORMATION process_info;
-    DWORD exit_code = 0;
+        char exe_path[MAX_PATH];
+        char command_line[1024];
+        STARTUPINFOA startup_info;
+        PROCESS_INFORMATION process_info;
+        DWORD exit_code = 0;
 
-    (void)expected_signal;
-    if (case_name == nullptr or GetModuleFileNameA(nullptr, exe_path, MAX_PATH) == 0) {
-        return 0;
-    }
+        (void)expected_signal;
+        if (case_name == nullptr or GetModuleFileNameA(nullptr, exe_path, MAX_PATH) == 0) {
+            return false;
+        }
 
-    memset(&startup_info, 0, sizeof(startup_info));
-    memset(&process_info, 0, sizeof(process_info));
-    startup_info.cb = sizeof(startup_info);
-    if ((size_t)snprintf(command_line, sizeof(command_line), "\"%s\" --case %s", exe_path, case_name) >=
-        sizeof(command_line)) {
-        return 0;
-    }
-    if (not CreateProcessA(exe_path, command_line, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup_info, &process_info)) {
-        return 0;
-    }
+        memset(&startup_info, 0, sizeof(startup_info));
+        memset(&process_info, 0, sizeof(process_info));
+        startup_info.cb = sizeof(startup_info);
+        if ((size_t)snprintf(command_line, sizeof(command_line), "\"%s\" --case %s", exe_path, case_name) >=
+            sizeof(command_line)) {
+            return false;
+        }
+        if (not CreateProcessA(exe_path, command_line, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup_info, &process_info)) {
+            return false;
+        }
 
-    if (WaitForSingleObject(process_info.hProcess, INFINITE) != WAIT_OBJECT_0) {
+        if (WaitForSingleObject(process_info.hProcess, INFINITE) != WAIT_OBJECT_0) {
+            CloseHandle(process_info.hThread);
+            CloseHandle(process_info.hProcess);
+            return false;
+        }
+        if (not GetExitCodeProcess(process_info.hProcess, &exit_code)) {
+            CloseHandle(process_info.hThread);
+            CloseHandle(process_info.hProcess);
+            return false;
+        }
         CloseHandle(process_info.hThread);
         CloseHandle(process_info.hProcess);
-        return 0;
-    }
-    if (not GetExitCodeProcess(process_info.hProcess, &exit_code)) {
-        CloseHandle(process_info.hThread);
-        CloseHandle(process_info.hProcess);
-        return 0;
-    }
-    CloseHandle(process_info.hThread);
-    CloseHandle(process_info.hProcess);
-    return exit_code != 0;
+        return exit_code != 0;
 #else
-    (void)case_name;
-    (void)expected_signal;
-    return 0;
+        (void)case_name;
+        (void)expected_signal;
+        return false;
 #endif
 }
 
-#ifdef __clang__
 #pragma clang diagnostic pop
-#endif

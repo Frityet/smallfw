@@ -10,8 +10,7 @@ local function add_runtime_sources()
         path.join(runtime_src, "arc.c"),
         path.join(runtime_src, "encoding.m"),
         path.join(runtime_src, "helpers.c"),
-        path.join(runtime_src, "loader-common.c"),
-        path.join(runtime_src, "loader-gnustep.c"),
+        path.join(runtime_src, "loader.c"),
         path.join(runtime_src, "object-header.c"),
         path.join(dispatch_src, "dispatch.c"),
         path.join(exceptions_src, "exceptions.c")
@@ -19,21 +18,26 @@ local function add_runtime_sources()
     if is_mode("test") then
         add_files(path.join(runtime_src, "testhooks.c"))
     end
-    add_files(path.join(smallfw_src, "AllocationFailedException.m"), {mflags = {"-fno-objc-arc"}})
-    add_files(path.join(smallfw_src, "InvalidArgumentException.m"), {mflags = {"-fno-objc-arc"}})
-    add_files(path.join(smallfw_src, "Object.m"), {mflags = {"-fno-objc-arc"}})
+    add_files(path.join(smallfw_src, "AllocationFailedException.m"), {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files(path.join(smallfw_src, "InvalidArgumentException.m"), {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files(path.join(smallfw_src, "Object.m"), {mflags = smallfw.no_objc_arc_file_flags()})
 
     if is_plat("mingw") and has_config("runtime-exceptions") then
-        add_files(path.join(exceptions_src, "exceptions-mingw.mm"), {mxflags = {"-fno-objc-arc"}})
+        add_files(path.join(exceptions_src, "exceptions-mingw.mm"), {mxflags = smallfw.no_objc_arc_file_flags()})
     end
 
-    if smallfw.runtime_dispatch_backend() == "asm" and is_arch("x86_64") and not is_plat("mingw") then
+    local dispatch_backend = smallfw.runtime_dispatch_backend()
+    if dispatch_backend == "asm" and is_arch("x86_64", "x64") then
         add_files(path.join(dispatch_src, "dispatch-x86-64.asm"), {sourcekind = "as", asflags = {"-x", "assembler-with-cpp"}})
-    else
+    elseif dispatch_backend == "c" then
         add_files(path.join(dispatch_src, "dispatch-c.c"))
-        if not is_plat("mingw") then
+        if not is_plat("mingw", "windows") then
             add_links("ffi", {public = true})
         end
+    elseif dispatch_backend == "legacy" then
+        -- Clang lowers Objective-C sends to objc_msg_lookup_sender / objc_msg_lookup_super for this backend.
+    else
+        raise("unsupported dispatch backend: %s", dispatch_backend)
     end
 end
 
@@ -49,7 +53,7 @@ target("smallfw-blocksruntime")
     add_includedirs(runtime_src, {public = true})
     add_headerfiles(path.join(blocks_src, "*.h"), {prefixdir = "Blocks"})
     add_headerfiles(path.join(runtime_src, "SFRuntime.modulemap"), {prefixdir = "."})
-    add_files(path.join(blocks_src, "data.m"), path.join(blocks_src, "runtime.m"), {mflags = {"-fno-objc-arc"}})
+    add_files(path.join(blocks_src, "data.m"), path.join(blocks_src, "runtime.m"), {mflags = smallfw.no_objc_arc_file_flags()})
     if is_plat("linux") then
         add_defines("_POSIX_C_SOURCE=200809L", {force = true})
     end
@@ -86,6 +90,7 @@ target("smallfw-runtime")
     add_headerfiles(path.join(runtime_src, "abi.h"),
                     path.join(runtime_src, "c2x-compat.h"),
                     path.join(runtime_src, "encoding.h"),
+                    path.join(runtime_src, "loader.h"),
                     path.join(runtime_src, "locking.h"),
                     path.join(runtime_src, "objc-runtime-exports.h"),
                     path.join(runtime_src, "sf-allocator.h"),

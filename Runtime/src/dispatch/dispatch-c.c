@@ -1,7 +1,7 @@
 #include "internal.h"
 
-#if not defined(_WIN32)
-#include <ffi.h>
+#if not defined(_WIN32) and not defined(SF_RUNTIME_DISPATCH_PARSER_ONLY)
+#    include <ffi.h>
 #endif
 #include <stdarg.h>
 #include <stdint.h>
@@ -10,17 +10,19 @@
 #define SF_C_FALLBACK_MAX_ARGS 4U
 #define SF_C_SIG_CACHE_SIZE 32U
 
-#if defined(_WIN32)
-#define SF_DISPATCH_C_USE_LIBFFI 0
+#pragma clang assume_nonnull begin
+
+#if defined(_WIN32) or defined(SF_RUNTIME_DISPATCH_PARSER_ONLY)
+#    define SF_DISPATCH_C_USE_LIBFFI 0
 #else
-#define SF_DISPATCH_C_USE_LIBFFI 1
+#    define SF_DISPATCH_C_USE_LIBFFI 1
 #endif
 
 typedef struct SFCSigCacheEntry {
     uint32_t slot;
     char codes[SF_C_FALLBACK_MAX_ARGS];
     uint8_t argc;
-    uint8_t unsupported;
+    bool unsupported;
 } SFCSigCacheEntry_t;
 
 typedef enum SFCCallArgKind {
@@ -36,54 +38,67 @@ typedef struct SFCCallArgInfo {
     uint16_t size;
 } SFCCallArgInfo_t;
 
+typedef union SFCArgValue {
+    uintptr_t word;
+    float float_value;
+    double double_value;
+} SFCArgValue_t;
+
 typedef struct SFCTypeLayout {
     size_t size;
     size_t align;
-    int contains_fp;
-    int unsupported;
+    bool contains_fp;
+    bool unsupported;
     const char *end;
 } SFCTypeLayout_t;
 
-#if defined(__x86_64__) && !defined(_WIN32)
-typedef struct SFCSysVVaList {
-    unsigned int gp_offset;
-    unsigned int fp_offset;
-    void *overflow_arg_area;
-    void *reg_save_area;
-} SFCSysVVaList_t;
+#if defined(__x86_64__) and not defined(_WIN32)
+    typedef struct SFCSysVVaList {
+        unsigned int gp_offset;
+        unsigned int fp_offset;
+        void *overflow_arg_area;
+        void *reg_save_area;
+    } SFCSysVVaList_t;
 #endif
 
 #if SF_DISPATCH_C_USE_LIBFFI
-typedef union SFCWordStorage {
-    int8_t s8;
-    uint8_t u8;
-    int16_t s16;
-    uint16_t u16;
-    int32_t s32;
-    uint32_t u32;
-    long sl;
-    unsigned long ul;
-    long long s64;
-    unsigned long long u64;
-    void *ptr;
-} SFCWordStorage_t;
+    typedef union SFCWordStorage {
+        int8_t s8;
+        uint8_t u8;
+        int16_t s16;
+        uint16_t u16;
+        int32_t s32;
+        uint32_t u32;
+        long sl;
+        unsigned long ul;
+        long long s64;
+        unsigned long long u64;
+        float f32;
+        double f64;
+        void *ptr;
+    } SFCWordStorage_t;
 
-typedef struct SFCStructFFIType {
-    ffi_type type;
-    ffi_type *elements[16];
-} SFCStructFFIType_t;
+    typedef struct SFCStructFFIType {
+        ffi_type type;
+        ffi_type *elements[16];
+    } SFCStructFFIType_t;
 #endif
 
 static thread_local SFCSigCacheEntry_t g_sig_cache[SF_C_SIG_CACHE_SIZE];
 
-static int is_digit_char(char c)
+static bool is_digit_char(char c)
 {
     return c >= '0' and c <= '9';
 }
 
-static int is_type_qualifier(char c)
+static bool is_type_qualifier(char c)
 {
     return c == 'r' or c == 'n' or c == 'N' or c == 'o' or c == 'O' or c == 'R' or c == 'V';
+}
+
+static bool is_float_code(char code)
+{
+    return code == 'f' or code == 'd';
 }
 
 static size_t align_up_size(size_t value, size_t align)
@@ -218,7 +233,7 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
         case 'f':
             layout.size = 4U;
             layout.align = 4U;
-            layout.contains_fp = 1;
+            layout.contains_fp = true;
             layout.end += 1;
             return layout;
         case 'l':
@@ -237,7 +252,7 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
         case 'D':
             layout.size = 8U;
             layout.align = 8U;
-            layout.contains_fp = 1;
+            layout.contains_fp = true;
             layout.end += 1;
             return layout;
         case '*':
@@ -275,26 +290,26 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
             if (*layout.end == ']') {
                 ++layout.end;
             } else {
-                layout.unsupported = 1;
+                layout.unsupported = true;
             }
             return layout;
         }
         case '{': {
             size_t size = 0U;
             size_t align = 1U;
-            int contains_fp = 0;
-            int unsupported = 0;
+            bool contains_fp = false;
+            bool unsupported = false;
             layout.end += 1;
             while (*layout.end and * layout.end != '=' and * layout.end != '}') {
                 ++layout.end;
             }
             if (*layout.end == '}') {
                 ++layout.end;
-                layout.unsupported = 1;
+                layout.unsupported = true;
                 return layout;
             }
             if (*layout.end != '=') {
-                layout.unsupported = 1;
+                layout.unsupported = true;
                 return layout;
             }
             ++layout.end;
@@ -312,7 +327,7 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
             if (*layout.end == '}') {
                 ++layout.end;
             } else {
-                unsupported = 1;
+                unsupported = true;
             }
             layout.size = align_up_size(size, align);
             layout.align = align;
@@ -323,19 +338,19 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
         case '(': {
             size_t size = 0U;
             size_t align = 1U;
-            int contains_fp = 0;
-            int unsupported = 0;
+            bool contains_fp = false;
+            bool unsupported = false;
             layout.end += 1;
             while (*layout.end and * layout.end != '=' and * layout.end != ')') {
                 ++layout.end;
             }
             if (*layout.end == ')') {
                 ++layout.end;
-                layout.unsupported = 1;
+                layout.unsupported = true;
                 return layout;
             }
             if (*layout.end != '=') {
-                layout.unsupported = 1;
+                layout.unsupported = true;
                 return layout;
             }
             ++layout.end;
@@ -354,7 +369,7 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
             if (*layout.end == ')') {
                 ++layout.end;
             } else {
-                unsupported = 1;
+                unsupported = true;
             }
             layout.size = align_up_size(size, align);
             layout.align = align;
@@ -365,13 +380,13 @@ static SFCTypeLayout_t parse_type_layout(const char *p)
         default:
             layout.size = sizeof(void *);
             layout.align = sizeof(void *);
-            layout.unsupported = 1;
+            layout.unsupported = true;
             layout.end = skip_type_token(layout.end);
             return layout;
     }
 }
 
-static int classify_aggregate_token(const char *token, SFCCallArgInfo_t *out_info)
+static bool classify_aggregate_token(const char *token, SFCCallArgInfo_t *out_info)
 {
     SFCTypeLayout_t layout = parse_type_layout(token);
     char code = primary_type_code(token);
@@ -394,7 +409,7 @@ static int classify_aggregate_token(const char *token, SFCCallArgInfo_t *out_inf
     return 1;
 }
 
-static int classify_type_token(const char *token, SFCCallArgInfo_t *out_info)
+static bool classify_type_token(const char *token, SFCCallArgInfo_t *out_info)
 {
     char code = primary_type_code(token);
     out_info->code = code;
@@ -403,10 +418,10 @@ static int classify_type_token(const char *token, SFCCallArgInfo_t *out_info)
     if (code == '{' or code == '(' or code == '[') {
         return classify_aggregate_token(token, out_info);
     }
-    return not(code == 'f' or code == 'd' or code == 'D');
+    return code != 'D';
 }
 
-static int collect_return_info(SEL op, SFCCallArgInfo_t *out_info)
+static bool collect_return_info(SEL op, SFCCallArgInfo_t *out_info)
 {
     const char *types = op ? op->types : nullptr;
     if (types == nullptr or types[0] == '\0') {
@@ -419,10 +434,10 @@ static int collect_return_info(SEL op, SFCCallArgInfo_t *out_info)
 
 static size_t collect_explicit_arg_infos(SEL op,
                                          SFCCallArgInfo_t out_infos[SF_C_FALLBACK_MAX_ARGS],
-                                         int *unsupported_sig)
+                                         bool *unsupported_sig)
 {
     if (unsupported_sig != nullptr) {
-        *unsupported_sig = 0;
+        *unsupported_sig = false;
     }
     if (op == nullptr or op->types == nullptr or op->types[0] == '\0') {
         return 0;
@@ -447,7 +462,7 @@ static size_t collect_explicit_arg_infos(SEL op,
             if (explicit_count >= SF_C_FALLBACK_MAX_ARGS or
                                       not classify_type_token(token, &out_infos[explicit_count])) {
                 if (unsupported_sig != nullptr) {
-                    *unsupported_sig = 1;
+                    *unsupported_sig = true;
                 }
                 return explicit_count;
             }
@@ -460,145 +475,173 @@ static size_t collect_explicit_arg_infos(SEL op,
 }
 
 #if SF_DISPATCH_C_USE_LIBFFI
-static ffi_type *ffi_type_for_code(char code)
-{
-    switch (code) {
-        case 'v':
-            return &ffi_type_void;
-        case 'c':
-            return &ffi_type_sint8;
-        case 'C':
-        case 'B':
-            return &ffi_type_uint8;
-        case 's':
-            return &ffi_type_sint16;
-        case 'S':
-            return &ffi_type_uint16;
-        case 'i':
-            return &ffi_type_sint32;
-        case 'I':
-            return &ffi_type_uint32;
-        case 'l':
-            return &ffi_type_slong;
-        case 'L':
-            return &ffi_type_ulong;
-        case 'q':
-            return &ffi_type_sint64;
-        case 'Q':
-            return &ffi_type_uint64;
-        case '*':
-        case ':':
-        case '@':
-        case '#':
-        case '^':
-        case '[':
-        case '(':
-        case '{':
-            return &ffi_type_pointer;
-        default:
-            return nullptr;
+    static ffi_type *nillable ffi_type_for_code(char code)
+    {
+        switch (code) {
+            case 'v':
+                return &ffi_type_void;
+            case 'c':
+                return &ffi_type_sint8;
+            case 'C':
+            case 'B':
+                return &ffi_type_uint8;
+            case 's':
+                return &ffi_type_sint16;
+            case 'S':
+                return &ffi_type_uint16;
+            case 'i':
+                return &ffi_type_sint32;
+            case 'I':
+                return &ffi_type_uint32;
+            case 'f':
+                return &ffi_type_float;
+            case 'l':
+                return &ffi_type_slong;
+            case 'L':
+                return &ffi_type_ulong;
+            case 'q':
+                return &ffi_type_sint64;
+            case 'Q':
+                return &ffi_type_uint64;
+            case 'd':
+                return &ffi_type_double;
+            case '*':
+            case ':':
+            case '@':
+            case '#':
+            case '^':
+            case '[':
+            case '(':
+            case '{':
+                return &ffi_type_pointer;
+            default:
+                return nullptr;
+        }
     }
-}
 
-static void store_word_arg(SFCWordStorage_t *storage, char code, uintptr_t raw)
-{
-    switch (code) {
-        case 'c':
-            storage->s8 = (int8_t)(intptr_t)raw;
-            break;
-        case 'C':
-        case 'B':
-            storage->u8 = (uint8_t)raw;
-            break;
-        case 's':
-            storage->s16 = (int16_t)(intptr_t)raw;
-            break;
-        case 'S':
-            storage->u16 = (uint16_t)raw;
-            break;
-        case 'i':
-            storage->s32 = (int32_t)(intptr_t)raw;
-            break;
-        case 'I':
-            storage->u32 = (uint32_t)raw;
-            break;
-        case 'l':
-            storage->sl = (long)(intptr_t)raw;
-            break;
-        case 'L':
-            storage->ul = (unsigned long)raw;
-            break;
-        case 'q':
-            storage->s64 = (long long)(intptr_t)raw;
-            break;
-        case 'Q':
-            storage->u64 = (unsigned long long)raw;
-            break;
-        default:
-            storage->ptr = (void *)raw;
-            break;
+    static void store_word_arg(SFCWordStorage_t *storage, char code, uintptr_t raw)
+    {
+        switch (code) {
+            case 'c':
+                storage->s8 = (int8_t)(intptr_t)raw;
+                break;
+            case 'C':
+            case 'B':
+                storage->u8 = (uint8_t)raw;
+                break;
+            case 's':
+                storage->s16 = (int16_t)(intptr_t)raw;
+                break;
+            case 'S':
+                storage->u16 = (uint16_t)raw;
+                break;
+            case 'i':
+                storage->s32 = (int32_t)(intptr_t)raw;
+                break;
+            case 'I':
+                storage->u32 = (uint32_t)raw;
+                break;
+            case 'l':
+                storage->sl = (long)(intptr_t)raw;
+                break;
+            case 'L':
+                storage->ul = (unsigned long)raw;
+                break;
+            case 'q':
+                storage->s64 = (long long)(intptr_t)raw;
+                break;
+            case 'Q':
+                storage->u64 = (unsigned long long)raw;
+                break;
+            case 'f':
+                storage->f32 = (float)raw;
+                break;
+            case 'd':
+                storage->f64 = (double)raw;
+                break;
+            default:
+                storage->ptr = (void *)raw;
+                break;
+        }
     }
-}
 
-static id return_word_as_id(const SFCWordStorage_t *storage, char code)
-{
-    switch (code) {
-        case 'v':
-            return (id)0;
-        case 'c':
-            return (id)(uintptr_t)(intptr_t)storage->s8;
-        case 'C':
-        case 'B':
-            return (id)(uintptr_t)storage->u8;
-        case 's':
-            return (id)(uintptr_t)(intptr_t)storage->s16;
-        case 'S':
-            return (id)(uintptr_t)storage->u16;
-        case 'i':
-            return (id)(uintptr_t)(intptr_t)storage->s32;
-        case 'I':
-            return (id)(uintptr_t)storage->u32;
-        case 'l':
-            return (id)(uintptr_t)(intptr_t)storage->sl;
-        case 'L':
-            return (id)(uintptr_t)storage->ul;
-        case 'q':
-            return (id)(uintptr_t)(intptr_t)storage->s64;
-        case 'Q':
-            return (id)(uintptr_t)storage->u64;
-        default:
-            return (id)storage->ptr;
+    static void store_call_arg(SFCWordStorage_t *storage, char code, SFCArgValue_t value)
+    {
+        switch (code) {
+            case 'f':
+                storage->f32 = value.float_value;
+                break;
+            case 'd':
+                storage->f64 = value.double_value;
+                break;
+            default:
+                store_word_arg(storage, code, value.word);
+                break;
+        }
     }
-}
+
+    static id nillable return_word_as_id(const SFCWordStorage_t *storage, char code)
+    {
+        switch (code) {
+            case 'v':
+                return (id)0;
+            case 'c':
+                return (id)(uintptr_t)(intptr_t)storage->s8;
+            case 'C':
+            case 'B':
+                return (id)(uintptr_t)storage->u8;
+            case 's':
+                return (id)(uintptr_t)(intptr_t)storage->s16;
+            case 'S':
+                return (id)(uintptr_t)storage->u16;
+            case 'i':
+                return (id)(uintptr_t)(intptr_t)storage->s32;
+            case 'I':
+                return (id)(uintptr_t)storage->u32;
+            case 'l':
+                return (id)(uintptr_t)(intptr_t)storage->sl;
+            case 'L':
+                return (id)(uintptr_t)storage->ul;
+            case 'q':
+                return (id)(uintptr_t)(intptr_t)storage->s64;
+            case 'Q':
+                return (id)(uintptr_t)storage->u64;
+            default:
+                return (id)storage->ptr;
+        }
+    }
 #endif
 
-static int direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
+static bool direct_word_call_supported(const SFCCallArgInfo_t *ret_info,
                                       const SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS], size_t argc)
 {
 #if defined(__EMSCRIPTEN__)
-    // Wasm traps on function pointer ABI mismatches that native targets often tolerate.
-    // Keep wasm on the libffi path instead of using the uintptr_t/id direct-call shortcut.
-    (void)ret_info;
-    (void)arg_infos;
-    (void)argc;
-    return 0;
+        // Wasm traps on function pointer ABI mismatches that native targets often tolerate.
+        // Keep wasm on the libffi path instead of using the uintptr_t/id direct-call shortcut.
+        (void)ret_info;
+        (void)arg_infos;
+        (void)argc;
+        return 0;
 #else
-    if (ret_info == nullptr or argc > SF_C_FALLBACK_MAX_ARGS) {
-        return 0;
-    }
-    if (ret_info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
-        return 0;
-    }
-    for (size_t i = 0; i < argc; ++i) {
-        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+        if (ret_info == nullptr or argc > SF_C_FALLBACK_MAX_ARGS) {
             return 0;
         }
-    }
-    return 1;
+        if (is_float_code(ret_info->code)) {
+            return 0;
+        }
+        if (ret_info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+            return 0;
+        }
+        for (size_t i = 0; i < argc; ++i) {
+            if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES or is_float_code(arg_infos[i].code)) {
+                return 0;
+            }
+        }
+        return 1;
 #endif
 }
 
-static id call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_FALLBACK_MAX_ARGS], size_t argc)
+static id nillable call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_FALLBACK_MAX_ARGS], size_t argc)
 {
     switch (argc) {
         case 0:
@@ -617,10 +660,41 @@ static id call_word_imp(IMP imp, id receiver, SEL op, const uintptr_t args[SF_C_
     }
 }
 
-static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MAX_ARGS], int *unsupported_sig)
+static bool arg_codes_contain_float(const char arg_codes[SF_C_FALLBACK_MAX_ARGS], size_t argc)
+{
+    for (size_t i = 0; i < argc; ++i) {
+        if (is_float_code(arg_codes[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static id nillable call_direct_imp(IMP imp, id receiver, SEL op, const SFCArgValue_t args[SF_C_FALLBACK_MAX_ARGS],
+                                   const char arg_codes[SF_C_FALLBACK_MAX_ARGS], size_t argc)
+{
+    uintptr_t word_args[SF_C_FALLBACK_MAX_ARGS] = {args[0].word, args[1].word, args[2].word, args[3].word};
+    if (not arg_codes_contain_float(arg_codes, argc)) {
+        return call_word_imp(imp, receiver, op, word_args, argc);
+    }
+
+    if (argc == 1U) {
+        switch (arg_codes[0]) {
+            case 'f':
+                return ((id (*)(id, SEL, float))imp)(receiver, op, args[0].float_value);
+            case 'd':
+                return ((id (*)(id, SEL, double))imp)(receiver, op, args[0].double_value);
+            default:
+                break;
+        }
+    }
+    return (id)0;
+}
+
+static size_t collect_explicit_arg_codes(SEL nillable op, char out_codes[SF_C_FALLBACK_MAX_ARGS], bool *nillable unsupported_sig)
 {
     if (unsupported_sig != nullptr) {
-        *unsupported_sig = 0;
+        *unsupported_sig = false;
     }
 
     if (op == nullptr or op->types == nullptr or op->types[0] == '\0') {
@@ -644,15 +718,15 @@ static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MA
         }
 
         if (arg_index >= 2) {
-            if (code == 'f' or code == 'd' or code == 'D') {
+            if (code == 'D') {
                 if (unsupported_sig != nullptr) {
-                    *unsupported_sig = 1;
+                    *unsupported_sig = true;
                 }
                 return explicit_count;
             }
             if (explicit_count >= SF_C_FALLBACK_MAX_ARGS) {
                 if (unsupported_sig != nullptr) {
-                    *unsupported_sig = 1;
+                    *unsupported_sig = true;
                 }
                 return explicit_count;
             }
@@ -664,19 +738,19 @@ static size_t collect_explicit_arg_codes(SEL op, char out_codes[SF_C_FALLBACK_MA
     return explicit_count;
 }
 
-static inline size_t sig_cache_index(SEL op)
+static inline size_t sig_cache_index(SEL nillable op)
 {
     uintptr_t v = (uintptr_t)sf_selector_slot(op);
     uintptr_t mix = v ^ (v >> 5U);
     return (size_t)(mix & (SF_C_SIG_CACHE_SIZE - 1U));
 }
 
-static size_t collect_explicit_arg_codes_cached(SEL op,
+static size_t collect_explicit_arg_codes_cached(SEL nillable op,
                                                 char out_codes[SF_C_FALLBACK_MAX_ARGS],
-                                                int *unsupported_sig)
+                                                bool *nillable unsupported_sig)
 {
     if (unsupported_sig != nullptr) {
-        *unsupported_sig = 0;
+        *unsupported_sig = false;
     }
     if (op == nullptr) {
         return 0;
@@ -693,17 +767,17 @@ static size_t collect_explicit_arg_codes_cached(SEL op,
             memcpy(out_codes, entry->codes, argc);
         }
         if (unsupported_sig != nullptr) {
-            *unsupported_sig = (int)entry->unsupported;
+            *unsupported_sig = entry->unsupported;
         }
         return argc;
     }
 
-    int unsupported = 0;
+    bool unsupported = false;
     size_t argc = collect_explicit_arg_codes(op, out_codes, &unsupported);
 
     entry->slot = slot;
     entry->argc = (uint8_t)argc;
-    entry->unsupported = (uint8_t)(unsupported != 0);
+    entry->unsupported = unsupported;
     if (argc > 0) {
         memcpy(entry->codes, out_codes, argc);
     }
@@ -748,17 +822,33 @@ static uintptr_t read_word_arg(va_list *ap, char code)
     }
 }
 
+static SFCArgValue_t read_arg_value(va_list *ap, char code)
+{
+    SFCArgValue_t value = {.word = 0U};
+    switch (code) {
+        case 'f':
+            value.float_value = (float)va_arg(*ap, double);
+            return value;
+        case 'd':
+            value.double_value = va_arg(*ap, double);
+            return value;
+        default:
+            value.word = read_word_arg(ap, code);
+            return value;
+    }
+}
+
 static uintptr_t read_struct_bytes_arg(va_list *ap, size_t size)
 {
-#if defined(__x86_64__) && !defined(_WIN32)
-    auto sysv = (SFCSysVVaList_t *)(void *)ap;
-    void *ptr = sysv->overflow_arg_area;
-    size_t rounded = align_up_size(size, sizeof(uint64_t));
-    sysv->overflow_arg_area = (void *)((char *)sysv->overflow_arg_area + rounded);
-    return (uintptr_t)ptr;
+#if defined(__x86_64__) and not defined(_WIN32)
+        auto sysv = (SFCSysVVaList_t *)(void *)ap;
+        void *ptr = sysv->overflow_arg_area;
+        size_t rounded = align_up_size(size, sizeof(uint64_t));
+        sysv->overflow_arg_area = (void *)((char *)sysv->overflow_arg_area + rounded);
+        return (uintptr_t)ptr;
 #else
-    (void)size;
-    return (uintptr_t)va_arg(*ap, void *);
+        (void)size;
+        return (uintptr_t)va_arg(*ap, void *);
 #endif
 }
 
@@ -776,71 +866,89 @@ static uintptr_t read_call_arg(va_list *ap, const SFCCallArgInfo_t *info)
     return read_word_arg(ap, info->code);
 }
 
-#if SF_DISPATCH_C_USE_LIBFFI
-static int build_struct_ffi_type(const char *token, SFCStructFFIType_t *out_type)
+static SFCArgValue_t read_call_arg_value(va_list *ap, const SFCCallArgInfo_t *info)
 {
-    const char *p = token;
-    size_t count = 0U;
-
-    while (*p and is_type_qualifier(*p)) {
-        ++p;
-    }
-    if (*p != '{') {
-        return 0;
-    }
-    ++p;
-    while (*p and * p != '=' and * p != '}') {
-        ++p;
-    }
-    if (*p != '=') {
-        return 0;
-    }
-    ++p;
-
-    while (*p and * p != '}') {
-        ffi_type *field_type = ffi_type_for_code(primary_type_code(p));
-        if (field_type == nullptr) {
-            return 0;
-        }
-        if (count + 1U >= sizeof(out_type->elements) / sizeof(out_type->elements[0])) {
-            return 0;
-        }
-        if (primary_type_code(p) == '{' or primary_type_code(p) == '(' or primary_type_code(p) == '[') {
-            return 0;
-        }
-        out_type->elements[count++] = field_type;
-        p = skip_type_token(p);
-    }
-    if (*p != '}') {
-        return 0;
-    }
-
-    out_type->elements[count] = nullptr;
-    out_type->type.size = 0U;
-    out_type->type.alignment = 0U;
-    out_type->type.type = FFI_TYPE_STRUCT;
-    out_type->type.elements = out_type->elements;
-    return 1;
-}
-
-static ffi_type *ffi_type_for_call_info(const SFCCallArgInfo_t *info)
-{
+    SFCArgValue_t value = {.word = 0U};
     if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_WORD) {
-        return &ffi_type_uint64;
+        value.word = (uintptr_t)va_arg(*ap, unsigned long long);
+        return value;
+    }
+    if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+        value.word = read_struct_bytes_arg(ap, info->size);
+        return value;
     }
     if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_POINTER) {
-        return &ffi_type_pointer;
+        value.word = (uintptr_t)va_arg(*ap, void *);
+        return value;
     }
-    return ffi_type_for_code(info->code);
+    return read_arg_value(ap, info->code);
 }
+
+#if SF_DISPATCH_C_USE_LIBFFI
+    static bool build_struct_ffi_type(const char *token, SFCStructFFIType_t *out_type)
+    {
+        const char *p = token;
+        size_t count = 0U;
+
+        while (*p and is_type_qualifier(*p)) {
+            ++p;
+        }
+        if (*p != '{') {
+            return 0;
+        }
+        ++p;
+        while (*p and * p != '=' and * p != '}') {
+            ++p;
+        }
+        if (*p != '=') {
+            return 0;
+        }
+        ++p;
+
+        while (*p and * p != '}') {
+            ffi_type *field_type = ffi_type_for_code(primary_type_code(p));
+            if (field_type == nullptr) {
+                return 0;
+            }
+            if (count + 1U >= sizeof(out_type->elements) / sizeof(out_type->elements[0])) {
+                return 0;
+            }
+            if (primary_type_code(p) == '{' or primary_type_code(p) == '(' or primary_type_code(p) == '[') {
+                return 0;
+            }
+            out_type->elements[count++] = field_type;
+            p = skip_type_token(p);
+        }
+        if (*p != '}') {
+            return 0;
+        }
+
+        out_type->elements[count] = nullptr;
+        out_type->type.size = 0U;
+        out_type->type.alignment = 0U;
+        out_type->type.type = FFI_TYPE_STRUCT;
+        out_type->type.elements = out_type->elements;
+        return 1;
+    }
+
+    static ffi_type *nillable ffi_type_for_call_info(const SFCCallArgInfo_t *info)
+    {
+        if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_WORD) {
+            return &ffi_type_uint64;
+        }
+        if (info->kind == (uint8_t)SFC_CALL_ARG_KIND_AGGREGATE_POINTER) {
+            return &ffi_type_pointer;
+        }
+        return ffi_type_for_code(info->code);
+    }
 #endif
 
-int sf_runtime_test_dispatch_is_digit_char(char c)
+bool sf_runtime_test_dispatch_is_digit_char(char c)
 {
     return is_digit_char(c);
 }
 
-int sf_runtime_test_dispatch_is_type_qualifier(char c)
+bool sf_runtime_test_dispatch_is_type_qualifier(char c)
 {
     return is_type_qualifier(c);
 }
@@ -855,14 +963,14 @@ char sf_runtime_test_dispatch_primary_type_code(const char *p)
     return primary_type_code(p);
 }
 
-size_t sf_runtime_test_dispatch_collect_explicit_arg_codes(SEL op, char *out_codes,
-                                                           int *unsupported_sig)
+size_t sf_runtime_test_dispatch_collect_explicit_arg_codes(SEL nillable op, char *nonnil out_codes,
+                                                           bool *nillable unsupported_sig)
 {
     return collect_explicit_arg_codes(op, out_codes, unsupported_sig);
 }
 
-size_t sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(SEL op, char *out_codes,
-                                                                  int *unsupported_sig)
+size_t sf_runtime_test_dispatch_collect_explicit_arg_codes_cached(SEL nillable op, char *nonnil out_codes,
+                                                                  bool *nillable unsupported_sig)
 {
     return collect_explicit_arg_codes_cached(op, out_codes, unsupported_sig);
 }
@@ -877,247 +985,267 @@ uintptr_t sf_runtime_test_dispatch_read_word_arg(int code, ...)
     return value;
 }
 
-#if !defined(SF_RUNTIME_DISPATCH_PARSER_ONLY)
-void objc_msgSend_stret(void *out, id receiver, SEL op, ...)
-{
-    id dispatch_receiver = receiver;
-    SEL dispatch_op = op;
-    IMP imp = nullptr;
-    SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
-    int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
-#if SF_RUNTIME_FORWARDING
-    imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
-#else
-    imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
-#endif
-    if (out == nullptr or unsupported_sig) {
-        return;
-    }
+#if not defined(SF_RUNTIME_DISPATCH_PARSER_ONLY)
+    void objc_msgSend_stret(void *nonnil out, id nillable receiver, SEL nillable op, ...)
+    {
+        id dispatch_receiver = receiver;
+        SEL dispatch_op = op;
+        IMP imp = nullptr;
+        SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
+        bool unsupported_sig = false;
+        size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
+#    if SF_RUNTIME_FORWARDING
+            imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#    else
+            imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
+#    endif
+        if (out == nullptr or unsupported_sig) {
+            return;
+        }
 
-#if SF_DISPATCH_C_USE_LIBFFI
-    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
-    va_list ap;
-    va_start(ap, op);
-    for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_call_arg(&ap, &arg_infos[i]);
-    }
-    va_end(ap);
+#    if SF_DISPATCH_C_USE_LIBFFI
+            SFCArgValue_t args[SF_C_FALLBACK_MAX_ARGS] = {0};
+            va_list ap;
+            va_start(ap, op);
+            for (size_t i = 0; i < argc; ++i) {
+                args[i] = read_call_arg_value(&ap, &arg_infos[i]);
+            }
+            va_end(ap);
 
-    ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
-    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
-    SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
-    SFCStructFFIType_t ret_struct_type;
-    SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
-    const char *ret_token = dispatch_op != nullptr ? dispatch_op->types : nullptr;
+            ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
+            void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
+            SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
+            SFCStructFFIType_t ret_struct_type;
+            SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
+            const char *ret_token = dispatch_op != nullptr ? dispatch_op->types : nullptr;
 
-    if (ret_token == nullptr or not build_struct_ffi_type(ret_token, &ret_struct_type)) {
-        return;
-    }
-
-    memset(arg_storage, 0, sizeof(arg_storage));
-    memset(struct_arg_types, 0, sizeof(struct_arg_types));
-    for (size_t i = 0; i < argc; ++i) {
-        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
-            const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
-            const char *p = types;
-            int arg_index = 0;
-            if (p == nullptr) {
+            if (ret_token == nullptr or not build_struct_ffi_type(ret_token, &ret_struct_type)) {
                 return;
             }
-            p = skip_type_token(p);
-            while (is_digit_char(*p)) {
-                ++p;
-            }
-            while (*p != '\0') {
-                const char *token = p;
-                p = skip_type_token(p);
-                while (*p == '-' or is_digit_char(*p)) {
-                    ++p;
-                }
-                if (arg_index >= 2 and(size_t)(arg_index - 2) == i) {
-                    if (not build_struct_ffi_type(token, &struct_arg_types[i])) {
+
+            memset(arg_storage, 0, sizeof(arg_storage));
+            memset(struct_arg_types, 0, sizeof(struct_arg_types));
+            for (size_t i = 0; i < argc; ++i) {
+                if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+                    const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
+                    const char *p = types;
+                    int arg_index = 0;
+                    if (p == nullptr) {
                         return;
                     }
-                    arg_types[i + 2] = &struct_arg_types[i].type;
-                    arg_values[i + 2] = (void *)(uintptr_t)args[i];
-                    break;
+                    p = skip_type_token(p);
+                    while (is_digit_char(*p)) {
+                        ++p;
+                    }
+                    while (*p != '\0') {
+                        const char *token = p;
+                        p = skip_type_token(p);
+                        while (*p == '-' or is_digit_char(*p)) {
+                            ++p;
+                        }
+                        if (arg_index >= 2 and(size_t)(arg_index - 2) == i) {
+                            if (not build_struct_ffi_type(token, &struct_arg_types[i])) {
+                                return;
+                            }
+                            arg_types[i + 2] = &struct_arg_types[i].type;
+                            arg_values[i + 2] = (void *)(uintptr_t)args[i].word;
+                            break;
+                        }
+                        arg_index += 1;
+                    }
+                    if (arg_types[i + 2] == nullptr) {
+                        return;
+                    }
+                    continue;
                 }
-                arg_index += 1;
+
+                arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
+                if (arg_types[i + 2] == nullptr) {
+                    return;
+                }
+                store_call_arg(&arg_storage[i], arg_infos[i].code, args[i]);
+                arg_values[i + 2] = &arg_storage[i];
             }
-            if (arg_types[i + 2] == nullptr) {
+
+            ffi_cif cif;
+            if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)(argc + 2U), &ret_struct_type.type, arg_types) != FFI_OK) {
                 return;
             }
-            continue;
-        }
 
-        arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
-        if (arg_types[i + 2] == nullptr) {
+            ffi_call(&cif, FFI_FN(imp), out, arg_values);
             return;
-        }
-        store_word_arg(&arg_storage[i], arg_infos[i].code, args[i]);
-        arg_values[i + 2] = &arg_storage[i];
+#    else
+            uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
+            va_list ap;
+            va_start(ap, op);
+            for (size_t i = 0; i < argc; ++i) {
+                args[i] = read_call_arg(&ap, &arg_infos[i]);
+            }
+            va_end(ap);
+
+            switch (argc) {
+                case 0:
+                    ((void (*)(void *, id, SEL))imp)(out, dispatch_receiver, dispatch_op);
+                    return;
+                case 1:
+                    ((void (*)(void *, id, SEL, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0]);
+                    return;
+                case 2:
+                    ((void (*)(void *, id, SEL, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0],
+                                                                           args[1]);
+                    return;
+                case 3:
+                    ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op,
+                                                                                      args[0], args[1], args[2]);
+                    return;
+                case 4:
+                    ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver,
+                                                                                                 dispatch_op, args[0],
+                                                                                                 args[1], args[2], args[3]);
+                    return;
+                default:
+                    return;
+            }
+#    endif
     }
 
-    ffi_cif cif;
-    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)(argc + 2U), &ret_struct_type.type, arg_types) != FFI_OK) {
-        return;
-    }
-
-    ffi_call(&cif, FFI_FN(imp), out, arg_values);
-    return;
-#else
-    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
-    va_list ap;
-    va_start(ap, op);
-    for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_call_arg(&ap, &arg_infos[i]);
-    }
-    va_end(ap);
-
-    switch (argc) {
-        case 0:
-            ((void (*)(void *, id, SEL))imp)(out, dispatch_receiver, dispatch_op);
-            return;
-        case 1:
-            ((void (*)(void *, id, SEL, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0]);
-            return;
-        case 2:
-            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op, args[0],
-                                                                   args[1]);
-            return;
-        case 3:
-            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver, dispatch_op,
-                                                                              args[0], args[1], args[2]);
-            return;
-        case 4:
-            ((void (*)(void *, id, SEL, uintptr_t, uintptr_t, uintptr_t, uintptr_t))imp)(out, dispatch_receiver,
-                                                                                         dispatch_op, args[0],
-                                                                                         args[1], args[2], args[3]);
-            return;
-        default:
-            return;
-    }
-#endif
-}
-
-id objc_msgSend(id receiver, SEL op, ...)
-{
-    id dispatch_receiver = receiver;
-    SEL dispatch_op = op;
-    IMP imp = nullptr;
-#if SF_RUNTIME_FORWARDING
-    imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
-#else
-    imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
-#endif
-#if SF_DISPATCH_C_USE_LIBFFI
-    SFCCallArgInfo_t ret_info = {0};
-    SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
-    int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
-    if (unsupported_sig or not collect_return_info(dispatch_op, &ret_info)) {
-        return (id)0;
-    }
-    ffi_type *ret_type = ffi_type_for_call_info(&ret_info);
-    if (ret_type == nullptr) {
-        return (id)0;
-    }
-
-    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
-    va_list ap;
-    va_start(ap, op);
-    for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_call_arg(&ap, &arg_infos[i]);
-    }
-    va_end(ap);
-
-    if (direct_word_call_supported(&ret_info, arg_infos, argc)) {
-        return call_word_imp(imp, dispatch_receiver, dispatch_op, args, argc);
-    }
-
-    ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
-    void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
-    SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
-    SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
-    memset(arg_storage, 0, sizeof(arg_storage));
-    memset(struct_arg_types, 0, sizeof(struct_arg_types));
-    for (size_t i = 0; i < argc; ++i) {
-        if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
-            const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
-            const char *p = types;
-            int arg_index = 0;
-            if (p == nullptr) {
+    id nillable objc_msgSend(id nillable receiver, SEL nillable op, ...)
+    {
+#    if defined(_WIN64) and defined(__x86_64__)
+            double windows_fp_args[SF_C_FALLBACK_MAX_ARGS];
+            __asm__ volatile("movsd %%xmm2, %0" : "=m"(windows_fp_args[0]));
+            __asm__ volatile("movsd %%xmm3, %0" : "=m"(windows_fp_args[1]));
+            __asm__ volatile("movsd %%xmm4, %0" : "=m"(windows_fp_args[2]));
+            __asm__ volatile("movsd %%xmm5, %0" : "=m"(windows_fp_args[3]));
+#    endif
+        id dispatch_receiver = receiver;
+        SEL dispatch_op = op;
+        IMP imp = nullptr;
+#    if SF_RUNTIME_FORWARDING
+            imp = sf_resolve_message_dispatch(&dispatch_receiver, &dispatch_op);
+#    else
+            imp = sf_lookup_imp(dispatch_receiver, dispatch_op);
+#    endif
+#    if SF_DISPATCH_C_USE_LIBFFI
+            SFCCallArgInfo_t ret_info = {0};
+            SFCCallArgInfo_t arg_infos[SF_C_FALLBACK_MAX_ARGS] = {0};
+            bool unsupported_sig = false;
+            size_t argc = collect_explicit_arg_infos(dispatch_op, arg_infos, &unsupported_sig);
+            if (unsupported_sig or not collect_return_info(dispatch_op, &ret_info)) {
                 return (id)0;
             }
-            p = skip_type_token(p);
-            while (is_digit_char(*p)) {
-                ++p;
+            ffi_type *nillable ret_type = ffi_type_for_call_info(&ret_info);
+            if (ret_type == nullptr) {
+                return (id)0;
             }
-            while (*p != '\0') {
-                const char *token = p;
-                p = skip_type_token(p);
-                while (*p == '-' or is_digit_char(*p)) {
-                    ++p;
-                }
-                if (arg_index >= 2 and(size_t)(arg_index - 2) == i) {
-                    if (not build_struct_ffi_type(token, &struct_arg_types[i])) {
+
+            SFCArgValue_t args[SF_C_FALLBACK_MAX_ARGS] = {0};
+            va_list ap;
+            va_start(ap, op);
+            for (size_t i = 0; i < argc; ++i) {
+                args[i] = read_call_arg_value(&ap, &arg_infos[i]);
+            }
+            va_end(ap);
+
+            if (direct_word_call_supported(&ret_info, arg_infos, argc)) {
+                uintptr_t word_args[SF_C_FALLBACK_MAX_ARGS] = {args[0].word, args[1].word, args[2].word, args[3].word};
+                return call_word_imp(imp, dispatch_receiver, dispatch_op, word_args, argc);
+            }
+
+            ffi_type *arg_types[2 + SF_C_FALLBACK_MAX_ARGS] = {&ffi_type_pointer, &ffi_type_pointer, nullptr, nullptr, nullptr, nullptr};
+            void *arg_values[2 + SF_C_FALLBACK_MAX_ARGS] = {&dispatch_receiver, &dispatch_op, nullptr, nullptr, nullptr, nullptr};
+            SFCWordStorage_t arg_storage[SF_C_FALLBACK_MAX_ARGS];
+            SFCStructFFIType_t struct_arg_types[SF_C_FALLBACK_MAX_ARGS];
+            memset(arg_storage, 0, sizeof(arg_storage));
+            memset(struct_arg_types, 0, sizeof(struct_arg_types));
+            for (size_t i = 0; i < argc; ++i) {
+                if (arg_infos[i].kind == (uint8_t)SFC_CALL_ARG_KIND_STRUCT_BYTES) {
+                    const char *types = dispatch_op != nullptr ? dispatch_op->types : nullptr;
+                    const char *p = types;
+                    int arg_index = 0;
+                    if (p == nullptr) {
                         return (id)0;
                     }
-                    arg_types[i + 2] = &struct_arg_types[i].type;
-                    arg_values[i + 2] = (void *)(uintptr_t)args[i];
-                    break;
+                    p = skip_type_token(p);
+                    while (is_digit_char(*p)) {
+                        ++p;
+                    }
+                    while (*p != '\0') {
+                        const char *token = p;
+                        p = skip_type_token(p);
+                        while (*p == '-' or is_digit_char(*p)) {
+                            ++p;
+                        }
+                        if (arg_index >= 2 and(size_t)(arg_index - 2) == i) {
+                            if (not build_struct_ffi_type(token, &struct_arg_types[i])) {
+                                return (id)0;
+                            }
+                            arg_types[i + 2] = &struct_arg_types[i].type;
+                            arg_values[i + 2] = (void *)(uintptr_t)args[i].word;
+                            break;
+                        }
+                        arg_index += 1;
+                    }
+                    if (arg_types[i + 2] == nullptr) {
+                        return (id)0;
+                    }
+                    continue;
                 }
-                arg_index += 1;
+                arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
+                if (arg_types[i + 2] == nullptr) {
+                    return (id)0;
+                }
+                store_call_arg(&arg_storage[i], arg_infos[i].code, args[i]);
+                arg_values[i + 2] = &arg_storage[i];
             }
-            if (arg_types[i + 2] == nullptr) {
+
+            ffi_cif cif;
+            if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)(argc + 2U), ret_type, arg_types) != FFI_OK) {
                 return (id)0;
             }
-            continue;
-        }
-        arg_types[i + 2] = ffi_type_for_call_info(&arg_infos[i]);
-        if (arg_types[i + 2] == nullptr) {
-            return (id)0;
-        }
-        store_word_arg(&arg_storage[i], arg_infos[i].code, args[i]);
-        arg_values[i + 2] = &arg_storage[i];
-    }
 
-    ffi_cif cif;
-    if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)(argc + 2U), ret_type, arg_types) != FFI_OK) {
-        return (id)0;
-    }
+            SFCWordStorage_t result;
+            memset(&result, 0, sizeof(result));
+            ffi_call(&cif, FFI_FN(imp), &result, arg_values);
+            return return_word_as_id(&result, ret_info.code);
+#    else
+            char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
+            bool unsupported_sig = false;
+            size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
+            if (unsupported_sig) {
+                return (id)0;
+            }
 
-    SFCWordStorage_t result;
-    memset(&result, 0, sizeof(result));
-    ffi_call(&cif, FFI_FN(imp), &result, arg_values);
-    return return_word_as_id(&result, ret_info.code);
-#else
-    char arg_codes[SF_C_FALLBACK_MAX_ARGS] = {0};
-    int unsupported_sig = 0;
-    size_t argc = collect_explicit_arg_codes_cached(dispatch_op, arg_codes, &unsupported_sig);
-    if (unsupported_sig) {
-        return (id)0;
-    }
+            SFCArgValue_t args[SF_C_FALLBACK_MAX_ARGS] = {0};
+            va_list ap;
+            va_start(ap, op);
+            for (size_t i = 0; i < argc; ++i) {
+#        if defined(_WIN64) and defined(__x86_64__)
+                    if (is_float_code(arg_codes[i])) {
+                        (void)va_arg(ap, void *);
+                        if (arg_codes[i] == 'f') {
+                            args[i].float_value = (float)windows_fp_args[i];
+                        } else {
+                            args[i].double_value = windows_fp_args[i];
+                        }
+                        continue;
+                    }
+#        endif
+                args[i] = read_arg_value(&ap, arg_codes[i]);
+            }
+            va_end(ap);
 
-    uintptr_t args[SF_C_FALLBACK_MAX_ARGS] = {0, 0, 0, 0};
-    va_list ap;
-    va_start(ap, op);
-    for (size_t i = 0; i < argc; ++i) {
-        args[i] = read_word_arg(&ap, arg_codes[i]);
-    }
-    va_end(ap);
-
-    switch (argc) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-            return call_word_imp(imp, dispatch_receiver, dispatch_op, args, argc);
-        default:
-            return (id)0;
+            switch (argc) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                    return call_direct_imp(imp, dispatch_receiver, dispatch_op, args, arg_codes, argc);
+                default:
+                    return (id)0;
+            }
+#    endif
     }
 #endif
-}
-#endif
+#pragma clang assume_nonnull end

@@ -6,10 +6,12 @@
 #include <stdint.h>
 
 #if SF_RUNTIME_EXCEPTIONS
-@interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)exception;
-@end
+    @interface InvalidArgumentException (SmallFWInternal)
+    + (instancetype)exception;
+    @end
 #endif
+
+#pragma clang assume_nonnull begin
 
 static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
 {
@@ -25,13 +27,13 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
 
 @synthesize count = _count;
 
-+ (instancetype)arrayWithObjects:(const id nonnil *nillable)objects count:(size_t)count
++ (SF_ERRORABLE(instancetype))arrayWithObjects:(const id nonnil *nillable)objects count:(size_t)count
 {
     auto array = [[self allocWithAllocator:nullptr] initWithObjects:objects count:count];
     return [array autorelease];
 }
 
-- (instancetype)initWithObjects:(const id nonnil *nillable)objects count:(size_t)count
+- (SF_ERRORABLE(instancetype))initWithObjects:(const id nonnil *nillable)objects count:(size_t)count
 {
     if (count > 0U and objects == nullptr) {
         [self release];
@@ -68,24 +70,24 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
     return self;
 }
 
-- (id)objectAtIndex:(size_t)idx
+- (SF_ERRORABLE(id))objectAtIndex:(size_t)idx
 {
     if (idx >= _count or _items == nullptr) {
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException exception];
+            @throw [InvalidArgumentException exception];
 #else
-        return nullptr;
+            return nullptr;
 #endif
     }
     return (id)_items[idx];
 }
 
-- (id)objectAtIndexedSubscript:(size_t)idx
+- (SF_ERRORABLE(id))objectAtIndexedSubscript:(size_t)idx
 {
     return [self objectAtIndex:idx];
 }
 
-- (bool)isEqual:(Object *)other
+- (bool)isEqual:(Object *nillable)other
 {
     if ((id)self == (id)other) {
         return true;
@@ -139,3 +141,4 @@ static uint64_t sf_array_hash_word(uint64_t hash, uintptr_t word)
 }
 
 @end
+#pragma clang assume_nonnull end

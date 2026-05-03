@@ -3,58 +3,56 @@
 
 #include "runtime-test-support.h"
 
-#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-#endif
 
 static const char *g_hidden_case_prefix = "__child_";
 
-#if defined(SF_TEST_SUITE_LABEL) && defined(SF_TEST_SUITE_PROVIDER)
-#define SF_TEST_STRINGIFY_IMPL(x) #x
-#define SF_TEST_STRINGIFY(x) SF_TEST_STRINGIFY_IMPL(x)
+#if defined(SF_TEST_SUITE_LABEL) and defined(SF_TEST_SUITE_PROVIDER)
+#    define SF_TEST_STRINGIFY_IMPL(x) #x
+#    define SF_TEST_STRINGIFY(x) SF_TEST_STRINGIFY_IMPL(x)
 
-static const SFTestSuite g_suites[] = {
-    {SF_TEST_STRINGIFY(SF_TEST_SUITE_LABEL), SF_TEST_SUITE_PROVIDER},
-};
+    static const SFTestSuite g_suites[] = {
+        {SF_TEST_STRINGIFY(SF_TEST_SUITE_LABEL), SF_TEST_SUITE_PROVIDER},
+    };
 #else
-static const SFTestSuite g_suites[] = {
-#ifdef SF_TEST_ENABLE_SUITE_ARC
-    {"arc", sf_runtime_arc_cases},
-#endif
-#ifdef SF_TEST_ENABLE_SUITE_PARENT
-    {"parent", sf_runtime_parent_cases},
-#endif
-#ifdef SF_TEST_ENABLE_SUITE_DISPATCH
-    {"dispatch", sf_runtime_dispatch_cases},
-#endif
-#ifdef SF_TEST_ENABLE_SUITE_LOADER
-    {"loader", sf_runtime_loader_cases},
-#endif
-#ifdef SF_TEST_ENABLE_SUITE_TAGGED
-    {"tagged", sf_runtime_tagged_cases},
-#endif
-#ifdef SF_TEST_ENABLE_SUITE_EXCEPTIONS
-    {"exceptions", sf_runtime_exception_cases},
-#endif
-};
+    static const SFTestSuite g_suites[] = {
+#    ifdef SF_TEST_ENABLE_SUITE_ARC
+            {"arc", sf_runtime_arc_cases},
+#    endif
+#    ifdef SF_TEST_ENABLE_SUITE_PARENT
+            {"parent", sf_runtime_parent_cases},
+#    endif
+#    ifdef SF_TEST_ENABLE_SUITE_DISPATCH
+            {"dispatch", sf_runtime_dispatch_cases},
+#    endif
+#    ifdef SF_TEST_ENABLE_SUITE_LOADER
+            {"loader", sf_runtime_loader_cases},
+#    endif
+#    ifdef SF_TEST_ENABLE_SUITE_TAGGED
+            {"tagged", sf_runtime_tagged_cases},
+#    endif
+#    ifdef SF_TEST_ENABLE_SUITE_EXCEPTIONS
+            {"exceptions", sf_runtime_exception_cases},
+#    endif
+    };
 #endif
 
-static int is_hidden_case_name(const char *case_name)
+static bool is_hidden_case_name(const char *case_name)
 {
     size_t prefix_len = strlen(g_hidden_case_prefix);
     return strncmp(case_name, g_hidden_case_prefix, prefix_len) == 0;
 }
 
-static int case_name_matches(const char *requested_name, const char *suite_name, const char *case_name)
+static bool case_name_matches(const char *requested_name, const char *suite_name, const char *case_name)
 {
     size_t suite_name_len = strlen(suite_name);
 
     if (requested_name == nullptr) {
-        return 0;
+        return false;
     }
     if (strcmp(requested_name, case_name) == 0) {
-        return 1;
+        return true;
     }
     return strncmp(requested_name, suite_name, suite_name_len) == 0 and
            requested_name[suite_name_len] == '/' and
@@ -75,7 +73,7 @@ static const SFTestSuite *find_suite_named(const char *suite_name)
     return nullptr;
 }
 
-static void print_case_result(const char *suite_name, const char *case_name, int ok)
+static void print_case_result(const char *suite_name, const char *case_name, bool ok)
 {
     printf("GROUP %s\n", suite_name);
     printf("CASE %s/%s %s\n", suite_name, case_name, ok ? "PASS" : "FAIL");
@@ -89,7 +87,7 @@ static int run_case_from_suite(const SFTestSuite *suite, const char *requested_n
 
     for (size_t case_index = 0; case_index < count; ++case_index) {
         if (case_name_matches(requested_name, suite->name, cases[case_index].name)) {
-            int ok = cases[case_index].fn();
+            bool ok = cases[case_index].fn();
             print_case_result(suite->name, cases[case_index].name, ok);
             return ok ? 0 : 1;
         }
@@ -114,14 +112,14 @@ static int run_suite_cases(const SFTestSuite *suite)
 {
     size_t count = 0;
     const SFTestCase *cases = suite->fn(&count);
-    int failed = 0;
+    bool failed = false;
     size_t visible_count = 0;
 
     printf("GROUP %s START\n", suite->name);
     fflush(stdout);
 
     for (size_t case_index = 0; case_index < count; ++case_index) {
-        int ok = 0;
+        bool ok = false;
         if (is_hidden_case_name(cases[case_index].name)) {
             continue;
         }
@@ -131,7 +129,7 @@ static int run_suite_cases(const SFTestSuite *suite)
         printf("CASE %s/%s %s\n", suite->name, cases[case_index].name, ok ? "PASS" : "FAIL");
         fflush(stdout);
         if (not ok) {
-            failed = 1;
+            failed = true;
         }
     }
 
@@ -156,11 +154,11 @@ static int run_suite_named(const char *suite_name)
 
 static int run_all_cases(void)
 {
-    int failed = 0;
+    bool failed = false;
 
     for (size_t suite_index = 0; suite_index < sizeof(g_suites) / sizeof(g_suites[0]); ++suite_index) {
         if (run_suite_cases(&g_suites[suite_index]) != 0) {
-            failed = 1;
+            failed = true;
         }
     }
     return failed ? 1 : 0;
@@ -195,8 +193,8 @@ int main(int argc, char **argv)
 {
     const char *case_name = nullptr;
     const char *suite_name = nullptr;
-    int list_only = 0;
-    int run_all = 0;
+    bool list_only = false;
+    bool run_all = false;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--case") == 0 and (i + 1) < argc) {
@@ -206,9 +204,9 @@ int main(int argc, char **argv)
             suite_name = argv[i + 1];
             ++i;
         } else if (strcmp(argv[i], "--all") == 0) {
-            run_all = 1;
+            run_all = true;
         } else if (strcmp(argv[i], "--list") == 0) {
-            list_only = 1;
+            list_only = true;
         }
     }
 
@@ -229,6 +227,4 @@ int main(int argc, char **argv)
     return 2;
 }
 
-#ifdef __clang__
 #pragma clang diagnostic pop
-#endif

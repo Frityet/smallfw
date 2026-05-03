@@ -147,7 +147,7 @@ static const char *class_name_or_nil(Class cls)
     return cls != nullptr ? class_getName(cls) : "(nil)";
 }
 
-static int expect_generic_class(const char *label, Object *object, Class expected)
+static bool expect_generic_class(const char *label, Object *object, Class expected)
 {
     Class actual = nullptr;
 
@@ -168,7 +168,7 @@ static int expect_generic_class(const char *label, Object *object, Class expecte
     return 1;
 }
 
-static int test_single_argument_stdlib_generics(void)
+static bool test_single_argument_stdlib_generics(void)
 {
     Array<String *> *array =
         [[Array<String *> allocWithAllocator: nullptr] initWithObjects: (id[]){@"value"} count: 1U];
@@ -179,19 +179,19 @@ static int test_single_argument_stdlib_generics(void)
         return 0;
     }
 #if SF_RUNTIME_EXCEPTIONS
-    [list addObject: @1];
+        [list addObject: @1];
 #else
-    if (![list addObject: @1]) {
-        fprintf(stderr, "list add failed\n");
-        return 0;
-    }
+        if (![list addObject: @1]) {
+            fprintf(stderr, "list add failed\n");
+            return 0;
+        }
 #endif
 
-    return expect_generic_class("array", (Object *)array, String.class) &&
+    return expect_generic_class("array", (Object *)array, String.class) and
            expect_generic_class("list", (Object *)list, Number.class);
 }
 
-static int test_unsupported_stdlib_generics_are_nil(void)
+static bool test_unsupported_stdlib_generics_are_nil(void)
 {
     Map<String *, Number *> *map =
         [[Map<String *, Number *> allocWithAllocator: nullptr] initWithObjects: (id[]){@1}
@@ -201,17 +201,17 @@ static int test_unsupported_stdlib_generics_are_nil(void)
     return expect_generic_class("map", (Object *)map, nullptr);
 }
 
-static int test_local_generic_interfaces(void)
+static bool test_local_generic_interfaces(void)
 {
     auto marked = [[LocalBox<String *> allocWithAllocator: nullptr] init];
     auto plain = [[PlainBox<String *> allocWithAllocator: nullptr] init];
 
-    return expect_generic_class("marked local box", (Object *)marked, String.class) &&
-           expect_generic_class("plain local box", (Object *)plain, nullptr) &&
+    return expect_generic_class("marked local box", (Object *)marked, String.class) and
+           expect_generic_class("plain local box", (Object *)plain, nullptr) and
            (marked.observedClass == String.class);
 }
 
-static int test_replacement_initializer_generic_metadata(void)
+static bool test_replacement_initializer_generic_metadata(void)
 {
     auto replacement = [[ReplacementBox<String *> allocWithAllocator: nullptr] init];
 
@@ -219,7 +219,7 @@ static int test_replacement_initializer_generic_metadata(void)
         fprintf(stderr, "replacement box construction failed\n");
         return 0;
     }
-    if (!expect_generic_class("replacement box", (Object *)replacement, String.class)) {
+    if (not expect_generic_class("replacement box", (Object *)replacement, String.class)) {
         return 0;
     }
     if (replacement.observedClass != String.class) {
@@ -250,7 +250,7 @@ static int test_replacement_initializer_generic_metadata(void)
     return 1;
 }
 
-static int test_alloc_in_place_generic_class(void)
+static bool test_alloc_in_place_generic_class(void)
 {
     size_t storage_size = sizeof(SFObjHeader_t) + class_getInstanceSize(LocalBox.class);
     void *storage = calloc(1U, storage_size);
@@ -268,33 +268,33 @@ static int test_alloc_in_place_generic_class(void)
     return ok;
 }
 
-static int test_alloc_with_parent_embedded_value(void)
+static bool test_alloc_with_parent_embedded_value(void)
 {
     auto holder = [[EmbeddedHolder allocWithAllocator: nullptr] init];
     auto child = [[EmbeddedBox<String *> allocWithParent: holder] init];
 
-    return expect_generic_class("embedded child", (Object *)child, String.class) &&
+    return expect_generic_class("embedded child", (Object *)child, String.class) and
            (child.observedClass == String.class);
 }
 
 int main(void)
 {
-    if (!test_single_argument_stdlib_generics()) {
+    if (not test_single_argument_stdlib_generics()) {
         return 1;
     }
-    if (!test_unsupported_stdlib_generics_are_nil()) {
+    if (not test_unsupported_stdlib_generics_are_nil()) {
         return 1;
     }
-    if (!test_local_generic_interfaces()) {
+    if (not test_local_generic_interfaces()) {
         return 1;
     }
-    if (!test_replacement_initializer_generic_metadata()) {
+    if (not test_replacement_initializer_generic_metadata()) {
         return 1;
     }
-    if (!test_alloc_in_place_generic_class()) {
+    if (not test_alloc_in_place_generic_class()) {
         return 1;
     }
-    if (!test_alloc_with_parent_embedded_value()) {
+    if (not test_alloc_with_parent_embedded_value()) {
         return 1;
     }
     return 0;

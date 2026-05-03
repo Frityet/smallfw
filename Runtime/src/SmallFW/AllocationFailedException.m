@@ -5,6 +5,8 @@
 #include "abi.h"
 #include "internal.h"
 
+#pragma clang assume_nonnull begin
+
 typedef struct SFStaticAllocationFailedException {
     SFObjHeader_t hdr;
     Class isa;
@@ -37,9 +39,10 @@ typedef struct SFStaticAllocationFailedException {
     return sf_exception_backtrace_count(self);
 }
 
-- (const void *)exceptionBacktraceFrameAtIndex:(size_t)index
+- (const void *nillable)exceptionBacktraceFrameAtIndex:(size_t)index
 {
     return sf_exception_backtrace_frame(self, index);
 }
 
 @end
+#pragma clang assume_nonnull end

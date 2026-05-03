@@ -17,7 +17,7 @@ int main(void)
     Object *root = [[Object allocWithAllocator:nullptr] init];
     Object *child = [[Object allocWithParent:root] init];
 
-    if (root == nil || child == nil) {
+    if (root == nil or child == nil) {
         fprintf(stderr, "failed to boot wasm runtime smoke example\n");
         return 1;
     }

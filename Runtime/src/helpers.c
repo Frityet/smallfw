@@ -1,33 +1,29 @@
 #include "internal.h"
 
-#if defined(__clang__) || defined(__GNUC__)
 #define SF_ARC_RUNTIME_ENTRY __attribute__((used))
-#else
-#define SF_ARC_RUNTIME_ENTRY
-#endif
 
-#if defined(__clang__)
 #define SF_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
-#else
-#define SF_NO_SANITIZE_FUNCTION
-#endif
 
-static SF_NO_SANITIZE_FUNCTION id sf_call_alloc_imp(IMP imp, id cls, SEL sel, SFAllocator_t *allocator)
+#pragma clang assume_nonnull begin
+
+static SF_NO_SANITIZE_FUNCTION id nillable sf_call_alloc_imp(IMP nillable imp, id nillable cls, SEL nonnil sel, SFAllocator_t *nonnil allocator)
 {
-    return ((id (*)(id, SEL, SFAllocator_t *))imp)(cls, sel, allocator);
+    sf_nonnil_check(imp != nullptr);
+    return ((id nillable (*)(id nillable, SEL nonnil, SFAllocator_t *nonnil))imp)(cls, sel, allocator);
 }
 
-static SF_NO_SANITIZE_FUNCTION id sf_call_init_imp(IMP imp, id obj, SEL sel)
+static SF_NO_SANITIZE_FUNCTION id nillable sf_call_init_imp(IMP nillable imp, id nillable obj, SEL nonnil sel)
 {
-    return ((id (*)(id, SEL))imp)(obj, sel);
+    sf_nonnil_check(imp != nullptr);
+    return ((id nillable (*)(id nillable, SEL nonnil))imp)(obj, sel);
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_autorelease(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_autorelease(id nillable obj)
 {
     return sf_autorelease(obj);
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_alloc(Class cls)
+SF_ARC_RUNTIME_ENTRY id nillable objc_alloc(Class nillable cls)
 {
     auto meta_cls = sf_object_class((id)cls);
     auto alloc_sel = sf_cached_selector_alloc();
@@ -38,10 +34,10 @@ SF_ARC_RUNTIME_ENTRY id objc_alloc(Class cls)
     if (imp == nullptr or alloc_sel == nullptr) {
         return (id)0;
     }
-    return sf_call_alloc_imp(imp, (id)cls, alloc_sel, sf_default_allocator());
+    return sf_call_alloc_imp(imp, (id)cls, (SEL nonnil)alloc_sel, sf_default_allocator());
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_alloc_init(Class cls)
+SF_ARC_RUNTIME_ENTRY id nillable objc_alloc_init(Class nillable cls)
 {
     auto init_sel = sf_cached_selector_init();
     auto obj = objc_alloc(cls);
@@ -56,5 +52,6 @@ SF_ARC_RUNTIME_ENTRY id objc_alloc_init(Class cls)
     if (imp == nullptr or init_sel == nullptr) {
         return (id)0;
     }
-    return sf_call_init_imp(imp, obj, init_sel);
+    return sf_call_init_imp(imp, obj, (SEL nonnil)init_sel);
 }
+#pragma clang assume_nonnull end

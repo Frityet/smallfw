@@ -1,15 +1,24 @@
 #include <limits.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #if defined(_WIN32)
-#include <windows.h>
+#    include <windows.h>
+#    if defined(interface)
+#        undef interface
+#    endif
 #else
-#include <dlfcn.h>
+#    include <dlfcn.h>
 #endif
 
 #include "runtime-test-support.h"
+
+#if defined(_WIN32) and not defined(__MINGW32__)
+#    define SF_TEST_HAS_PTHREAD 0
+#else
+#    include <pthread.h>
+#    define SF_TEST_HAS_PTHREAD 1
+#endif
 
 typedef struct SFTestAliasEntry {
     const char *alias_name;
@@ -88,45 +97,45 @@ static void *class_lookup_thread_main(void *arg)
 }
 
 #if SF_RUNTIME_REFLECTION
-static void ensure_extra_registered_classes(void)
-{
-    static int initialized = 0;
-    static SFTestManualClass bundles[12];
-    static const char *names[12] = {
-        "ExtraCoverageClass0",
-        "ExtraCoverageClass1",
-        "ExtraCoverageClass2",
-        "ExtraCoverageClass3",
-        "ExtraCoverageClass4",
-        "ExtraCoverageClass5",
-        "ExtraCoverageClass6",
-        "ExtraCoverageClass7",
-        "ExtraCoverageClass8",
-        "ExtraCoverageClass9",
-        "ExtraCoverageClass10",
-        "ExtraCoverageClass11",
-    };
+    static void ensure_extra_registered_classes(void)
+    {
+        static int initialized = 0;
+        static SFTestManualClass bundles[12];
+        static const char *names[12] = {
+            "ExtraCoverageClass0",
+            "ExtraCoverageClass1",
+            "ExtraCoverageClass2",
+            "ExtraCoverageClass3",
+            "ExtraCoverageClass4",
+            "ExtraCoverageClass5",
+            "ExtraCoverageClass6",
+            "ExtraCoverageClass7",
+            "ExtraCoverageClass8",
+            "ExtraCoverageClass9",
+            "ExtraCoverageClass10",
+            "ExtraCoverageClass11",
+        };
 
-    if (initialized) {
-        return;
+        if (initialized) {
+            return;
+        }
+
+        SFObjCClass_t *classes[12];
+        for (int i = 0; i < 12; ++i) {
+            memset(&bundles[i], 0, sizeof(bundles[i]));
+            bundles[i].cls.isa = &bundles[i].meta;
+            bundles[i].cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
+            bundles[i].cls.name = names[i];
+            bundles[i].meta.isa = &bundles[i].meta;
+            bundles[i].meta.superclass = &bundles[i].meta;
+            bundles[i].meta.name = names[i];
+            classes[i] = &bundles[i].cls;
+        }
+
+        sf_register_classes(classes, classes + 12);
+        sf_finalize_registered_classes();
+        initialized = 1;
     }
-
-    SFObjCClass_t *classes[12];
-    for (int i = 0; i < 12; ++i) {
-        memset(&bundles[i], 0, sizeof(bundles[i]));
-        bundles[i].cls.isa = &bundles[i].meta;
-        bundles[i].cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
-        bundles[i].cls.name = names[i];
-        bundles[i].meta.isa = &bundles[i].meta;
-        bundles[i].meta.superclass = &bundles[i].meta;
-        bundles[i].meta.name = names[i];
-        classes[i] = &bundles[i].cls;
-    }
-
-    sf_register_classes(classes, classes + 12);
-    sf_finalize_registered_classes();
-    initialized = 1;
-}
 #endif
 
 static void *fail_alloc_once(void *ctx, size_t size, size_t align)
@@ -146,35 +155,31 @@ static void fail_alloc_free(void *ctx, void *ptr, size_t size, size_t align)
     free(ptr);
 }
 
-static int case_no_libobjc_dependency(void)
+static bool case_no_libobjc_dependency(void)
 {
 #if defined(_WIN32)
-    return GetModuleHandleA("libobjc.dll") == nullptr and
-           GetModuleHandleA("objc.dll") == nullptr;
+        return GetModuleHandleA("libobjc.dll") == nullptr and
+               GetModuleHandleA("objc.dll") == nullptr;
 #else
-    void *h = dlopen("libobjc.so.4", RTLD_LAZY | RTLD_NOLOAD);
-    if (h != nullptr) {
-        dlclose(h);
-        return 0;
-    }
-    return 1;
+        void *h = dlopen("libobjc.so.4", RTLD_LAZY | RTLD_NOLOAD);
+        if (h != nullptr) {
+            dlclose(h);
+            return 0;
+        }
+        return 1;
 #endif
 }
 
-static int case_loader_lookup_nulls(void)
+static bool case_loader_lookup_nulls(void)
 {
     auto ping_sel = sel_registerName("ping");
 
     sf_register_classes(nullptr, nullptr);
-#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnonnull"
-#endif
     sf_register_live_object_header(nullptr);
     sf_unregister_live_object_header(nullptr);
-#if defined(__clang__)
 #pragma clang diagnostic pop
-#endif
     __objc_load(nullptr);
     sf_finalize_registered_classes();
     return sf_class_from_name(nullptr) == nullptr and
@@ -188,13 +193,13 @@ static int case_loader_lookup_nulls(void)
            sf_lookup_imp_in_class(nullptr, ping_sel) == nullptr;
 }
 
-static int case_loader_lookup_missing(void)
+static bool case_loader_lookup_missing(void)
 {
     return objc_getClass("DefinitelyMissingRuntimeClass") == nil and
            objc_lookup_class("DefinitelyMissingRuntimeClass") == nil;
 }
 
-static int case_loader_header_validation(void)
+static bool case_loader_header_validation(void)
 {
     unsigned char storage[sizeof(SFObjHeader_t) + sizeof(void *)];
     memset(storage, 0, sizeof(storage));
@@ -211,44 +216,44 @@ static int case_loader_header_validation(void)
     return ok;
 }
 
-static int case_loader_header_size_modes(void)
+static bool case_loader_header_size_modes(void)
 {
 #if UINTPTR_MAX == UINT32_MAX
-#if SF_RUNTIME_COMPACT_HEADERS
-#if SF_RUNTIME_VALIDATION
-    return sizeof(SFObjHeader_t) >= 40 and sizeof(SFObjHeader_t) < 56 and
-           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#    if SF_RUNTIME_COMPACT_HEADERS
+#        if SF_RUNTIME_VALIDATION
+                return sizeof(SFObjHeader_t) >= 40 and sizeof(SFObjHeader_t) < 56 and
+                       sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#        else
+                return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
+                       sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#        endif
+#    else
+#        if SF_RUNTIME_VALIDATION
+                return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
+#        else
+                return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48;
+#        endif
+#    endif
 #else
-    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
-           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
-#endif
-#else
-#if SF_RUNTIME_VALIDATION
-    return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
-#else
-    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48;
-#endif
-#endif
-#else
-#if SF_RUNTIME_COMPACT_HEADERS
-#if SF_RUNTIME_VALIDATION
-    return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64 and
-           sizeof(SFInlineValueHeader_t) < sizeof(SFObjHeader_t);
-#else
-    return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
-           sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
-#endif
-#else
-#if SF_RUNTIME_VALIDATION
-    return sizeof(SFObjHeader_t) >= 64;
-#else
-    return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
-#endif
-#endif
+#    if SF_RUNTIME_COMPACT_HEADERS
+#        if SF_RUNTIME_VALIDATION
+                return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64 and
+                       sizeof(SFInlineValueHeader_t) < sizeof(SFObjHeader_t);
+#        else
+                return sizeof(SFObjHeader_t) >= 32 and sizeof(SFObjHeader_t) < 48 and
+                       sizeof(SFInlineValueHeader_t) <= sizeof(SFObjHeader_t);
+#        endif
+#    else
+#        if SF_RUNTIME_VALIDATION
+                return sizeof(SFObjHeader_t) >= 64;
+#        else
+                return sizeof(SFObjHeader_t) >= 48 and sizeof(SFObjHeader_t) < 64;
+#        endif
+#    endif
 #endif
 }
 
-static int case_loader_manual_registration(void)
+static bool case_loader_manual_registration(void)
 {
     static int initialized = 0;
     static SFTestManualClass bundle;
@@ -291,7 +296,7 @@ static int case_loader_manual_registration(void)
            objc_getClass("ManualAliasClass") == (id)&bundle.cls;
 }
 
-static int case_loader_class_size_synthetic(void)
+static bool case_loader_class_size_synthetic(void)
 {
     SFTestManualClass bundle;
     SFTestIvarListTwo ivars;
@@ -328,27 +333,26 @@ static int case_loader_class_size_synthetic(void)
            second_offset == INT32_MAX;
 }
 
-static int case_loader_abi_entrypoint_surface(void)
+static bool case_loader_abi_entrypoint_surface(void)
 {
 #if defined(_WIN32)
-    return 1;
+        return 1;
 #else
-    void (*active)(void *) = __objc_load;
-    return active != nullptr;
+        void (*active)(void *) = __objc_load;
+        return active != nullptr;
 #endif
 }
 
-static int case_loader_hash_helpers(void)
+static bool case_loader_hash_helpers(void)
 {
     static const unsigned char data[] = {1, 2, 3, 4};
-    return sf_cstr_len(nullptr) == 0 and
-           sf_cstr_len("abc") == 3 and
+    return strlen("abc") == 3 and
            sf_hash_bytes(data, sizeof(data)) == sf_hash_bytes(data, sizeof(data)) and
            sf_hash_ptr(data) == sf_hash_ptr(data) and
            sf_class_name_of_object(nil) != (void *)nullptr;
 }
 
-static int case_loader_alloc_failure_paths(void)
+static bool case_loader_alloc_failure_paths(void)
 {
     SFTestFailAllocCtx ctx = {0};
     SFAllocator_t allocator = {
@@ -397,7 +401,7 @@ static int case_loader_alloc_failure_paths(void)
     return 1;
 }
 
-static int case_loader_class_name_live_object(void)
+static bool case_loader_class_name_live_object(void)
 {
     __unsafe_unretained CounterObject *obj = SFW_NEW(CounterObject);
     if (obj == nil) {
@@ -410,403 +414,406 @@ static int case_loader_class_name_live_object(void)
 }
 
 #if SF_RUNTIME_REFLECTION
-static id inherited_probe(id self, SEL cmd, ...)
-{
-    (void)cmd;
-    return self;
-}
-
-static int case_reflection_class_lookup(void)
-{
-    auto cls = (Class)objc_getClass("ReflectionProbe");
-    auto super_cls = (Class)objc_getClass("Object");
-    unsigned int count = 0;
-    Class *list = nullptr;
-    int found = 0;
-
-    if (cls == Nil or super_cls == Nil) {
-        return 0;
-    }
-    if (class_getName(cls) == nullptr or strcmp(class_getName(cls), "ReflectionProbe") != 0) {
-        return 0;
-    }
-    if (class_getSuperclass(cls) != super_cls) {
-        return 0;
-    }
-    if (object_getClass((id)cls) != objc_getMetaClass("ReflectionProbe")) {
-        return 0;
+    static id inherited_probe(id self, SEL cmd, ...)
+    {
+        (void)cmd;
+        return self;
     }
 
-    list = objc_copyClassList(&count);
-    if (count == 0 or list == nullptr) {
-        free((void *)list);
-        return 0;
-    }
+    static bool case_reflection_class_lookup(void)
+    {
+        auto cls = (Class)objc_getClass("ReflectionProbe");
+        auto super_cls = (Class)objc_getClass("Object");
+        unsigned int count = 0;
+        Class *list = nullptr;
+        int found = 0;
 
-    for (unsigned int i = 0; i < count; ++i) {
-        if (list[i] == cls) {
-            found = 1;
-            break;
+        if (cls == Nil or super_cls == Nil) {
+            return 0;
         }
-    }
-    free((void *)list);
-    return found;
-}
-
-static int case_reflection_inherited_method_lookup(void)
-{
-    static int initialized = 0;
-    static SFTestInheritBundle bundle;
-    static SFTestSelector inherited_sel = {"inheritedPing", "@16@0:8"};
-    SEL canonical_sel = nullptr;
-
-    if (not initialized) {
-        memset(&bundle, 0, sizeof(bundle));
-        bundle.parent.cls.isa = &bundle.parent.meta;
-        bundle.parent.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
-        bundle.parent.cls.name = "ReflectionMethodParent";
-        bundle.parent.meta.isa = &bundle.parent.meta;
-        bundle.parent.meta.superclass = &bundle.parent.meta;
-        bundle.parent.meta.name = "ReflectionMethodParentMeta";
-
-        bundle.child.cls.isa = &bundle.child.meta;
-        bundle.child.cls.superclass = &bundle.parent.cls;
-        bundle.child.cls.name = "ReflectionMethodChild";
-        bundle.child.meta.isa = &bundle.child.meta;
-        bundle.child.meta.superclass = &bundle.parent.meta;
-        bundle.child.meta.name = "ReflectionMethodChildMeta";
-
-        bundle.methods.count = 1;
-        bundle.methods.size = (int64_t)sizeof(SFObjCMethod_t);
-        bundle.methods.methods[0].imp = (IMP)inherited_probe;
-        bundle.methods.methods[0].selector = (SEL)&inherited_sel;
-        bundle.methods.methods[0].types = inherited_sel.types;
-        bundle.parent.cls.methods = (SFObjCMethodList_t *)&bundle.methods;
-
-        SFObjCClass_t *classes[] = {&bundle.parent.cls, &bundle.child.cls};
-        sf_register_classes(classes, classes + 2);
-        sf_finalize_registered_classes();
-        initialized = 1;
-    }
-
-    canonical_sel = sel_registerName("inheritedPing");
-    auto method = class_getInstanceMethod((Class)&bundle.child.cls, canonical_sel);
-    if (canonical_sel == nullptr) {
-        return 0;
-    }
-    return method != nullptr and
-           method_getName(method) == canonical_sel and
-           method_getImplementation(method) != nullptr and
-           method_getTypeEncoding(method) != nullptr;
-}
-
-static int case_reflection_method_lookup(void)
-{
-    auto cls = (Class)objc_getClass("ReflectionProbe");
-    auto instance_sel = sel_registerName("instancePing");
-    auto class_sel = sel_registerName("classPing");
-    Method instance_method = nullptr;
-    Method class_method = nullptr;
-    Method *method_list = nullptr;
-    unsigned int count = 0;
-    int found_instance = 0;
-
-    if (cls == Nil or instance_sel == nullptr or class_sel == nullptr) {
-        return 0;
-    }
-
-    instance_method = class_getInstanceMethod(cls, instance_sel);
-    class_method = class_getClassMethod(cls, class_sel);
-    if (instance_method == nullptr or class_method == nullptr) {
-        return 0;
-    }
-    if (method_getName(instance_method) == nullptr or not sel_isEqual(method_getName(instance_method), instance_sel)) {
-        return 0;
-    }
-    if (method_getImplementation(instance_method) == nullptr or method_getTypeEncoding(instance_method) == nullptr) {
-        return 0;
-    }
-
-    method_list = class_copyMethodList(cls, &count);
-    if (count == 0 or method_list == nullptr) {
-        free((void *)method_list);
-        return 0;
-    }
-
-    for (unsigned int i = 0; i < count; ++i) {
-        auto sel = method_getName(method_list[i]);
-        if (sel != nullptr and sel_isEqual(sel, instance_sel)) {
-            found_instance = 1;
-            break;
+        if (class_getName(cls) == nullptr or strcmp(class_getName(cls), "ReflectionProbe") != 0) {
+            return 0;
         }
-    }
-    free((void *)method_list);
-    return found_instance;
-}
-
-static int case_reflection_ivar_lookup(void)
-{
-    auto cls = (Class)objc_getClass("ReflectionProbe");
-    Ivar ivar = nullptr;
-    Ivar *ivars = nullptr;
-    unsigned int count = 0;
-    int found = 0;
-
-    if (cls == Nil) {
-        return 0;
-    }
-
-    ivar = class_getInstanceVariable(cls, "_value");
-    if (ivar == nullptr) {
-        return 0;
-    }
-    if (ivar_getName(ivar) == nullptr or strcmp(ivar_getName(ivar), "_value") != 0) {
-        return 0;
-    }
-    if (ivar_getTypeEncoding(ivar) == nullptr) {
-        return 0;
-    }
-    if (ivar_getOffset(ivar) < 0) {
-        return 0;
-    }
-
-    ivars = class_copyIvarList(cls, &count);
-    if (count == 0 or ivars == nullptr) {
-        free((void *)ivars);
-        return 0;
-    }
-
-    for (unsigned int i = 0; i < count; ++i) {
-        const char *name = ivar_getName(ivars[i]);
-        if (name != nullptr and strcmp(name, "_value") == 0) {
-            found = 1;
-            break;
+        if (class_getSuperclass(cls) != super_cls) {
+            return 0;
         }
-    }
-    free((void *)ivars);
-    return found;
-}
-
-static int case_reflection_inherited_ivar_lookup(void)
-{
-    static int initialized = 0;
-    static SFTestIvarInheritBundle bundle;
-    static int32_t offset = 4;
-
-    if (not initialized) {
-        memset(&bundle, 0, sizeof(bundle));
-        bundle.parent.cls.isa = &bundle.parent.meta;
-        bundle.parent.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
-        bundle.parent.cls.name = "ReflectionIvarParent";
-        bundle.parent.meta.isa = &bundle.parent.meta;
-        bundle.parent.meta.superclass = &bundle.parent.meta;
-        bundle.parent.meta.name = "ReflectionIvarParentMeta";
-
-        bundle.child.cls.isa = &bundle.child.meta;
-        bundle.child.cls.superclass = &bundle.parent.cls;
-        bundle.child.cls.name = "ReflectionIvarChild";
-        bundle.child.meta.isa = &bundle.child.meta;
-        bundle.child.meta.superclass = &bundle.parent.meta;
-        bundle.child.meta.name = "ReflectionIvarChildMeta";
-
-        bundle.ivars.count = 1;
-        bundle.ivars.item_size = 1;
-        bundle.ivars.ivars[0].name = "_inherited";
-        bundle.ivars.ivars[0].type = "i";
-        bundle.ivars.ivars[0].offset = &offset;
-        bundle.ivars.ivars[0].size = 4;
-        bundle.parent.cls.ivars = &bundle.ivars;
-
-        SFObjCClass_t *classes[] = {&bundle.parent.cls, &bundle.child.cls};
-        sf_register_classes(classes, classes + 2);
-        sf_finalize_registered_classes();
-        initialized = 1;
-    }
-
-    auto ivar = class_getInstanceVariable((Class)&bundle.child.cls, "_inherited");
-    auto ivars = class_copyIvarList((Class)&bundle.parent.cls, nullptr);
-    int ok = ivar != nullptr and
-             ivar_getName(ivar) != nullptr and
-             strcmp(ivar_getName(ivar), "_inherited") == 0 and
-             ivars != nullptr;
-    free((void *)ivars);
-    return ok;
-}
-
-static int case_reflection_full_map_exhaustion(void)
-{
-    static int initialized = 0;
-    enum { bundle_count = 4096 };
-    static SFTestManualClass *bundles = nullptr;
-    static SFObjCClass_t **classes = nullptr;
-
-    if (not initialized) {
-        bundles = (SFTestManualClass *)calloc(bundle_count, sizeof(*bundles));
-        classes = (SFObjCClass_t **)calloc(bundle_count, sizeof(*classes));
-        if (bundles == nullptr or classes == nullptr) {
-            free(classes);
-            free(bundles);
-            bundles = nullptr;
-            classes = nullptr;
+        if (object_getClass((id)cls) != objc_getMetaClass("ReflectionProbe")) {
             return 0;
         }
 
-        for (int i = 0; i < bundle_count; ++i) {
-            auto name = (char *)malloc(48);
-            auto meta_name = (char *)malloc(52);
-            if (name == nullptr or meta_name == nullptr) {
-                free(name);
-                free(meta_name);
+        list = objc_copyClassList(&count);
+        if (count == 0 or list == nullptr) {
+            free((void *)list);
+            return 0;
+        }
+
+        for (unsigned int i = 0; i < count; ++i) {
+            if (list[i] == cls) {
+                found = 1;
+                break;
+            }
+        }
+        free((void *)list);
+        return found;
+    }
+
+    static bool case_reflection_inherited_method_lookup(void)
+    {
+        static int initialized = 0;
+        static SFTestInheritBundle bundle;
+        static SFTestSelector inherited_sel = {"inheritedPing", "@16@0:8"};
+        SEL canonical_sel = nullptr;
+
+        if (not initialized) {
+            memset(&bundle, 0, sizeof(bundle));
+            bundle.parent.cls.isa = &bundle.parent.meta;
+            bundle.parent.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
+            bundle.parent.cls.name = "ReflectionMethodParent";
+            bundle.parent.meta.isa = &bundle.parent.meta;
+            bundle.parent.meta.superclass = &bundle.parent.meta;
+            bundle.parent.meta.name = "ReflectionMethodParentMeta";
+
+            bundle.child.cls.isa = &bundle.child.meta;
+            bundle.child.cls.superclass = &bundle.parent.cls;
+            bundle.child.cls.name = "ReflectionMethodChild";
+            bundle.child.meta.isa = &bundle.child.meta;
+            bundle.child.meta.superclass = &bundle.parent.meta;
+            bundle.child.meta.name = "ReflectionMethodChildMeta";
+
+            bundle.methods.count = 1;
+            bundle.methods.size = (int64_t)sizeof(SFObjCMethod_t);
+            bundle.methods.methods[0].imp = (IMP)inherited_probe;
+            bundle.methods.methods[0].selector = (SEL)&inherited_sel;
+            bundle.methods.methods[0].types = inherited_sel.types;
+            bundle.parent.cls.methods = (SFObjCMethodList_t *)&bundle.methods;
+
+            SFObjCClass_t *classes[] = {&bundle.parent.cls, &bundle.child.cls};
+            sf_register_classes(classes, classes + 2);
+            sf_finalize_registered_classes();
+            initialized = 1;
+        }
+
+        canonical_sel = sel_registerName("inheritedPing");
+        auto method = class_getInstanceMethod((Class)&bundle.child.cls, canonical_sel);
+        if (canonical_sel == nullptr) {
+            return 0;
+        }
+        return method != nullptr and
+               method_getName(method) == canonical_sel and
+               method_getImplementation(method) != nullptr and
+               method_getTypeEncoding(method) != nullptr;
+    }
+
+    static bool case_reflection_method_lookup(void)
+    {
+        auto cls = (Class)objc_getClass("ReflectionProbe");
+        auto instance_sel = sel_registerName("instancePing");
+        auto class_sel = sel_registerName("classPing");
+        Method instance_method = nullptr;
+        Method class_method = nullptr;
+        Method *method_list = nullptr;
+        unsigned int count = 0;
+        int found_instance = 0;
+
+        if (cls == Nil or instance_sel == nullptr or class_sel == nullptr) {
+            return 0;
+        }
+
+        instance_method = class_getInstanceMethod(cls, instance_sel);
+        class_method = class_getClassMethod(cls, class_sel);
+        if (instance_method == nullptr or class_method == nullptr) {
+            return 0;
+        }
+        if (method_getName(instance_method) == nullptr or not sel_isEqual(method_getName(instance_method), instance_sel)) {
+            return 0;
+        }
+        if (method_getImplementation(instance_method) == nullptr or method_getTypeEncoding(instance_method) == nullptr) {
+            return 0;
+        }
+
+        method_list = class_copyMethodList(cls, &count);
+        if (count == 0 or method_list == nullptr) {
+            free((void *)method_list);
+            return 0;
+        }
+
+        for (unsigned int i = 0; i < count; ++i) {
+            auto sel = method_getName(method_list[i]);
+            if (sel != nullptr and sel_isEqual(sel, instance_sel)) {
+                found_instance = 1;
+                break;
+            }
+        }
+        free((void *)method_list);
+        return found_instance;
+    }
+
+    static bool case_reflection_ivar_lookup(void)
+    {
+        auto cls = (Class)objc_getClass("ReflectionProbe");
+        Ivar ivar = nullptr;
+        Ivar *ivars = nullptr;
+        unsigned int count = 0;
+        int found = 0;
+
+        if (cls == Nil) {
+            return 0;
+        }
+
+        ivar = class_getInstanceVariable(cls, "_value");
+        if (ivar == nullptr) {
+            return 0;
+        }
+        if (ivar_getName(ivar) == nullptr or strcmp(ivar_getName(ivar), "_value") != 0) {
+            return 0;
+        }
+        if (ivar_getTypeEncoding(ivar) == nullptr) {
+            return 0;
+        }
+        if (ivar_getOffset(ivar) < 0) {
+            return 0;
+        }
+
+        ivars = class_copyIvarList(cls, &count);
+        if (count == 0 or ivars == nullptr) {
+            free((void *)ivars);
+            return 0;
+        }
+
+        for (unsigned int i = 0; i < count; ++i) {
+            const char *name = ivar_getName(ivars[i]);
+            if (name != nullptr and strcmp(name, "_value") == 0) {
+                found = 1;
+                break;
+            }
+        }
+        free((void *)ivars);
+        return found;
+    }
+
+    static bool case_reflection_inherited_ivar_lookup(void)
+    {
+        static int initialized = 0;
+        static SFTestIvarInheritBundle bundle;
+        static int32_t offset = 4;
+
+        if (not initialized) {
+            memset(&bundle, 0, sizeof(bundle));
+            bundle.parent.cls.isa = &bundle.parent.meta;
+            bundle.parent.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
+            bundle.parent.cls.name = "ReflectionIvarParent";
+            bundle.parent.meta.isa = &bundle.parent.meta;
+            bundle.parent.meta.superclass = &bundle.parent.meta;
+            bundle.parent.meta.name = "ReflectionIvarParentMeta";
+
+            bundle.child.cls.isa = &bundle.child.meta;
+            bundle.child.cls.superclass = &bundle.parent.cls;
+            bundle.child.cls.name = "ReflectionIvarChild";
+            bundle.child.meta.isa = &bundle.child.meta;
+            bundle.child.meta.superclass = &bundle.parent.meta;
+            bundle.child.meta.name = "ReflectionIvarChildMeta";
+
+            bundle.ivars.count = 1;
+            bundle.ivars.item_size = 1;
+            bundle.ivars.ivars[0].name = "_inherited";
+            bundle.ivars.ivars[0].type = "i";
+            bundle.ivars.ivars[0].offset = &offset;
+            bundle.ivars.ivars[0].size = 4;
+            bundle.parent.cls.ivars = &bundle.ivars;
+
+            SFObjCClass_t *classes[] = {&bundle.parent.cls, &bundle.child.cls};
+            sf_register_classes(classes, classes + 2);
+            sf_finalize_registered_classes();
+            initialized = 1;
+        }
+
+        auto ivar = class_getInstanceVariable((Class)&bundle.child.cls, "_inherited");
+        auto ivars = class_copyIvarList((Class)&bundle.parent.cls, nullptr);
+        int ok = ivar != nullptr and
+                 ivar_getName(ivar) != nullptr and
+                 strcmp(ivar_getName(ivar), "_inherited") == 0 and
+                 ivars != nullptr;
+        free((void *)ivars);
+        return ok;
+    }
+
+    static bool case_reflection_full_map_exhaustion(void)
+    {
+        static int initialized = 0;
+        enum { bundle_count = 4096 };
+        static SFTestManualClass *bundles = nullptr;
+        static SFObjCClass_t **classes = nullptr;
+
+        if (not initialized) {
+            bundles = (SFTestManualClass *)calloc(bundle_count, sizeof(*bundles));
+            classes = (SFObjCClass_t **)calloc(bundle_count, sizeof(*classes));
+            if (bundles == nullptr or classes == nullptr) {
+                free(classes);
+                free(bundles);
+                bundles = nullptr;
+                classes = nullptr;
                 return 0;
             }
 
-            (void)snprintf(name, 48, "ReflectionFullMapClass%d", i);
-            (void)snprintf(meta_name, 52, "ReflectionFullMapClassMeta%d", i);
+            for (int i = 0; i < bundle_count; ++i) {
+                auto name = (char *)malloc(48);
+                auto meta_name = (char *)malloc(52);
+                if (name == nullptr or meta_name == nullptr) {
+                    free(name);
+                    free(meta_name);
+                    return 0;
+                }
 
-            bundles[i].cls.isa = &bundles[i].meta;
-            bundles[i].cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
-            bundles[i].cls.name = name;
-            bundles[i].meta.isa = &bundles[i].meta;
-            bundles[i].meta.superclass = &bundles[i].meta;
-            bundles[i].meta.name = meta_name;
-            classes[i] = &bundles[i].cls;
+                (void)snprintf(name, 48, "ReflectionFullMapClass%d", i);
+                (void)snprintf(meta_name, 52, "ReflectionFullMapClassMeta%d", i);
+
+                bundles[i].cls.isa = &bundles[i].meta;
+                bundles[i].cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
+                bundles[i].cls.name = name;
+                bundles[i].meta.isa = &bundles[i].meta;
+                bundles[i].meta.superclass = &bundles[i].meta;
+                bundles[i].meta.name = meta_name;
+                classes[i] = &bundles[i].cls;
+            }
+
+            sf_register_classes(classes, classes + bundle_count);
+            sf_finalize_registered_classes();
+            initialized = 1;
         }
 
-        sf_register_classes(classes, classes + bundle_count);
-        sf_finalize_registered_classes();
-        initialized = 1;
+        SFTestManualClass probe;
+        memset(&probe, 0, sizeof(probe));
+        probe.cls.isa = &probe.meta;
+        probe.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
+        probe.cls.name = "ReflectionFullMapProbe";
+        probe.meta.isa = &probe.meta;
+        probe.meta.superclass = &probe.meta;
+        probe.meta.name = "ReflectionFullMapProbeMeta";
+
+        return class_getInstanceSize((Class)&probe.cls) >= sizeof(void *) and
+               objc_getClass("DefinitelyMissingAfterFullMap") == nil;
     }
 
-    SFTestManualClass probe;
-    memset(&probe, 0, sizeof(probe));
-    probe.cls.isa = &probe.meta;
-    probe.cls.superclass = (SFObjCClass_t *)objc_getClass("Object");
-    probe.cls.name = "ReflectionFullMapProbe";
-    probe.meta.isa = &probe.meta;
-    probe.meta.superclass = &probe.meta;
-    probe.meta.name = "ReflectionFullMapProbeMeta";
+    static bool case_reflection_null_paths(void)
+    {
+        unsigned int count = 77;
+        SFTestManualClass bundle;
 
-    return class_getInstanceSize((Class)&probe.cls) >= sizeof(void *) and
-           objc_getClass("DefinitelyMissingAfterFullMap") == nil;
-}
+        memset(&bundle, 0, sizeof(bundle));
+        bundle.cls.isa = &bundle.meta;
+        bundle.cls.name = "NoMethodsClass";
+        bundle.meta.isa = &bundle.meta;
+        bundle.meta.name = "NoMethodsClassMeta";
 
-static int case_reflection_null_paths(void)
-{
-    unsigned int count = 77;
-    SFTestManualClass bundle;
+        return class_getName(nullptr) == nullptr and
+               class_getSuperclass(nullptr) == nullptr and
+               object_getClass(nil) == Nil and
+               objc_getMetaClass(nullptr) == Nil and
+               class_getInstanceMethod(nullptr, nullptr) == nullptr and
+               class_getClassMethod(nullptr, nullptr) == nullptr and
+               class_copyMethodList(nullptr, &count) == nullptr and
+               count == 0 and
+               class_copyMethodList((Class)&bundle.cls, &count) == nullptr and
+               method_getName(nullptr) == nullptr and
+               method_getImplementation(nullptr) == nullptr and
+               method_getTypeEncoding(nullptr) == nullptr and
+               class_getInstanceVariable(nullptr, nullptr) == nullptr and
+               class_copyIvarList(nullptr, &count) == nullptr and
+               ivar_getName(nullptr) == nullptr and
+               ivar_getTypeEncoding(nullptr) == nullptr and
+               ivar_getOffset(nullptr) == 0 and
+               sel_getName(nullptr) == nullptr and
+               sel_registerName(nullptr) == nullptr and
+               sel_registerName("") == nullptr and
+               sel_isEqual(nullptr, nullptr);
+    }
 
-    memset(&bundle, 0, sizeof(bundle));
-    bundle.cls.isa = &bundle.meta;
-    bundle.cls.name = "NoMethodsClass";
-    bundle.meta.isa = &bundle.meta;
-    bundle.meta.name = "NoMethodsClassMeta";
+    static bool case_reflection_selector_lookup_only(void)
+    {
+        auto first = sel_registerName("instancePing");
+        auto second = sel_registerName("instancePing");
+        auto missing = sel_registerName("reflection_selector_registration");
+        return first != nullptr and
+               first == second and
+               missing == nullptr and
+               strcmp(sel_getName(first), "instancePing") == 0;
+    }
 
-    return class_getName(nullptr) == nullptr and
-           class_getSuperclass(nullptr) == nullptr and
-           object_getClass(nil) == Nil and
-           objc_getMetaClass(nullptr) == Nil and
-           class_getInstanceMethod(nullptr, nullptr) == nullptr and
-           class_getClassMethod(nullptr, nullptr) == nullptr and
-           class_copyMethodList(nullptr, &count) == nullptr and
-           count == 0 and
-           class_copyMethodList((Class)&bundle.cls, &count) == nullptr and
-           method_getName(nullptr) == nullptr and
-           method_getImplementation(nullptr) == nullptr and
-           method_getTypeEncoding(nullptr) == nullptr and
-           class_getInstanceVariable(nullptr, nullptr) == nullptr and
-           class_copyIvarList(nullptr, &count) == nullptr and
-           ivar_getName(nullptr) == nullptr and
-           ivar_getTypeEncoding(nullptr) == nullptr and
-           ivar_getOffset(nullptr) == 0 and
-           sel_getName(nullptr) == nullptr and
-           sel_registerName(nullptr) == nullptr and
-           sel_registerName("") == nullptr and
-           sel_isEqual(nullptr, nullptr);
-}
+    static bool case_reflection_failure_paths(void)
+    {
+        ensure_extra_registered_classes();
 
-static int case_reflection_selector_lookup_only(void)
-{
-    auto first = sel_registerName("instancePing");
-    auto second = sel_registerName("instancePing");
-    auto missing = sel_registerName("reflection_selector_registration");
-    return first != nullptr and
-           first == second and
-           missing == nullptr and
-           strcmp(sel_getName(first), "instancePing") == 0;
-}
+        unsigned int count = 0;
+        auto baseline = objc_copyClassList(&count);
+        if (baseline == nullptr or count == 0) {
+            free((void *)baseline);
+            return 0;
+        }
 
-static int case_reflection_failure_paths(void)
-{
-    ensure_extra_registered_classes();
-
-    unsigned int count = 0;
-    auto baseline = objc_copyClassList(&count);
-    if (baseline == nullptr or count == 0) {
+        size_t required_allocs = 1;
+        size_t cap = 16;
+        while (cap < (size_t)count) {
+            cap *= 2U;
+            required_allocs += 1U;
+        }
         free((void *)baseline);
-        return 0;
-    }
 
-    size_t required_allocs = 1;
-    size_t cap = 16;
-    while (cap < (size_t)count) {
-        cap *= 2U;
-        required_allocs += 1U;
-    }
-    free((void *)baseline);
-
-    sf_runtime_test_fail_allocation_after(0);
-    auto classes = objc_copyClassList(&count);
-    sf_runtime_test_reset_alloc_failures();
-    if (classes != nullptr or count != 0) {
-        free((void *)classes);
-        return 0;
-    }
-
-    if (required_allocs > 1U) {
-        sf_runtime_test_fail_allocation_after(required_allocs - 1U);
-    } else {
         sf_runtime_test_fail_allocation_after(0);
-    }
-    classes = objc_copyClassList(&count);
-    sf_runtime_test_reset_alloc_failures();
-    if (classes != nullptr) {
+        auto classes = objc_copyClassList(&count);
+        sf_runtime_test_reset_alloc_failures();
+        if (classes != nullptr or count != 0) {
+            free((void *)classes);
+            return 0;
+        }
+
+        if (required_allocs > 1U) {
+            sf_runtime_test_fail_allocation_after(required_allocs - 1U);
+        } else {
+            sf_runtime_test_fail_allocation_after(0);
+        }
+        classes = objc_copyClassList(&count);
+        sf_runtime_test_reset_alloc_failures();
+        if (classes != nullptr) {
+            free((void *)classes);
+            return 0;
+        }
+
+        sf_runtime_test_fail_allocation_after(required_allocs);
+        classes = objc_copyClassList(&count);
+        sf_runtime_test_reset_alloc_failures();
+        if (classes == nullptr or count == 0) {
+            free((void *)classes);
+            return 0;
+        }
         free((void *)classes);
-        return 0;
-    }
 
-    sf_runtime_test_fail_allocation_after(required_allocs);
-    classes = objc_copyClassList(&count);
-    sf_runtime_test_reset_alloc_failures();
-    if (classes == nullptr or count == 0) {
-        free((void *)classes);
-        return 0;
-    }
-    free((void *)classes);
+        sf_runtime_test_fail_allocation_after(0);
+        auto methods = class_copyMethodList((Class)objc_getClass("ReflectionProbe"), &count);
+        sf_runtime_test_reset_alloc_failures();
+        if (methods != nullptr) {
+            free((void *)methods);
+            return 0;
+        }
 
-    sf_runtime_test_fail_allocation_after(0);
-    auto methods = class_copyMethodList((Class)objc_getClass("ReflectionProbe"), &count);
-    sf_runtime_test_reset_alloc_failures();
-    if (methods != nullptr) {
-        free((void *)methods);
-        return 0;
-    }
+        sf_runtime_test_fail_allocation_after(0);
+        auto ivars = class_copyIvarList((Class)objc_getClass("ReflectionProbe"), &count);
+        sf_runtime_test_reset_alloc_failures();
+        if (ivars != nullptr) {
+            free((void *)ivars);
+            return 0;
+        }
 
-    sf_runtime_test_fail_allocation_after(0);
-    auto ivars = class_copyIvarList((Class)objc_getClass("ReflectionProbe"), &count);
-    sf_runtime_test_reset_alloc_failures();
-    if (ivars != nullptr) {
-        free((void *)ivars);
-        return 0;
+        sf_runtime_test_reset_alloc_failures();
+        return 1;
     }
-
-    sf_runtime_test_reset_alloc_failures();
-    return 1;
-}
 
 #endif
 
-static int case_class_lookup_concurrent(void)
+static bool case_class_lookup_concurrent(void)
 {
+#if not SF_TEST_HAS_PTHREAD
+        return 1;
+#else
     enum { thread_count = 4,
            loops_per_thread = 40000,
            class_count = 5 };
@@ -839,6 +846,7 @@ static int case_class_lookup_concurrent(void)
         }
     }
     return 1;
+#endif
 }
 
 static const SFTestCase g_loader_cases[] = {
@@ -854,18 +862,18 @@ static const SFTestCase g_loader_cases[] = {
     {"loader_alloc_failure_paths", case_loader_alloc_failure_paths},
     {"loader_class_name_live_object", case_loader_class_name_live_object},
 #if SF_RUNTIME_REFLECTION
-    {"reflection_class_lookup", case_reflection_class_lookup},
-    {"reflection_inherited_method_lookup", case_reflection_inherited_method_lookup},
-    {"reflection_method_lookup", case_reflection_method_lookup},
-    {"reflection_ivar_lookup", case_reflection_ivar_lookup},
-    {"reflection_inherited_ivar_lookup", case_reflection_inherited_ivar_lookup},
-    {"reflection_null_paths", case_reflection_null_paths},
-    {"reflection_selector_lookup_only", case_reflection_selector_lookup_only},
-    {"reflection_failure_paths", case_reflection_failure_paths},
-    {"reflection_full_map_exhaustion", case_reflection_full_map_exhaustion},
+        {"reflection_class_lookup", case_reflection_class_lookup},
+        {"reflection_inherited_method_lookup", case_reflection_inherited_method_lookup},
+        {"reflection_method_lookup", case_reflection_method_lookup},
+        {"reflection_ivar_lookup", case_reflection_ivar_lookup},
+        {"reflection_inherited_ivar_lookup", case_reflection_inherited_ivar_lookup},
+        {"reflection_null_paths", case_reflection_null_paths},
+        {"reflection_selector_lookup_only", case_reflection_selector_lookup_only},
+        {"reflection_failure_paths", case_reflection_failure_paths},
+        {"reflection_full_map_exhaustion", case_reflection_full_map_exhaustion},
 #endif
-#if !defined(__EMSCRIPTEN__)
-    {"class_lookup_concurrent", case_class_lookup_concurrent},
+#if not defined(__EMSCRIPTEN__)
+        {"class_lookup_concurrent", case_class_lookup_concurrent},
 #endif
 };
 

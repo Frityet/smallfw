@@ -7,7 +7,7 @@
 #pragma clang assume_nonnull begin
 
 #ifdef __cplusplus
-extern "C" {
+    extern "C" {
 #endif
 
 typedef struct SFAllocator {
@@ -19,7 +19,7 @@ typedef struct SFAllocator {
 SFAllocator_t *sf_default_allocator(void);
 
 #ifdef __cplusplus
-}
+    }
 #endif
 
 #pragma clang assume_nonnull end

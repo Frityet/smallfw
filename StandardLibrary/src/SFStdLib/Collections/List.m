@@ -9,13 +9,13 @@
 #include <string.h>
 
 #if SF_RUNTIME_EXCEPTIONS
-@interface AllocationFailedException (SmallFWInternal)
-+ (instancetype)allocationFailedException;
-@end
+    @interface AllocationFailedException (SmallFWInternal)
+    + (instancetype)allocationFailedException;
+    @end
 
-@interface InvalidArgumentException (SmallFWInternal)
-+ (instancetype)exception;
-@end
+    @interface InvalidArgumentException (SmallFWInternal)
+    + (instancetype)exception;
+    @end
 #endif
 
 #pragma clang assume_nonnull begin
@@ -30,7 +30,7 @@ static uint64_t sf_list_hash_word(uint64_t hash, uintptr_t word)
     return hash;
 }
 
-static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
+static bool sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
 {
     if (bytes_out == nullptr) {
         return 0;
@@ -104,7 +104,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
     }
     if (new_capacity < min_capacity or not sf_list_capacity_bytes(new_capacity, &bytes)) {
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [AllocationFailedException allocationFailedException];
+            @throw [AllocationFailedException allocationFailedException];
 #endif
         return false;
     }
@@ -112,7 +112,7 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
     tmp = (id *)self.allocator->alloc(self.allocator->ctx, bytes, alignof(id));
     if (tmp == nullptr) {
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [AllocationFailedException allocationFailedException];
+            @throw [AllocationFailedException allocationFailedException];
 #endif
         return false;
     }
@@ -133,40 +133,40 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
 }
 
 #if SF_RUNTIME_EXCEPTIONS
-- (void)addObject:(id)object
+    - (void)addObject:(id)object
 #else
-- (bool)addObject:(id)object
+    - (bool)addObject:(id)object
 #endif
 {
     if (object == nullptr) {
 #if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException exception];
+            @throw [InvalidArgumentException exception];
 #else
-        return false;
+            return false;
 #endif
     }
 #if SF_RUNTIME_GENERIC_METADATA
-    if ([object class] != (Class)self.genericTypeClass) {
-#if SF_RUNTIME_EXCEPTIONS
-        @throw [InvalidArgumentException exception];
-#else
-        return false;
-#endif
-    }
+        if ([object class] != (Class)self.genericTypeClass) {
+#    if SF_RUNTIME_EXCEPTIONS
+                @throw [InvalidArgumentException exception];
+#    else
+                return false;
+#    endif
+        }
 #endif
 
     if (not[self growToFit:_count + 1U]) {
 #if SF_RUNTIME_EXCEPTIONS
-        __builtin_unreachable();
+            __builtin_unreachable();
 #else
-        return false;
+            return false;
 #endif
     }
 
     _items[_count] = [(Object *)object retain];
     ++_count;
 #if not SF_RUNTIME_EXCEPTIONS
-    return true;
+        return true;
 #endif
 }
 
@@ -238,5 +238,4 @@ static int sf_list_capacity_bytes(size_t capacity, size_t *bytes_out)
 }
 
 @end
-
 #pragma clang assume_nonnull end

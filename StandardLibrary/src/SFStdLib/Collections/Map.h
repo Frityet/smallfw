@@ -7,7 +7,7 @@
 #pragma clang assume_nonnull begin
 
 #if SF_RUNTIME_GENERIC_METADATA
-__attribute__((sf_encode_generics))
+    __attribute__((sf_encode_generics))
 #endif
 @interface Map<KeyType, ObjectType> : Object {
   @private

@@ -7,13 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__clang__) || defined(__GNUC__)
-#define SF_LIKELY(x) __builtin_expect(!!(x), 1)
+#define SF_LIKELY(x) __builtin_expect((x) ? 1 : 0, 1)
 #define SF_ARC_RUNTIME_ENTRY __attribute__((used))
-#else
-#define SF_LIKELY(x) (x)
-#define SF_ARC_RUNTIME_ENTRY
-#endif
+
+#pragma clang assume_nonnull begin
 
 typedef struct SFAutoreleaseState {
     id *objects;
@@ -25,11 +22,11 @@ typedef struct SFAutoreleaseState {
 } SFAutoreleaseState_t;
 
 static thread_local SFAutoreleaseState_t g_autorelease_state;
-static thread_local id g_last_header_obj;
-static thread_local SFObjHeader_t *g_last_header_ptr;
+static thread_local id nillable g_last_header_obj;
+static thread_local SFObjHeader_t *nillable g_last_header_ptr;
 static thread_local size_t g_pool_fallback_token;
 
-static inline bool block_class_is_or_inherits_from(Class cls, Class expected)
+static inline bool block_class_is_or_inherits_from(Class nillable cls, Class nillable expected)
 {
     while (cls != nullptr and expected != nullptr) {
         if (cls == expected) {
@@ -44,16 +41,16 @@ static inline bool block_class_is_or_inherits_from(Class cls, Class expected)
     return false;
 }
 
-static inline bool object_is_block(id obj)
+static inline bool object_is_block(id nillable obj)
 {
     // Blocks participate in ARC traffic through plain objc_retain/objc_release as well as objc_retainBlock.
     if (obj == nullptr) {
         return false;
     }
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (sf_is_tagged_pointer(obj)) {
-        return false;
-    }
+        if (sf_is_tagged_pointer(obj)) {
+            return false;
+        }
 #endif
     return block_class_is_or_inherits_from(object_getClass(obj), objc_lookup_class("Block"));
 }
@@ -63,34 +60,34 @@ static inline uint32_t header_class_flags(SFObjHeader_t *hdr)
     return sf_header_class_flags(hdr);
 }
 
-static inline int header_has_trivial_release(SFObjHeader_t *hdr)
+static inline bool header_has_trivial_release(SFObjHeader_t *hdr)
 {
     return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_TRIVIAL_RELEASE) != 0U;
 }
 
-static inline int header_has_object_ivars(SFObjHeader_t *hdr)
+static inline bool header_has_object_ivars(SFObjHeader_t *hdr)
 {
     return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_HAS_OBJECT_IVARS) != 0U;
 }
 
-static inline int header_has_cxx_destruct(SFObjHeader_t *hdr)
+static inline bool header_has_cxx_destruct(SFObjHeader_t *hdr)
 {
     return (header_class_flags(hdr) & SF_OBJ_CLASS_FLAG_HAS_CXX_DESTRUCT) != 0U;
 }
 
 #if SF_RUNTIME_TESTING
-void sf_runtime_test_reset_autorelease_state(void)
-{
-    free((void *)g_autorelease_state.objects);
-    free(g_autorelease_state.markers);
-    memset(&g_autorelease_state, 0, sizeof(g_autorelease_state));
-    g_last_header_obj = nullptr;
-    g_last_header_ptr = nullptr;
-    g_pool_fallback_token = 0;
-}
+    void sf_runtime_test_reset_autorelease_state(void)
+    {
+        free((void *)g_autorelease_state.objects);
+        free(g_autorelease_state.markers);
+        memset(&g_autorelease_state, 0, sizeof(g_autorelease_state));
+        g_last_header_obj = nullptr;
+        g_last_header_ptr = nullptr;
+        g_pool_fallback_token = 0;
+    }
 #endif
 
-static inline SFObjHeader_t *header_from_heap_candidate(id obj)
+static inline SFObjHeader_t *nillable header_from_heap_candidate(id nillable obj)
 {
     SFObjHeader_t *hdr = nullptr;
     if (obj == g_last_header_obj) {
@@ -101,9 +98,9 @@ static inline SFObjHeader_t *header_from_heap_candidate(id obj)
         return nullptr;
     }
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (sf_is_tagged_pointer(obj)) {
-        return nullptr;
-    }
+        if (sf_is_tagged_pointer(obj)) {
+            return nullptr;
+        }
 #endif
 
     hdr = sf_header_from_object(obj);
@@ -116,7 +113,7 @@ static inline SFObjHeader_t *header_from_heap_candidate(id obj)
     return hdr;
 }
 
-static int ensure_object_capacity(size_t wanted)
+static bool ensure_object_capacity(size_t wanted)
 {
     if (g_autorelease_state.capacity >= wanted) {
         return 1;
@@ -133,7 +130,7 @@ static int ensure_object_capacity(size_t wanted)
     return 1;
 }
 
-static int ensure_marker_capacity(size_t wanted)
+static bool ensure_marker_capacity(size_t wanted)
 {
     if (g_autorelease_state.marker_capacity >= wanted) {
         return 1;
@@ -150,9 +147,9 @@ static int ensure_marker_capacity(size_t wanted)
     return 1;
 }
 
-static void clear_embedded_owner_slot(SFObjHeader_t *hdr, id obj)
+static void clear_embedded_owner_slot(SFObjHeader_t *nonnil hdr, id nillable obj)
 {
-    if (hdr == nullptr or obj == nullptr or(hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+    if (obj == nullptr or(hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
         return;
     }
 
@@ -168,15 +165,15 @@ static void clear_embedded_owner_slot(SFObjHeader_t *hdr, id obj)
     }
 }
 
-static inline int embedded_owner_slot_contains_object(SFObjHeader_t *hdr, id obj)
+static inline bool embedded_owner_slot_contains_object(SFObjHeader_t *nonnil hdr, id nillable obj)
 {
-    if (hdr == nullptr or obj == nullptr or(hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
-        return 0;
+    if (obj == nullptr or(hdr->flags & SF_OBJ_FLAG_EMBEDDED) == 0U) {
+        return false;
     }
 
     auto parent = sf_header_parent(hdr);
     if (parent == nullptr) {
-        return 0;
+        return false;
     }
 
     auto parent_bytes = (unsigned char *)(void *)parent;
@@ -249,8 +246,8 @@ static void clear_object_ivars(id obj, Class cls)
                 auto dealloc_sel = sf_cached_selector_dealloc();
                 static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
                 static SEL cxx_destruct_sel;
-                int has_object_ivars = 1;
-                int has_cxx_destruct = 1;
+                bool has_object_ivars = true;
+                bool has_cxx_destruct = true;
 
                 has_object_ivars = header_has_object_ivars(old_hdr);
                 has_cxx_destruct = header_has_cxx_destruct(old_hdr);
@@ -261,10 +258,10 @@ static void clear_object_ivars(id obj, Class cls)
 
                 auto imp = sf_class_cached_dealloc_imp(old_cls);
                 if (imp != nullptr and dealloc_sel != nullptr) {
-                    ((void (*)(id, SEL))imp)(old, dealloc_sel);
+                    ((void (*)(id, SEL))imp)(old, (SEL nonnil)dealloc_sel);
                 }
                 if (has_object_ivars) {
-                    clear_object_ivars(old, old_cls);
+                    clear_object_ivars(old, (Class nonnil)old_cls);
                 }
                 if (has_cxx_destruct) {
                     if (cxx_destruct_sel == nullptr) {
@@ -292,7 +289,7 @@ static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator)
     while (member != nullptr) {
         SFObjHeader_t *next = sf_header_group_next(member);
         size_t total_size = (size_t)member->alloc_size;
-        int embedded = (member->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
+        bool embedded = (member->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
         sf_header_destroy_sidecar(member, 0);
         if (not embedded) {
             use_allocator->free(use_allocator->ctx, (void *)member, total_size, sizeof(void *));
@@ -301,29 +298,29 @@ static void free_group_members(SFObjHeader_t *head, SFAllocator_t *allocator)
     }
 }
 
-static inline id retain_known_heap_object(id obj, SFObjHeader_t *hdr)
+static inline id retain_known_heap_object(id nonnil obj, SFObjHeader_t *nonnil hdr)
 {
-    if (hdr == nullptr or(hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U or hdr->state != SF_OBJ_STATE_LIVE or embedded_owner_slot_contains_object(hdr, obj)) {
+    if ((hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U or hdr->state != SF_OBJ_STATE_LIVE or embedded_owner_slot_contains_object(hdr, obj)) {
         return obj;
     }
 #if SF_RUNTIME_THREADSAFE
-    (void)atomic_fetch_add_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 1, memory_order_relaxed);
+        (void)atomic_fetch_add_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 1, memory_order_relaxed);
 #else
-    hdr->refcount += 1;
+        hdr->refcount += 1;
 #endif
     return obj;
 }
 
-static inline int header_has_sidecar_state(SFObjHeader_t *hdr)
+static inline bool header_has_sidecar_state(SFObjHeader_t *hdr)
 {
 #if SF_RUNTIME_COMPACT_HEADERS
-    return hdr != nullptr and not sf_header_is_inline_value_prefix(hdr) and(hdr->flags & SF_OBJ_FLAG_HAS_COLD) != 0U;
+        return hdr != nullptr and not sf_header_is_inline_value_prefix(hdr) and(hdr->flags & SF_OBJ_FLAG_HAS_COLD) != 0U;
 #else
-    return hdr != nullptr and(hdr->parent != nullptr or hdr->group != nullptr);
+        return hdr != nullptr and(hdr->parent != nullptr or hdr->group != nullptr);
 #endif
 }
 
-static inline int header_is_plain_live_object(SFObjHeader_t *hdr)
+static inline bool header_is_plain_live_object(SFObjHeader_t *hdr)
 {
     return hdr != nullptr and hdr->state == SF_OBJ_STATE_LIVE and(hdr->flags & (SF_OBJ_FLAG_IMMORTAL | SF_OBJ_FLAG_EMBEDDED)) == 0U;
 }
@@ -341,7 +338,7 @@ static void dispose_plain_object(SFObjHeader_t *hdr)
     sf_header_clear_live_cookie(hdr);
     sf_header_set_aux_flags(hdr, 0U);
 #if SF_RUNTIME_VALIDATION
-    hdr->magic = 0;
+        hdr->magic = 0;
 #endif
     if (allocator == nullptr) {
         allocator = sf_default_allocator();
@@ -349,7 +346,7 @@ static void dispose_plain_object(SFObjHeader_t *hdr)
     allocator->free(allocator->ctx, (void *)hdr, total_size, sizeof(void *));
 }
 
-void sf_object_dispose(id obj)
+void sf_object_dispose(id nillable obj)
 {
     SFObjHeader_t *hdr = header_from_heap_candidate(obj);
     if (hdr == nullptr) {
@@ -378,7 +375,7 @@ void sf_object_dispose(id obj)
     if (not sf_header_grouped(hdr) or group_lock == nullptr) {
         SFAllocator_t *allocator = sf_header_allocator(hdr);
         size_t total_size = (size_t)hdr->alloc_size;
-        int embedded = (hdr->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
+        bool embedded = (hdr->flags & SF_OBJ_FLAG_EMBEDDED) != 0U;
         if (hdr->state != SF_OBJ_STATE_LIVE) {
             return;
         }
@@ -388,7 +385,7 @@ void sf_object_dispose(id obj)
         sf_header_clear_live_cookie(hdr);
         sf_header_set_aux_flags(hdr, 0U);
 #if SF_RUNTIME_VALIDATION
-        hdr->magic = 0;
+            hdr->magic = 0;
 #endif
         if (allocator == nullptr) {
             allocator = sf_default_allocator();
@@ -412,7 +409,7 @@ void sf_object_dispose(id obj)
     sf_header_clear_live_cookie(hdr);
     sf_header_set_aux_flags(hdr, 0U);
 #if SF_RUNTIME_VALIDATION
-    hdr->magic = 0;
+        hdr->magic = 0;
 #endif
     if (sf_header_group_live_count(root) > 0) {
         (void)sf_header_set_group_live_count(root, sf_header_group_live_count(root) - 1);
@@ -436,14 +433,14 @@ static void release_object_nontrivial(id obj, SFObjHeader_t *hdr)
     auto dealloc_sel = sf_cached_selector_dealloc();
     static struct sf_objc_selector cxx_destruct_sel_data = {".cxx_destruct", "v16@0:8"};
     static SEL cxx_destruct_sel;
-    int has_object_ivars = header_has_object_ivars(hdr);
-    int has_cxx_destruct = header_has_cxx_destruct(hdr);
+    bool has_object_ivars = header_has_object_ivars(hdr);
+    bool has_cxx_destruct = header_has_cxx_destruct(hdr);
 
     cls = sf_object_class(obj);
 
     auto imp = sf_class_cached_dealloc_imp(cls);
     if (imp != nullptr and dealloc_sel != nullptr) {
-        ((void (*)(id, SEL))imp)(obj, dealloc_sel);
+        ((void (*)(id, SEL))imp)(obj, (SEL nonnil)dealloc_sel);
     }
     if (has_object_ivars) {
         clear_object_ivars(obj, cls);
@@ -467,32 +464,32 @@ static inline void release_object_trivial(id obj)
     sf_object_dispose(obj);
 }
 
-static void release_object_now_known_header(id obj, SFObjHeader_t *hdr)
+static void release_object_now_known_header(id nonnil obj, SFObjHeader_t *nonnil hdr)
 {
-    if (hdr == nullptr or(hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U or hdr->state != SF_OBJ_STATE_LIVE or embedded_owner_slot_contains_object(hdr, obj)) {
+    if ((hdr->flags & SF_OBJ_FLAG_IMMORTAL) != 0U or hdr->state != SF_OBJ_STATE_LIVE or embedded_owner_slot_contains_object(hdr, obj)) {
         return;
     }
 
 #if SF_RUNTIME_THREADSAFE
-    SFObjRefcount_t old = atomic_fetch_sub_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 1, memory_order_release);
-    if (SF_LIKELY(old > 1)) {
-        return;
-    }
-    if (old == 0) {
-        atomic_store_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 0, memory_order_relaxed);
-        return;
-    }
-    atomic_thread_fence(memory_order_acquire);
+        SFObjRefcount_t old = atomic_fetch_sub_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 1, memory_order_release);
+        if (SF_LIKELY(old > 1)) {
+            return;
+        }
+        if (old == 0) {
+            atomic_store_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 0, memory_order_relaxed);
+            return;
+        }
+        atomic_thread_fence(memory_order_acquire);
 #else
-    SFObjRefcount_t rc = hdr->refcount;
-    if (SF_LIKELY(rc > 1)) {
-        hdr->refcount = rc - 1;
-        return;
-    }
-    if (rc == 0) {
-        return;
-    }
-    hdr->refcount = 0;
+        SFObjRefcount_t rc = hdr->refcount;
+        if (SF_LIKELY(rc > 1)) {
+            hdr->refcount = rc - 1;
+            return;
+        }
+        if (rc == 0) {
+            return;
+        }
+        hdr->refcount = 0;
 #endif
 
     if (header_has_trivial_release(hdr)) {
@@ -504,57 +501,96 @@ static void release_object_now_known_header(id obj, SFObjHeader_t *hdr)
 
 static void release_object_now(id obj)
 {
-    if (header_from_heap_candidate(obj) == nullptr and object_is_block(obj)) {
-        _Block_release((const void *)obj);
-        return;
-    }
-    release_object_now_known_header(obj, header_from_heap_candidate(obj));
-}
-
-SF_ARC_RUNTIME_ENTRY id objc_retain(id obj)
-{
-    SFObjHeader_t *hdr = nullptr;
-
-    if (obj == g_last_header_obj) {
-        hdr = g_last_header_ptr;
-        if (header_is_plain_live_object(hdr)) {
-#if SF_RUNTIME_THREADSAFE
-            (void)atomic_fetch_add_explicit((_Atomic(SFObjRefcount_t) *)&hdr->refcount, 1, memory_order_relaxed);
-#else
-            hdr->refcount += 1;
-#endif
-            return obj;
+    SFObjHeader_t *hdr = header_from_heap_candidate(obj);
+    if (hdr == nullptr) {
+        if (object_is_block(obj)) {
+            _Block_release((const void *)obj);
         }
-    }
-    hdr = hdr != nullptr ? hdr : header_from_heap_candidate(obj);
-    if (hdr == nullptr and object_is_block(obj)) {
-        return (id)_Block_copy((const void *)obj);
-    }
-    return retain_known_heap_object(obj, hdr);
-}
-
-SF_ARC_RUNTIME_ENTRY void objc_release(id obj)
-{
-    SFObjHeader_t *hdr = nullptr;
-
-    if (obj == g_last_header_obj) {
-        hdr = g_last_header_ptr;
-#if !SF_RUNTIME_THREADSAFE
-        if (header_is_plain_live_object(hdr) and SF_LIKELY(hdr->refcount > 1U)) {
-            hdr->refcount -= 1U;
-            return;
-        }
-#endif
-    }
-    hdr = hdr != nullptr ? hdr : header_from_heap_candidate(obj);
-    if (hdr == nullptr and object_is_block(obj)) {
-        _Block_release((const void *)obj);
         return;
     }
     release_object_now_known_header(obj, hdr);
 }
 
-id sf_autorelease(id obj)
+static inline SFObjHeader_t *nillable retained_header_for_object(id nillable obj)
+{
+    if (obj == nullptr) {
+        return nullptr;
+    }
+    return header_from_heap_candidate(obj);
+}
+
+static inline id nillable retain_object_or_block(id nillable obj, SFObjHeader_t *nillable hdr)
+{
+    if (obj == nullptr) {
+        return nullptr;
+    }
+    if (hdr == nullptr) {
+        return object_is_block(obj) ? (id)_Block_copy((const void *)obj) : obj;
+    }
+    return retain_known_heap_object((id nonnil)obj, (SFObjHeader_t *nonnil)hdr);
+}
+
+static inline void release_object_or_block(id nillable obj, SFObjHeader_t *nillable hdr)
+{
+    if (obj == nullptr) {
+        return;
+    }
+    if (hdr == nullptr) {
+        if (object_is_block(obj)) {
+            _Block_release((const void *)obj);
+        }
+        return;
+    }
+    release_object_now_known_header((id nonnil)obj, (SFObjHeader_t *nonnil)hdr);
+}
+
+SF_ARC_RUNTIME_ENTRY id nillable objc_retain(id nillable obj)
+{
+    SFObjHeader_t *hdr = nullptr;
+
+    if (obj == nullptr) {
+        return nullptr;
+    }
+    if (obj == g_last_header_obj) {
+        hdr = g_last_header_ptr;
+        if (header_is_plain_live_object(hdr)) {
+            auto live_hdr = (SFObjHeader_t *nonnil)hdr;
+#if SF_RUNTIME_THREADSAFE
+                (void)atomic_fetch_add_explicit((_Atomic(SFObjRefcount_t) *)&live_hdr->refcount, 1, memory_order_relaxed);
+#else
+                live_hdr->refcount += 1;
+#endif
+            return obj;
+        }
+    }
+    hdr = hdr != nullptr ? hdr : retained_header_for_object(obj);
+    return retain_object_or_block(obj, hdr);
+}
+
+SF_ARC_RUNTIME_ENTRY void objc_release(id nillable obj)
+{
+    SFObjHeader_t *hdr = nullptr;
+
+    if (obj == nullptr) {
+        return;
+    }
+    if (obj == g_last_header_obj) {
+        hdr = g_last_header_ptr;
+#if not SF_RUNTIME_THREADSAFE
+            if (header_is_plain_live_object(hdr)) {
+                auto live_hdr = (SFObjHeader_t *nonnil)hdr;
+                if (SF_LIKELY(live_hdr->refcount > 1U)) {
+                    live_hdr->refcount -= 1U;
+                    return;
+                }
+            }
+#endif
+    }
+    hdr = hdr != nullptr ? hdr : retained_header_for_object(obj);
+    release_object_or_block(obj, hdr);
+}
+
+id nillable sf_autorelease(id nillable obj)
 {
     if (header_from_heap_candidate(obj) == nullptr and not object_is_block(obj)) {
         return obj;
@@ -588,7 +624,7 @@ SF_ARC_RUNTIME_ENTRY void *objc_autoreleasePoolPush(void)
     return (void *)&g_pool_fallback_token;
 }
 
-SF_ARC_RUNTIME_ENTRY void objc_autoreleasePoolPop(void *pool)
+SF_ARC_RUNTIME_ENTRY void objc_autoreleasePoolPop(void *nillable pool)
 {
     size_t marker = g_autorelease_state.count;
     if (pool == (void *)&g_pool_fallback_token) {
@@ -613,32 +649,32 @@ SF_ARC_RUNTIME_ENTRY void objc_autoreleasePoolPop(void *pool)
     }
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_retainAutorelease(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_retainAutorelease(id nillable obj)
 {
     return sf_autorelease(objc_retain(obj));
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_retainAutoreleasedReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_retainAutoreleasedReturnValue(id nillable obj)
 {
     return objc_retain(obj);
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_autoreleaseReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_autoreleaseReturnValue(id nillable obj)
 {
     return sf_autorelease(obj);
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_retainAutoreleaseReturnValue(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_retainAutoreleaseReturnValue(id nillable obj)
 {
     return sf_autorelease(objc_retain(obj));
 }
 
-SF_ARC_RUNTIME_ENTRY id objc_retainBlock(id obj)
+SF_ARC_RUNTIME_ENTRY id nillable objc_retainBlock(id nillable obj)
 {
     return obj != nullptr ? (id)_Block_copy_with_pending_allocator((const void *)obj) : nullptr;
 }
 
-SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id *dst, id value)
+SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id nillable *nonnil dst, id nillable value)
 {
     id old = *dst;
     SFObjHeader_t *value_hdr = nullptr;
@@ -649,7 +685,7 @@ SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id *dst, id value)
     if (value != nullptr) {
         value_hdr = header_from_heap_candidate(value);
         if (value_hdr != nullptr) {
-            (void)retain_known_heap_object(value, value_hdr);
+            (void)retain_known_heap_object((id nonnil)value, (SFObjHeader_t *nonnil)value_hdr);
         } else {
             objc_retain(value);
         }
@@ -658,9 +694,10 @@ SF_ARC_RUNTIME_ENTRY void objc_storeStrong(id *dst, id value)
     if (old != nullptr) {
         old_hdr = header_from_heap_candidate(old);
         if (old_hdr != nullptr) {
-            release_object_now_known_header(old, old_hdr);
+            release_object_now_known_header((id nonnil)old, (SFObjHeader_t *nonnil)old_hdr);
         } else {
             objc_release(old);
         }
     }
 }
+#pragma clang assume_nonnull end

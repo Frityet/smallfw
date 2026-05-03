@@ -1,11 +1,15 @@
 #ifndef _CONFIG_H_
-#define _CONFIG_H_
+#    define _CONFIG_H_
 
-#ifdef __APPLE__
+#    pragma clang assume_nonnull begin
 
-#define HAVE_AVAILABILITY_MACROS_H 1
-#define HAVE_TARGET_CONDITIONALS_H 1
+#    ifdef __APPLE__
 
-#endif
+#        define HAVE_AVAILABILITY_MACROS_H 1
+#        define HAVE_TARGET_CONDITIONALS_H 1
+
+#    endif
+
+#    pragma clang assume_nonnull end
 
 #endif /* _CONFIG_H_ */

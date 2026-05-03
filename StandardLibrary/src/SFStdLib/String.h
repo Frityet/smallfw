@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if !SF_RUNTIME_TAGGED_POINTERS
-#error "smallfw String literals on GNUstep require runtime-tagged-pointers=y"
+#if not SF_RUNTIME_TAGGED_POINTERS
+#    error "smallfw String literals on GNUstep require runtime-tagged-pointers=y"
 #endif
 
 #pragma clang assume_nonnull begin
@@ -19,7 +19,7 @@
 - (SF_ERRORABLE(instancetype))initWithBytes:(const char *nillable)bytes length:(size_t)length;
 
 #if SF_RUNTIME_TAGGED_POINTERS
-+ (uintptr_t)taggedPointerSlot;
+    + (uintptr_t)taggedPointerSlot;
 #endif
 
 - (size_t)length;
@@ -28,7 +28,7 @@
 
 @end
 
-@interface NSConstantString : String {
+@interface ConstantString : String {
   @private
     uint32_t _flags;
     uint32_t _length;
@@ -38,14 +38,10 @@
 }
 @end
 
-@interface NXConstantString : String {
-  @private
-    uint32_t _flags;
-    uint32_t _length;
-    uint32_t _size;
-    uint32_t _hash;
-    const void *nillable _data;
-}
+@interface NSConstantString : ConstantString
+@end
+
+@interface NXConstantString : ConstantString
 @end
 
 @compatibility_alias NSString String;

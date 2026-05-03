@@ -9,5 +9,5 @@ int main(void)
     auto array = [Array arrayWithObjects:(id[]){number} count:1U];
     auto exception = [Exception exceptionWithMessage:@"module"];
     auto reflected_class = [Reflection classNamed:"Object"];
-    return number != nullptr && array != nullptr && exception != nullptr && reflected_class != nullptr ? 0 : 1;
+    return number != nullptr and array != nullptr and exception != nullptr and reflected_class != nullptr ? 0 : 1;
 }

@@ -7,12 +7,14 @@
 #include <string.h>
 
 #if SF_RUNTIME_EXCEPTIONS
-@interface AllocationFailedException (SmallFWInternal)
-+ (instancetype)allocationFailedException;
-@end
+    @interface AllocationFailedException (SmallFWInternal)
+    + (instancetype)allocationFailedException;
+    @end
 #endif
 
-static String *reflection_string_from_cstr(const char *nillable bytes)
+#pragma clang assume_nonnull begin
+
+static String *nillable reflection_string_from_cstr(const char *nillable bytes)
 {
     if (bytes == nullptr) {
         return nullptr;
@@ -268,10 +270,10 @@ static Array *nillable reflection_copy_ivars_for_class(Class nillable cls, bool 
         SF_THROW([AllocationFailedException allocationFailedException]);
     }
 #if SF_RUNTIME_EXCEPTIONS
-    __builtin_assume(reflected_classes != nullptr);
-    return (Array<ReflectionClass *> *nonnil)reflected_classes;
+        __builtin_assume(reflected_classes != nullptr);
+        return (Array<ReflectionClass *> *nonnil)reflected_classes;
 #else
-    return reflected_classes;
+        return reflected_classes;
 #endif
 }
 
@@ -618,3 +620,4 @@ static Array *nillable reflection_copy_ivars_for_class(Class nillable cls, bool 
 }
 
 @end
+#pragma clang assume_nonnull end

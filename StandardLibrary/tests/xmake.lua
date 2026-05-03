@@ -26,7 +26,7 @@ target("stdlib-module-smoke")
     add_deps("smallfw-stdlib")
     add_rules("smallfw.runtime.common")
     add_rules("smallfw.runtime.binary")
-    add_files("module-smoke.m", {mflags = {"-fno-objc-arc"}})
+    add_files("module-smoke.m", {mflags = smallfw.no_objc_arc_file_flags()})
     add_tests("stdlib_module_smoke", {group = "stdlib", realtime_output = true})
 
 if has_config("runtime-generic-metadata") then

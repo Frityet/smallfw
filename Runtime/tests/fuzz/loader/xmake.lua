@@ -1,4 +1,4 @@
-if not is_plat("mingw") and not is_plat("wasm") then
+if not is_plat("mingw", "windows") and not is_plat("wasm") then
     target("runtime-fuzz-loader")
         set_group("tests/fuzz/loader")
         set_kind("binary")

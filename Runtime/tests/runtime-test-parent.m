@@ -1,8 +1,14 @@
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "runtime-test-support.h"
+
+#if defined(_WIN32) and not defined(__MINGW32__)
+#    define SF_TEST_HAS_PTHREAD 0
+#else
+#    include <pthread.h>
+#    define SF_TEST_HAS_PTHREAD 1
+#endif
 
 typedef struct ParentThreadCtx {
     Object *parent;
@@ -23,31 +29,31 @@ static size_t embedded_value_storage_size(Class cls)
 {
     size_t instance_size = class_getInstanceSize(cls);
 #if SF_RUNTIME_INLINE_VALUE_STORAGE
-    return test_align_up(sizeof(SFInlineValueHeader_t) + instance_size, sizeof(void *));
+        return test_align_up(sizeof(SFInlineValueHeader_t) + instance_size, sizeof(void *));
 #else
-    return test_align_up(sizeof(SFObjHeader_t) + instance_size, sizeof(void *));
+        return test_align_up(sizeof(SFObjHeader_t) + instance_size, sizeof(void *));
 #endif
 }
 
-#if SF_RUNTIME_THREADSAFE
-static void *parent_thread_main(void *arg)
-{
-    auto ctx = (ParentThreadCtx *)arg;
+#if SF_RUNTIME_THREADSAFE and SF_TEST_HAS_PTHREAD
+    static void *parent_thread_main(void *arg)
+    {
+        auto ctx = (ParentThreadCtx *)arg;
 
-    for (int i = 0; i < ctx->loops; ++i) {
-        __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:ctx->parent] init];
-        if (child == nil) {
-            ctx->ok = 0;
-            return nullptr;
+        for (int i = 0; i < ctx->loops; ++i) {
+            __unsafe_unretained CounterObject *child = [[CounterObject allocWithParent:ctx->parent] init];
+            if (child == nil) {
+                ctx->ok = 0;
+                return nullptr;
+            }
+            objc_release(child);
         }
-        objc_release(child);
-    }
 
-    return nullptr;
-}
+        return nullptr;
+    }
 #endif
 
-static int case_value_parent_layout_hidden_storage(void)
+static bool case_value_parent_layout_hidden_storage(void)
 {
     auto holder_cls = (Class)objc_getClass("InlineHolder");
     auto object_cls = (Class)objc_getClass("Object");
@@ -64,20 +70,20 @@ static int case_value_parent_layout_hidden_storage(void)
     }
 
 #if SF_RUNTIME_REFLECTION
-    unsigned int count = 0;
-    auto ivars = class_copyIvarList(holder_cls, &count);
-    int ok = count == 2U and
-             class_getInstanceVariable(holder_cls, "_value") != nullptr and
-             class_getInstanceVariable(holder_cls, "_ref") != nullptr and
-             ivars != nullptr;
-    free((void *)ivars);
-    return ok;
+        unsigned int count = 0;
+        auto ivars = class_copyIvarList(holder_cls, &count);
+        int ok = count == 2U and
+                 class_getInstanceVariable(holder_cls, "_value") != nullptr and
+                 class_getInstanceVariable(holder_cls, "_ref") != nullptr and
+                 ivars != nullptr;
+        free((void *)ivars);
+        return ok;
 #else
-    return 1;
+        return 1;
 #endif
 }
 
-static int case_value_parent_alloc_embeds_in_parent(void)
+static bool case_value_parent_alloc_embeds_in_parent(void)
 {
     sf_test_reset_common_state();
 
@@ -113,7 +119,7 @@ static int case_value_parent_alloc_embeds_in_parent(void)
     return ok and ctx.free_calls == 1 and ctx.active_blocks == 0;
 }
 
-static int case_value_parent_nontrivial_inline_rejected(void)
+static bool case_value_parent_nontrivial_inline_rejected(void)
 {
     sf_test_reset_common_state();
 
@@ -126,19 +132,19 @@ static int case_value_parent_nontrivial_inline_rejected(void)
     int ok = 0;
 
 #if SF_RUNTIME_INLINE_VALUE_STORAGE
-    ok = child == nil and holder->_value == nil;
+        ok = child == nil and holder->_value == nil;
 #else
-    ok = child != nil and holder->_value == child and ((NonTrivialInlineValue *)child).parent == holder;
-    if (child != nil) {
-        objc_storeStrong((id *)&holder->_value, nil);
-    }
+        ok = child != nil and holder->_value == child and ((NonTrivialInlineValue *)child).parent == holder;
+        if (child != nil) {
+            objc_storeStrong((id *)&holder->_value, nil);
+        }
 #endif
 
     objc_release(holder);
     return ok;
 }
 
-static int case_value_parent_duplicate_slots_reuse(void)
+static bool case_value_parent_duplicate_slots_reuse(void)
 {
     sf_test_reset_common_state();
 
@@ -172,7 +178,7 @@ static int case_value_parent_duplicate_slots_reuse(void)
     return ok;
 }
 
-static int case_value_parent_child_expires_with_parent(void)
+static bool case_value_parent_child_expires_with_parent(void)
 {
     sf_test_reset_common_state();
 
@@ -188,12 +194,12 @@ static int case_value_parent_child_expires_with_parent(void)
     objc_release(holder);
     int ok = ctx.alloc_calls == 1 and ctx.free_calls == 1 and ctx.active_blocks == 0;
 #if SF_RUNTIME_VALIDATION
-    ok = ok and sf_header_from_object(child) == nullptr and not sf_object_is_heap(child);
+        ok = ok and sf_header_from_object(child) == nullptr and not sf_object_is_heap(child);
 #endif
     return ok;
 }
 
-static int case_value_parent_standalone_heap_alloc(void)
+static bool case_value_parent_standalone_heap_alloc(void)
 {
     sf_test_reset_common_state();
 
@@ -201,14 +207,10 @@ static int case_value_parent_standalone_heap_alloc(void)
     SFAllocator_t allocator = sf_test_make_counting_allocator(&ctx);
 
     __unsafe_unretained InlineValue *direct = [[InlineValue allocWithAllocator:&allocator] init];
-#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnonnull"
-#endif
     __unsafe_unretained InlineValue *nil_parent = [[InlineValue allocWithParent:nil] init];
-#if defined(__clang__)
 #pragma clang diagnostic pop
-#endif
     if (direct == nil or nil_parent == nil) {
         return 0;
     }
@@ -229,7 +231,7 @@ static int case_value_parent_standalone_heap_alloc(void)
     return ok and ctx.free_calls == 1;
 }
 
-static int case_value_parent_slot_exhaustion(void)
+static bool case_value_parent_slot_exhaustion(void)
 {
     sf_test_reset_common_state();
 
@@ -240,22 +242,22 @@ static int case_value_parent_slot_exhaustion(void)
     }
 
 #if SF_RUNTIME_EXCEPTIONS
-    int ok = 0;
-    @try {
-        (void)[[InlineValue allocWithParent:holder] init];
-    }
-    @catch (AllocationFailedException *e) {
-        ok = e != nil;
-    }
-#else
-    __unsafe_unretained InlineValue *extra = [InlineValue allocWithParent:holder];
-    int ok = extra == nil;
-    if (extra != nil) {
-        extra = [extra init];
-        if (extra != nil) {
-            objc_release(extra);
+        int ok = 0;
+        @try {
+            (void)[[InlineValue allocWithParent:holder] init];
         }
-    }
+        @catch (AllocationFailedException *e) {
+            ok = e != nil;
+        }
+#else
+        __unsafe_unretained InlineValue *extra = [InlineValue allocWithParent:holder];
+        int ok = extra == nil;
+        if (extra != nil) {
+            extra = [extra init];
+            if (extra != nil) {
+                objc_release(extra);
+            }
+        }
 #endif
 
     objc_release(child);
@@ -264,7 +266,7 @@ static int case_value_parent_slot_exhaustion(void)
     return ok;
 }
 
-static int case_value_parent_oversized_subclass_rejected(void)
+static bool case_value_parent_oversized_subclass_rejected(void)
 {
     sf_test_reset_common_state();
 
@@ -274,29 +276,29 @@ static int case_value_parent_oversized_subclass_rejected(void)
     }
 
 #if SF_RUNTIME_EXCEPTIONS
-    int ok = 0;
-    @try {
-        (void)[[InlineLargeValueSub allocWithParent:holder] init];
-    }
-    @catch (AllocationFailedException *e) {
-        ok = e != nil;
-    }
-#else
-    __unsafe_unretained InlineLargeValueSub *child = [InlineLargeValueSub allocWithParent:holder];
-    int ok = child == nil;
-    if (child != nil) {
-        child = [child init];
-        if (child != nil) {
-            objc_release(child);
+        int ok = 0;
+        @try {
+            (void)[[InlineLargeValueSub allocWithParent:holder] init];
         }
-    }
+        @catch (AllocationFailedException *e) {
+            ok = e != nil;
+        }
+#else
+        __unsafe_unretained InlineLargeValueSub *child = [InlineLargeValueSub allocWithParent:holder];
+        int ok = child == nil;
+        if (child != nil) {
+            child = [child init];
+            if (child != nil) {
+                objc_release(child);
+            }
+        }
 #endif
 
     objc_release(holder);
     return ok;
 }
 
-static int case_parent_group_inheritance(void)
+static bool case_parent_group_inheritance(void)
 {
     sf_test_reset_common_state();
 
@@ -329,7 +331,7 @@ static int case_parent_group_inheritance(void)
     return ok;
 }
 
-static int case_parent_allocator_propagation(void)
+static bool case_parent_allocator_propagation(void)
 {
     sf_test_reset_common_state();
 
@@ -348,7 +350,7 @@ static int case_parent_allocator_propagation(void)
     return ok;
 }
 
-static int case_parent_getter_lifecycle(void)
+static bool case_parent_getter_lifecycle(void)
 {
     sf_test_reset_common_state();
 
@@ -370,7 +372,7 @@ static int case_parent_getter_lifecycle(void)
     return g_counter_deallocs == 2;
 }
 
-static int case_parent_child_outlives_parent(void)
+static bool case_parent_child_outlives_parent(void)
 {
     sf_test_reset_common_state();
 
@@ -395,7 +397,7 @@ static int case_parent_child_outlives_parent(void)
     return ctx.free_calls == 2 and ctx.active_blocks == 0 and g_counter_deallocs == 2;
 }
 
-static int case_parent_group_frees_on_last_release(void)
+static bool case_parent_group_frees_on_last_release(void)
 {
     sf_test_reset_common_state();
 
@@ -426,7 +428,7 @@ static int case_parent_group_frees_on_last_release(void)
     return ctx.free_calls == 3 and ctx.active_blocks == 0 and g_counter_deallocs == 3;
 }
 
-static int case_parent_nested_allocation_same_root(void)
+static bool case_parent_nested_allocation_same_root(void)
 {
     sf_test_reset_common_state();
 
@@ -459,18 +461,14 @@ static int case_parent_nested_allocation_same_root(void)
     return ok and ctx.free_calls == 4 and ctx.active_blocks == 0;
 }
 
-static int case_parent_alloc_with_nil_parent(void)
+static bool case_parent_alloc_with_nil_parent(void)
 {
     sf_test_reset_common_state();
 
-#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnonnull"
-#endif
     __unsafe_unretained CounterObject *obj = [[CounterObject allocWithParent:nil] init];
-#if defined(__clang__)
 #pragma clang diagnostic pop
-#endif
     if (obj == nil) {
         return 0;
     }
@@ -481,7 +479,7 @@ static int case_parent_alloc_with_nil_parent(void)
     return ok;
 }
 
-static int case_parent_dead_parent_rejects_new_child(void)
+static bool case_parent_dead_parent_rejects_new_child(void)
 {
     sf_test_reset_common_state();
 
@@ -494,69 +492,69 @@ static int case_parent_dead_parent_rejects_new_child(void)
 
     objc_release(root);
 #if SF_RUNTIME_EXCEPTIONS
-    int threw = 0;
-    @try {
-        (void)[[CounterObject allocWithParent:root] init];
-    }
-    @catch (AllocationFailedException *e) {
-        threw = e != nil and e.exceptionBacktraceCount > 0;
-    }
-    if (not threw) {
-        objc_release(child);
-        return 0;
-    }
+        int threw = 0;
+        @try {
+            (void)[[CounterObject allocWithParent:root] init];
+        }
+        @catch (AllocationFailedException *e) {
+            threw = e != nil and e.exceptionBacktraceCount > 0;
+        }
+        if (not threw) {
+            objc_release(child);
+            return 0;
+        }
 #else
-    __unsafe_unretained CounterObject *replacement = [CounterObject allocWithParent:root];
-    if (replacement != nil) {
-        replacement = [replacement init];
-    }
-    if (replacement != nil) {
-        objc_release(replacement);
-        objc_release(child);
-        return 0;
-    }
+        __unsafe_unretained CounterObject *replacement = [CounterObject allocWithParent:root];
+        if (replacement != nil) {
+            replacement = [replacement init];
+        }
+        if (replacement != nil) {
+            objc_release(replacement);
+            objc_release(child);
+            return 0;
+        }
 #endif
 
     objc_release(child);
     return g_counter_deallocs == 2;
 }
 
-static int case_parent_concurrent_alloc_release(void)
+static bool case_parent_concurrent_alloc_release(void)
 {
-#if SF_RUNTIME_THREADSAFE
-    sf_test_reset_common_state();
+#if SF_RUNTIME_THREADSAFE and SF_TEST_HAS_PTHREAD
+        sf_test_reset_common_state();
 
-    enum { thread_count = 4,
-           loops_per_thread = 2000 };
-    pthread_t threads[thread_count];
-    ParentThreadCtx ctx[thread_count];
+        enum { thread_count = 4,
+               loops_per_thread = 2000 };
+        pthread_t threads[thread_count];
+        ParentThreadCtx ctx[thread_count];
 
-    __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
-    if (root == nil) {
-        return 0;
-    }
-
-    for (int i = 0; i < thread_count; ++i) {
-        ctx[i].parent = root;
-        ctx[i].loops = loops_per_thread;
-        ctx[i].ok = 1;
-        if (pthread_create(&threads[i], nullptr, parent_thread_main, &ctx[i]) != 0) {
-            objc_release(root);
+        __unsafe_unretained CounterObject *root = SFW_NEW(CounterObject);
+        if (root == nil) {
             return 0;
         }
-    }
 
-    for (int i = 0; i < thread_count; ++i) {
-        if (pthread_join(threads[i], nullptr) != 0 or not ctx[i].ok) {
-            objc_release(root);
-            return 0;
+        for (int i = 0; i < thread_count; ++i) {
+            ctx[i].parent = root;
+            ctx[i].loops = loops_per_thread;
+            ctx[i].ok = 1;
+            if (pthread_create(&threads[i], nullptr, parent_thread_main, &ctx[i]) != 0) {
+                objc_release(root);
+                return 0;
+            }
         }
-    }
 
-    objc_release(root);
-    return __atomic_load_n(&g_counter_deallocs, __ATOMIC_RELAXED) == (thread_count * loops_per_thread) + 1;
+        for (int i = 0; i < thread_count; ++i) {
+            if (pthread_join(threads[i], nullptr) != 0 or not ctx[i].ok) {
+                objc_release(root);
+                return 0;
+            }
+        }
+
+        objc_release(root);
+        return __atomic_load_n(&g_counter_deallocs, __ATOMIC_RELAXED) == (thread_count * loops_per_thread) + 1;
 #else
-    return 1;
+        return 1;
 #endif
 }
 

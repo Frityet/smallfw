@@ -2,53 +2,26 @@
 
 #include <iso646.h>
 
-#if !defined(nillable)
 #define nillable _Nullable
-#endif
-
-#if !defined(nonnil)
 #define nonnil _Nonnull
-#endif
-
-#if !defined(nillptr)
 #define nillptr nullptr
+
+#ifndef SF_DEBUG
+#    define SF_DEBUG 0
 #endif
 
-#if !defined(__cplusplus)
-#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L
-
-#if !defined(alignas)
-#define alignas _Alignas
+#if SF_DEBUG
+#    define sf_nonnil_check(...) do { if (not(__VA_ARGS__)) { __builtin_trap(); } } while (0)
+#else
+#    define sf_nonnil_check(...) do { } while (0)
 #endif
 
-#if !defined(alignof)
-#define alignof _Alignof
+#if defined(__EMSCRIPTEN__) and not defined(__EMSCRIPTEN_PTHREADS__)
+#    if defined(thread_local)
+#        undef thread_local
+#    endif
+#    define thread_local
 #endif
 
-#if !defined(static_assert)
-#define static_assert _Static_assert
-#endif
-
-#if !defined(thread_local)
-#define thread_local _Thread_local
-#endif
-
-#if !defined(nullptr)
-#define nullptr ((void *nillable)0)
-#endif
-
-#endif
-
-#if defined(__clang__) || defined(__GNUC__)
-#if !defined(typeof)
-#define typeof __typeof__
-#endif
-#endif
-
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-#if defined(thread_local)
-#undef thread_local
-#endif
-#define thread_local
-#endif
-#endif
+#pragma clang assume_nonnull begin
+#pragma clang assume_nonnull end

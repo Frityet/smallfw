@@ -1,11 +1,29 @@
 smallfw = smallfw or {}
 
+local function target_uses_clang_cl(target)
+    return target:toolchain("clang-cl") ~= nil
+end
+
+function smallfw.compile_flag(target, flag)
+    if type(flag) == "string" and target_uses_clang_cl(target) and flag:sub(1, 1) == "-" then
+        return "/clang:" .. flag
+    end
+    return flag
+end
+
+function smallfw.no_objc_arc_file_flags()
+    if is_plat("windows") and get_config("toolchain") == "clang-cl" then
+        return {"/clang:-fno-objc-arc"}
+    end
+    return {"-fno-objc-arc"}
+end
+
 local function add_objc_flags_to_target(target, ...)
     local flags = {...}
     for _, key in ipairs({"cflags", "cxflags", "mflags", "mxflags"}) do
         local values = {}
         for _, flag in ipairs(flags) do
-            table.insert(values, flag)
+            table.insert(values, smallfw.compile_flag(target, flag))
         end
         table.insert(values, {force = true})
         target:add(key, table.unpack(values))
@@ -17,7 +35,7 @@ local function add_objc_language_flags_to_target(target, ...)
     for _, key in ipairs({"mflags", "mxflags"}) do
         local values = {}
         for _, flag in ipairs(flags) do
-            table.insert(values, flag)
+            table.insert(values, smallfw.compile_flag(target, flag))
         end
         table.insert(values, {force = true})
         target:add(key, table.unpack(values))
@@ -50,7 +68,15 @@ local function runtime_dispatch_backend()
     if project_is_wasm() then
         return "c"
     end
-    return get_config("dispatch-backend") or "asm"
+    local backend = get_config("dispatch-backend") or "asm"
+    if backend == "asm" and not is_arch("x86_64", "x64") then
+        return "legacy"
+    end
+    return backend
+end
+
+local function runtime_legacy_objc_dispatch_enabled()
+    return runtime_dispatch_backend() == "legacy"
 end
 
 local function runtime_lto_mode()
@@ -68,7 +94,7 @@ local function runtime_generic_metadata_enabled()
 end
 
 local function runtime_exceptions_enabled()
-    return has_config("runtime-exceptions") and not project_is_wasm()
+    return has_config("runtime-exceptions") and not project_is_wasm() and not is_plat("windows")
 end
 
 local function runtime_tagged_pointers_enabled()
@@ -82,16 +108,99 @@ local function module_map_paths()
     }
 end
 
+local function wine_arch()
+    if is_arch("x86_64", "x64", "arm64", "aarch64") then
+        return "win64"
+    end
+    return "win32"
+end
+
+local function wine_path_for_host_path(host_path)
+    local absolute = path.absolute(host_path):gsub("/", "\\")
+    return "Z:" .. absolute
+end
+
+local function mingw_winepath()
+    local triplet = nil
+    if is_arch("x86_64", "x64") then
+        triplet = "x86_64-w64-mingw32"
+    elseif is_arch("i386", "x86", "i686") then
+        triplet = "i686-w64-mingw32"
+    else
+        return nil
+    end
+
+    local entries = {}
+    for _, pattern in ipairs({
+        path.join("/usr", "lib", "gcc", triplet, "*-posix"),
+        path.join("/usr", "lib", "gcc", triplet, "*-win32"),
+        path.join("/usr", triplet, "lib"),
+    }) do
+        for _, dir in ipairs(os.dirs(pattern)) do
+            table.insert(entries, wine_path_for_host_path(dir))
+        end
+    end
+    if #entries == 0 then
+        return nil
+    end
+    return table.concat(entries, ";")
+end
+
+local function ensure_wine_prefix(envs, execv)
+    local prefix_parent = path.directory(envs.WINEPREFIX)
+    execv("mkdir", {"-p", envs.WINEPREFIX})
+    local lockfile = path.join(prefix_parent, wine_arch() .. ".lock")
+    if execv("test", {"-f", path.join(envs.WINEPREFIX, "system.reg")}, {try = true}) ~= 0 then
+        execv("flock", {lockfile, "wineboot", "-u"}, {envs = envs})
+    end
+end
+
+local function run_target_for_tests(target, opt, execv)
+    local argv = {}
+    for _, arg in ipairs(opt.runargs or {}) do
+        table.insert(argv, arg)
+    end
+
+    if project_is_wasm() then
+        table.insert(argv, 1, path.absolute(target:targetfile()))
+        return execv("node", argv) == 0
+    end
+
+    if (target:is_plat("mingw") or target:is_plat("windows")) and not is_host("windows") then
+        table.insert(argv, 1, path.absolute(target:targetfile()))
+        local envs = {
+            WINEARCH = wine_arch(),
+            WINEPREFIX = path.join(os.projectdir(), "build", ".wine", wine_arch()),
+            WINEDEBUG = "-all",
+            DISPLAY = "",
+            WAYLAND_DISPLAY = "",
+            WINEDLLOVERRIDES = "winemenubuilder.exe=d;explorer.exe=d",
+        }
+        ensure_wine_prefix(envs, execv)
+        local winepath = target:is_plat("mingw") and mingw_winepath() or nil
+        if winepath ~= nil and winepath ~= "" then
+            envs.WINEPATH = winepath
+        end
+        return execv("wine", argv, {envs = envs}) == 0
+    end
+
+    return execv(target:targetfile(), argv) == 0
+end
+
 local function target_add_runtime_mode_defines(target)
     target:add("defines", has_config("runtime-validation") and
         "SF_RUNTIME_VALIDATION=1" or "SF_RUNTIME_VALIDATION=0")
     target:add("defines", "SF_RUNTIME_THREADSAFE=0", "SF_DISPATCH_STATS=0")
+    target:add("defines", (is_mode("debug") or is_mode("test")) and "SF_DEBUG=1" or "SF_DEBUG=0", {public = true})
     target:add("defines", is_mode("test") and "SF_RUNTIME_TESTING=1" or "SF_RUNTIME_TESTING=0", {public = true})
     target:add("defines", has_config("runtime-forwarding") and
         "SF_RUNTIME_FORWARDING=1" or "SF_RUNTIME_FORWARDING=0", {public = true})
 
-    if runtime_dispatch_backend() == "c" then
+    local dispatch_backend = runtime_dispatch_backend()
+    if dispatch_backend == "c" then
         target:add("defines", "SF_DISPATCH_BACKEND_C=1")
+    elseif dispatch_backend == "legacy" then
+        target:add("defines", "SF_DISPATCH_BACKEND_LEGACY=1", "SF_RUNTIME_OBJC_DISPATCH_LEGACY=1", {public = true})
     else
         target:add("defines", "SF_DISPATCH_BACKEND_ASM=1")
     end
@@ -139,6 +248,10 @@ end
 
 function smallfw.runtime_dispatch_backend()
     return runtime_dispatch_backend()
+end
+
+function smallfw.runtime_legacy_objc_dispatch_enabled()
+    return runtime_legacy_objc_dispatch_enabled()
 end
 
 function smallfw.runtime_lto_mode()
@@ -194,6 +307,10 @@ rule("smallfw.runtime.common")
             "-Wstrict-prototypes",
             "-Wnullability-completeness",
             "-Wnullable-to-nonnull-conversion",
+            "-Werror=nullability",
+            "-Werror=nullability-completeness",
+            "-Werror=nullable-to-nonnull-conversion",
+            "-Werror=nonnull",
             "-Wnull-dereference",
             "-Wshadow-all",
             "-Wdouble-promotion",
@@ -203,13 +320,6 @@ rule("smallfw.runtime.common")
             "-Wformat=2",
             "-Wdocumentation",
             "-Wnullability",
-            "-Wno-c++98-compat",
-            "-Wno-c++98-compat-pedantic",
-            "-Wno-c23-extensions",
-            "-Wno-c2x-extensions",
-            "-Wno-pre-c11-compat",
-            "-Wno-pre-c23-compat",
-            "-Wno-pre-c2x-compat",
             "-Wno-nullability-extension",
             "-Wno-covered-switch-default",
             "-Wno-disabled-macro-expansion",
@@ -266,7 +376,11 @@ rule("smallfw.runtime.common")
 
         local module_cache = path.join(target:autogendir(), "clang-module-cache")
         add_objc_language_flags_to_target(target, "-fobjc-runtime=" .. project_objc_runtime(), "-fobjc-arc", "-fblocks",
+                                          "-fconstant-string-class=ConstantString",
                                           "-fmodules", "-fimplicit-modules", "-fmodules-cache-path=" .. module_cache)
+        if runtime_legacy_objc_dispatch_enabled() then
+            add_objc_language_flags_to_target(target, "-Xclang", "-fobjc-dispatch-method=legacy")
+        end
         for _, modulemap in ipairs(module_map_paths()) do
             if os.isfile(modulemap) then
                 add_objc_language_flags_to_target(target, "-fmodule-map-file=" .. modulemap)
@@ -290,7 +404,9 @@ rule("smallfw.runtime.common")
 
 rule("smallfw.runtime.binary")
     on_load(function (target)
-        if is_plat("macosx") or is_plat("mingw") then
+        if is_plat("windows") then
+            -- no POSIX support libraries are required by runtime binaries on the MSVC target
+        elseif is_plat("macosx") or is_plat("mingw") then
             target:add("links", "pthread")
         else
             target:add("links", "dl", "pthread")
@@ -301,6 +417,9 @@ rule("smallfw.runtime.binary")
         if is_plat("linux") then
             add_force_flags(target, "ldflags", "-rdynamic")
         end
+    end)
+    on_test(function (target, opt)
+        return run_target_for_tests(target, opt, os.execv)
     end)
 
 rule("smallfw.wasm.run")
@@ -331,27 +450,16 @@ rule("smallfw.generic_metadata")
         add_force_flags(target, "mxflags", "-fplugin=" .. pluginfile, "-fpass-plugin=" .. pluginfile)
     end)
 
+rule("smallfw.clangd.autoupdate")
+    set_kind("project")
+    after_build(function ()
+        import("smallfw.clangd")
+        clangd.write_config()
+    end)
+
 rule("smallfw.wasm.test")
     on_test(function (target, opt)
-        if not project_is_wasm() then
-            return os.execv(target:targetfile(), opt.runargs or {}) == 0
-        end
-
-        import("lib.detect.find_program")
-        local node = find_program("node")
-        assert(node ~= nil, "node is required to run wasm targets")
-        local argv = {path.absolute(target:targetfile())}
-        for _, arg in ipairs(opt.runargs or {}) do
-            table.insert(argv, arg)
-        end
-
-        local ok, errors = pcall(function ()
-            os.execv(node, argv)
-        end)
-        if ok then
-            return true
-        end
-        return false, errors
+        return run_target_for_tests(target, opt, os.execv)
     end)
 
 rule("smallfw.wasm.browser_smoke")

@@ -11,7 +11,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     char *types = nullptr;
     char codes[32];
-    int unsupported = 0;
+    bool unsupported = false;
     struct sf_objc_selector sel = {"fuzzDispatch", nullptr};
 
     if (data == nullptr) {

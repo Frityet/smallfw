@@ -10,7 +10,7 @@ function smallfw.runtime_config_menu_options(extra_options, defaults)
         {},
         {nil, "analysis-symbols", "kv", nil, "Override analysis-symbols.", " - y", " - n"},
         {},
-        {nil, "dispatch-backend", "kv", nil, "Override dispatch-backend.", " - asm", " - c"},
+        {nil, "dispatch-backend", "kv", nil, "Override dispatch-backend.", " - asm", " - c", " - legacy"},
         {nil, "runtime-exceptions", "kv", nil, "Override runtime-exceptions.", " - y", " - n"},
         {nil, "runtime-reflection", "kv", nil, "Override runtime-reflection.", " - y", " - n"},
         {nil, "runtime-forwarding", "kv", nil, "Override runtime-forwarding.", " - y", " - n"},

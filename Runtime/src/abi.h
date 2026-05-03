@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
-#include <iso646.h>
 
 #include "locking.h"
 #include "objc-runtime-exports.h"
@@ -14,7 +13,7 @@
 #pragma clang assume_nonnull begin
 
 #ifdef __cplusplus
-extern "C" {
+    extern "C" {
 #endif
 
 typedef struct sf_objc_method {
@@ -45,9 +44,9 @@ typedef struct sf_objc_class {
     void *nillable protocols;
     void *nillable gc_object_type;
     unsigned long abi_version;
-#if !defined(_WIN32)
-    void *nillable ivar_offsets;
-    unsigned long flags;
+#if not defined(_WIN32)
+        void *nillable ivar_offsets;
+        unsigned long flags;
 #endif
     void *nillable properties;
 } SFObjCClass_t;
@@ -170,63 +169,63 @@ enum {
 };
 
 #if SF_RUNTIME_COMPACT_HEADERS
-typedef struct SFInlineValueHeader {
-#if SF_RUNTIME_VALIDATION
-    uint64_t magic;
-#endif
-    SFObjRefcount_t refcount;
-    uint32_t state, flags, alloc_size, reserved, class_flags;
-    uintptr_t tagged_parent;
-#if SF_RUNTIME_GENERIC_METADATA
-    Class nillable generic_type_class;
-#endif
-} SFInlineValueHeader_t;
+    typedef struct SFInlineValueHeader {
+#    if SF_RUNTIME_VALIDATION
+            uint64_t magic;
+#    endif
+        SFObjRefcount_t refcount;
+        uint32_t state, flags, alloc_size, reserved, class_flags;
+        uintptr_t tagged_parent;
+#    if SF_RUNTIME_GENERIC_METADATA
+            Class nillable generic_type_class;
+#    endif
+    } SFInlineValueHeader_t;
 
-struct SFObjColdState {
-#if SF_RUNTIME_VALIDATION
-    struct SFObjHeader *nillable live_next;
-#endif
-    SFAllocator_t *nillable allocator;
-    id nillable parent;
-#if SF_RUNTIME_GENERIC_METADATA
-    Class nillable generic_type_class;
-#endif
-    struct SFObjHeader *nillable group_root;
-    struct SFObjHeader *nillable group_next;
-#if SF_RUNTIME_THREADSAFE || !SF_RUNTIME_INLINE_GROUP_STATE
-    SFGroupState_t *nillable group;
-#else
-    struct SFObjHeader *nillable inline_group_head;
-    size_t inline_group_live_count;
-    uint32_t inline_group_dead;
-    uint32_t inline_group_reserved;
-#endif
-};
+    struct SFObjColdState {
+#    if SF_RUNTIME_VALIDATION
+            struct SFObjHeader *nillable live_next;
+#    endif
+        SFAllocator_t *nillable allocator;
+        id nillable parent;
+#    if SF_RUNTIME_GENERIC_METADATA
+            Class nillable generic_type_class;
+#    endif
+        struct SFObjHeader *nillable group_root;
+        struct SFObjHeader *nillable group_next;
+#    if SF_RUNTIME_THREADSAFE or not SF_RUNTIME_INLINE_GROUP_STATE
+            SFGroupState_t *nillable group;
+#    else
+            struct SFObjHeader *nillable inline_group_head;
+            size_t inline_group_live_count;
+            uint32_t inline_group_dead;
+            uint32_t inline_group_reserved;
+#    endif
+    };
 
-typedef struct SFObjHeader {
-#if SF_RUNTIME_VALIDATION
-    uint64_t magic;
-#endif
-    SFObjRefcount_t refcount;
-    uint32_t state, flags, alloc_size, reserved, class_flags, aux_flags;
-    SFObjColdState_t *nillable cold;
-} SFObjHeader_t;
+    typedef struct SFObjHeader {
+#    if SF_RUNTIME_VALIDATION
+            uint64_t magic;
+#    endif
+        SFObjRefcount_t refcount;
+        uint32_t state, flags, alloc_size, reserved, class_flags, aux_flags;
+        SFObjColdState_t *nillable cold;
+    } SFObjHeader_t;
 #else
-typedef struct SFObjHeader {
-#if SF_RUNTIME_VALIDATION
-    uint64_t magic;
-    struct SFObjHeader *nillable live_next;
-#endif
-    SFObjRefcount_t refcount;
-    uint32_t state, flags, alloc_size, reserved;
-    SFAllocator_t *nillable allocator;
-#if SF_RUNTIME_GENERIC_METADATA
-    Class nillable generic_type_class;
-#endif
-    id nillable parent;
-    SFGroupState_t *nillable group;
-    struct SFObjHeader *nillable group_next;
-} SFObjHeader_t;
+    typedef struct SFObjHeader {
+#    if SF_RUNTIME_VALIDATION
+            uint64_t magic;
+            struct SFObjHeader *nillable live_next;
+#    endif
+        SFObjRefcount_t refcount;
+        uint32_t state, flags, alloc_size, reserved;
+        SFAllocator_t *nillable allocator;
+#    if SF_RUNTIME_GENERIC_METADATA
+            Class nillable generic_type_class;
+#    endif
+        id nillable parent;
+        SFGroupState_t *nillable group;
+        struct SFObjHeader *nillable group_next;
+    } SFObjHeader_t;
 #endif
 
 static inline uint32_t sf_header_aux_flags(SFObjHeader_t *nillable hdr)
@@ -235,9 +234,9 @@ static inline uint32_t sf_header_aux_flags(SFObjHeader_t *nillable hdr)
         return 0U;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
-    return hdr->aux_flags;
+        return hdr->aux_flags;
 #else
-    return (hdr->flags & SF_OBJ_AUX_FLAGS_MASK) >> SF_OBJ_AUX_FLAGS_SHIFT;
+        return (hdr->flags & SF_OBJ_AUX_FLAGS_MASK) >> SF_OBJ_AUX_FLAGS_SHIFT;
 #endif
 }
 
@@ -247,10 +246,10 @@ static inline void sf_header_set_aux_flags(SFObjHeader_t *nillable hdr, uint32_t
         return;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->aux_flags = aux_flags;
+        hdr->aux_flags = aux_flags;
 #else
-    hdr->flags =
-        (hdr->flags & ~SF_OBJ_AUX_FLAGS_MASK) | ((aux_flags << SF_OBJ_AUX_FLAGS_SHIFT) & SF_OBJ_AUX_FLAGS_MASK);
+        hdr->flags =
+            (hdr->flags & ~SF_OBJ_AUX_FLAGS_MASK) | ((aux_flags << SF_OBJ_AUX_FLAGS_SHIFT) & SF_OBJ_AUX_FLAGS_MASK);
 #endif
 }
 
@@ -264,7 +263,7 @@ static inline void sf_header_clear_aux_flags(SFObjHeader_t *nillable hdr, uint32
     sf_header_set_aux_flags(hdr, sf_header_aux_flags(hdr) & ~aux_flags);
 }
 
-static inline int sf_header_has_aux_flag(SFObjHeader_t *nillable hdr, uint32_t aux_flag)
+static inline bool sf_header_has_aux_flag(SFObjHeader_t *nillable hdr, uint32_t aux_flag)
 {
     return (sf_header_aux_flags(hdr) & aux_flag) != 0U;
 }
@@ -286,7 +285,7 @@ static inline void sf_header_clear_live_cookie(SFObjHeader_t *nillable hdr)
     hdr->flags &= ~SF_OBJ_COOKIE_MASK;
 }
 
-static inline int sf_header_has_live_cookie(SFObjHeader_t *nillable hdr)
+static inline bool sf_header_has_live_cookie(SFObjHeader_t *nillable hdr)
 {
     return hdr != nullptr and
            ((hdr->flags & SF_OBJ_COOKIE_MASK) >> SF_OBJ_COOKIE_SHIFT) == (uint32_t)SF_OBJ_HEADER_COOKIE_LIVE;
@@ -298,9 +297,9 @@ static inline uint32_t sf_header_class_flags(SFObjHeader_t *nillable hdr)
         return 0U;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
-    return hdr->class_flags;
+        return hdr->class_flags;
 #else
-    return (hdr->flags & SF_OBJ_CLASS_FLAGS_MASK) >> SF_OBJ_CLASS_FLAGS_SHIFT;
+        return (hdr->flags & SF_OBJ_CLASS_FLAGS_MASK) >> SF_OBJ_CLASS_FLAGS_SHIFT;
 #endif
 }
 
@@ -310,10 +309,10 @@ static inline void sf_header_set_class_flags(SFObjHeader_t *nillable hdr, uint32
         return;
     }
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->class_flags = class_flags;
+        hdr->class_flags = class_flags;
 #else
-    hdr->flags =
-        (hdr->flags & ~SF_OBJ_CLASS_FLAGS_MASK) | ((class_flags << SF_OBJ_CLASS_FLAGS_SHIFT) & SF_OBJ_CLASS_FLAGS_MASK);
+        hdr->flags =
+            (hdr->flags & ~SF_OBJ_CLASS_FLAGS_MASK) | ((class_flags << SF_OBJ_CLASS_FLAGS_SHIFT) & SF_OBJ_CLASS_FLAGS_MASK);
 #endif
 }
 
@@ -334,12 +333,11 @@ bool sf_object_is_heap(id nillable obj);
 SFObjHeader_t *nillable sf_header_from_object(id nillable obj);
 id nillable sf_alloc_object(Class nillable cls, SFAllocator_t *nillable allocator);
 
-size_t sf_cstr_len(const char *nillable s);
-uint64_t sf_hash_bytes(const void *nillable data, size_t size);
+uint64_t sf_hash_bytes(const void *nonnil data, size_t size);
 uint64_t sf_hash_ptr(const void *nillable p);
 
 #ifdef __cplusplus
-}
+    }
 #endif
 
 #pragma clang assume_nonnull end

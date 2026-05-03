@@ -8,10 +8,10 @@
  * distribute, sublicense, and/or sell copies of the Software, and to permit
  * persons to whom the Software is furnished to do so, subject to the following
  * conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -37,12 +37,14 @@
 #include "internal.h"
 
 #ifdef HAVE_AVAILABILITY_MACROS_H
-#include <AvailabilityMacros.h>
+#    include <AvailabilityMacros.h>
 #endif /* HAVE_AVAILABILITY_MACROS_H */
 
 #ifdef HAVE_TARGET_CONDITIONALS_H
-#include <TargetConditionals.h>
+#    include <TargetConditionals.h>
 #endif /* HAVE_TARGET_CONDITIONALS_H */
+
+#pragma clang assume_nonnull begin
 
 /*
  * Globals:
@@ -137,7 +139,7 @@ bool _Block_push_allocator_override(const void *owner, SFAllocator_t *allocator)
 bool _Block_discard_allocator_override(const void *owner)
 {
     Block_smallfw_allocator_override_t *entry = g_block_allocator_overrides;
-    if (entry == NULL || entry->owner != owner) {
+    if (entry == NULL or entry->owner != owner) {
         return false;
     }
 
@@ -185,7 +187,7 @@ static int latching_decr_int(int *where)
  * GC support stub routines:
  */
 #if 0
-#pragma mark GC Support Routines
+#    pragma mark GC Support Routines
 #endif /* if 0 */
 
 static void *_Block_alloc_default(const unsigned long size, const bool initialCountIsOne, const bool isObject)
@@ -208,13 +210,13 @@ static void _Block_do_nothing(const void *aBlock)
 
 static void _Block_retain_object_default(const void *ptr)
 {
-    if (!ptr)
+    if (not ptr)
         return;
 }
 
 static void _Block_release_object_default(const void *ptr)
 {
-    if (!ptr)
+    if (not ptr)
         return;
 }
 
@@ -310,7 +312,7 @@ void _Block_use_RR(void (*retain)(const void *),
  */
 
 #if 0
-#pragma mark Copy/Release support
+#    pragma mark Copy/Release support
 #endif /* if 0 */
 
 /* Copy, or bump refcount, of a block.  If really copying, call the copy helper if present. */
@@ -319,7 +321,7 @@ static void *_Block_copy_internal(const void *arg, const int flags)
     auto wantsOne = (WANTS_ONE & flags) == WANTS_ONE;
 
     //printf("_Block_copy_internal(%p, %x)\n", arg, flags);
-    if (!arg)
+    if (not arg)
         return NULL;
 
     // The following would be better done as a switch statement
@@ -330,7 +332,7 @@ static void *_Block_copy_internal(const void *arg, const int flags)
         return aBlock;
     } else if (aBlock->flags & BLOCK_IS_GC) {
         // GC refcounting is expensive so do most refcounting here.
-        if (wantsOne && ((latching_incr_int(&aBlock->flags) & BLOCK_REFCOUNT_MASK) == 1)) {
+        if (wantsOne and ((latching_incr_int(&aBlock->flags) & BLOCK_REFCOUNT_MASK) == 1)) {
             // Tell collector to hang on this - it will bump the GC refcount version
             _Block_setHasRefcount(aBlock, true);
         }
@@ -340,9 +342,9 @@ static void *_Block_copy_internal(const void *arg, const int flags)
     }
 
     // Its a stack block.  Make a copy.
-    if (!isGC) {
+    if (not isGC) {
         auto result = (struct Block_layout *)_Block_allocate_smallfw_storage((size_t)aBlock->descriptor->size);
-        if (!result)
+        if (not result)
             return (void *)0;
         memmove(result, aBlock, aBlock->descriptor->size); // bitcopy first
         // reset refcount
@@ -362,7 +364,7 @@ static void *_Block_copy_internal(const void *arg, const int flags)
         auto flags = (unsigned long int)aBlock->flags;
         auto hasCTOR = (flags & BLOCK_HAS_CTOR) != 0;
         auto result = (struct Block_layout *)_Block_allocator(aBlock->descriptor->size, wantsOne, hasCTOR);
-        if (!result)
+        if (not result)
             return (void *)0;
         memmove(result, aBlock, aBlock->descriptor->size); // bitcopy first
         // reset refcount
@@ -479,7 +481,7 @@ static void _Block_byref_release(const void *arg)
  */
 
 #if 0
-#pragma mark SPI/API
+#    pragma mark SPI/API
 #endif /* if 0 */
 
 void *_Block_copy(const void *arg)
@@ -512,7 +514,7 @@ void _Block_release(const void *arg)
 {
     auto aBlock = (struct Block_layout *)arg;
     int32_t newCount;
-    if (!aBlock)
+    if (not aBlock)
         return;
     newCount = latching_decr_int(&aBlock->flags) & BLOCK_REFCOUNT_MASK;
     if (newCount > 0)
@@ -542,7 +544,7 @@ void _Block_release(const void *arg)
 static void _Block_destroy(const void *arg)
 {
     struct Block_layout *aBlock;
-    if (!arg)
+    if (not arg)
         return;
     aBlock = (struct Block_layout *)arg;
     if (aBlock->flags & BLOCK_IS_GC) {
@@ -571,7 +573,7 @@ unsigned long int Block_size(void *arg)
 }
 
 #if 0
-#pragma mark Compiler SPI entry points
+#    pragma mark Compiler SPI entry points
 #endif /* if 0 */
 
 /*******************************************************
@@ -602,7 +604,7 @@ So the __block copy/dispose helpers will generate flag values of 3 or 7 for obje
         __weak block id              128+3+16
 	__block (^Block)             128+7
 	__weak __block (^Block)      128+7+16
-        
+
 The implementation of the two routines would be improved by switch statements enumerating the eight cases.
 
 ********************************************************/
@@ -664,7 +666,7 @@ void _Block_object_dispose(const void *object, const int flags)
  * Debugging support:
  */
 #if 0
-#pragma mark Debugging
+#    pragma mark Debugging
 #endif /* if 0 */
 
 const char *_Block_dump(const void *block)
@@ -742,3 +744,4 @@ const char *_Block_byref_dump(struct Block_byref *src)
     }
     return buffer;
 }
+#pragma clang assume_nonnull end

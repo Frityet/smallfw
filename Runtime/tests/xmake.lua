@@ -20,18 +20,18 @@ target("runtime-tests")
     add_defines("SF_TEST_ENABLE_SUITE_PARENT")
     add_defines("SF_TEST_ENABLE_SUITE_DISPATCH")
     add_defines("SF_TEST_ENABLE_SUITE_LOADER")
-    add_files("runtime-tests.m", "runtime-test-support.m", {mflags = {"-fno-objc-arc"}})
-    add_files("runtime-test-arc.m", {mflags = {"-fno-objc-arc"}})
-    add_files("runtime-test-parent.m", {mflags = {"-fno-objc-arc"}})
-    add_files("runtime-test-dispatch.m", {mflags = {"-fno-objc-arc"}})
-    add_files("runtime-test-loader.m", {mflags = {"-fno-objc-arc"}})
+    add_files("runtime-tests.m", "runtime-test-support.m", {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files("runtime-test-arc.m", {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files("runtime-test-parent.m", {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files("runtime-test-dispatch.m", {mflags = smallfw.no_objc_arc_file_flags()})
+    add_files("runtime-test-loader.m", {mflags = smallfw.no_objc_arc_file_flags()})
     if has_config("runtime-tagged-pointers") then
         add_defines("SF_TEST_ENABLE_SUITE_TAGGED")
-        add_files("runtime-test-tagged.m", {mflags = {"-fno-objc-arc"}})
+        add_files("runtime-test-tagged.m", {mflags = smallfw.no_objc_arc_file_flags()})
     end
-    if not smallfw.is_wasm() then
+    if smallfw.runtime_exceptions_enabled() then
         add_defines("SF_TEST_ENABLE_SUITE_EXCEPTIONS")
-        add_files("runtime-test-exceptions.m", {mflags = {"-fno-objc-arc"}})
+        add_files("runtime-test-exceptions.m", {mflags = smallfw.no_objc_arc_file_flags()})
     end
 
 target("runtime-module-smoke")
@@ -43,7 +43,7 @@ target("runtime-module-smoke")
     add_deps("smallfw-blocksruntime")
     add_rules("smallfw.runtime.common")
     add_rules("smallfw.runtime.binary")
-    add_files("module-smoke.m", {mflags = {"-fno-objc-arc"}})
+    add_files("module-smoke.m", {mflags = smallfw.no_objc_arc_file_flags()})
     add_tests("runtime_module_smoke", {group = "runtime", realtime_output = true})
 
 target("runtime-tests-arc")
@@ -65,7 +65,7 @@ target("runtime-tests-arc")
         add_rules("smallfw.wasm.test")
     end
     add_defines("SF_TEST_SUITE_LABEL=arc", "SF_TEST_SUITE_PROVIDER=sf_runtime_arc_cases")
-    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-arc.m", {mflags = {"-fno-objc-arc"}})
+    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-arc.m", {mflags = smallfw.no_objc_arc_file_flags()})
     add_tests("arc_nil_operations", {group = "runtime", realtime_output = true, runargs = {"--case", "arc_nil_operations"}})
     add_tests("arc_strong_store", {group = "runtime", realtime_output = true, runargs = {"--case", "arc_strong_store"}})
     add_tests("arc_strong_store_self", {group = "runtime", realtime_output = true, runargs = {"--case", "arc_strong_store_self"}})
@@ -114,7 +114,7 @@ target("runtime-tests-parent")
         add_rules("smallfw.wasm.test")
     end
     add_defines("SF_TEST_SUITE_LABEL=parent", "SF_TEST_SUITE_PROVIDER=sf_runtime_parent_cases")
-    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-parent.m", {mflags = {"-fno-objc-arc"}})
+    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-parent.m", {mflags = smallfw.no_objc_arc_file_flags()})
     add_tests("value_parent_layout_hidden_storage", {group = "runtime", realtime_output = true, runargs = {"--case", "value_parent_layout_hidden_storage"}})
     add_tests("value_parent_alloc_embeds_in_parent", {group = "runtime", realtime_output = true, runargs = {"--case", "value_parent_alloc_embeds_in_parent"}})
     add_tests("value_parent_nontrivial_inline_rejected", {group = "runtime", realtime_output = true, runargs = {"--case", "value_parent_nontrivial_inline_rejected"}})
@@ -155,14 +155,14 @@ target("runtime-tests-dispatch")
         add_rules("smallfw.wasm.browser_smoke", {title = "runtime-tests-dispatch"})
     end
     add_defines("SF_TEST_SUITE_LABEL=dispatch", "SF_TEST_SUITE_PROVIDER=sf_runtime_dispatch_cases")
-    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-dispatch.m", {mflags = {"-fno-objc-arc"}})
+    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-dispatch.m", {mflags = smallfw.no_objc_arc_file_flags()})
     add_tests("dispatch_cache_warm_hits", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_cache_warm_hits"}})
     add_tests("dispatch_super_lookup", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_super_lookup"}})
     add_tests("dispatch_selector_equality", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_selector_equality"}})
     add_tests("dispatch_selector_lookup_only_registration", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_selector_lookup_only_registration"}})
     add_tests("dispatch_method_lookup_canonical", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_method_lookup_canonical"}})
     add_tests("dispatch_c_msgsend_signatures", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_c_msgsend_signatures"}})
-    add_tests("dispatch_c_msgsend_unsupported_float", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_c_msgsend_unsupported_float"}})
+    add_tests("dispatch_c_msgsend_double_arg", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_c_msgsend_double_arg"}})
     add_tests("dispatch_c_internal_helpers", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_c_internal_helpers"}})
     add_tests("dispatch_struct_params", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_struct_params"}})
     add_tests("dispatch_struct_returns", {group = "runtime", realtime_output = true, runargs = {"--case", "dispatch_struct_returns"}})
@@ -191,7 +191,7 @@ target("runtime-tests-loader")
         add_rules("smallfw.wasm.test")
     end
     add_defines("SF_TEST_SUITE_LABEL=loader", "SF_TEST_SUITE_PROVIDER=sf_runtime_loader_cases")
-    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-loader.m", {mflags = {"-fno-objc-arc"}})
+    add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-loader.m", {mflags = smallfw.no_objc_arc_file_flags()})
     if not smallfw.is_wasm() then
         add_tests("no_libobjc_dependency", {group = "runtime", realtime_output = true, runargs = {"--case", "no_libobjc_dependency"}})
     end
@@ -240,14 +240,14 @@ if has_config("runtime-tagged-pointers") then
             add_rules("smallfw.wasm.test")
         end
         add_defines("SF_TEST_SUITE_LABEL=tagged", "SF_TEST_SUITE_PROVIDER=sf_runtime_tagged_cases")
-        add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-tagged.m", {mflags = {"-fno-objc-arc"}})
+        add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-tagged.m", {mflags = smallfw.no_objc_arc_file_flags()})
         add_tests("tagged_arc_noop_semantics", {group = "runtime", realtime_output = true, runargs = {"--case", "tagged_arc_noop_semantics"}})
         add_tests("tagged_object_decode_paths", {group = "runtime", realtime_output = true, runargs = {"--case", "tagged_object_decode_paths"}})
         add_tests("tagged_dispatch_methods", {group = "runtime", realtime_output = true, runargs = {"--case", "tagged_dispatch_methods"}})
         add_tests("tagged_slot_registration_rules", {group = "runtime", realtime_output = true, runargs = {"--case", "tagged_slot_registration_rules"}})
 end
 
-if not smallfw.is_wasm() then
+if smallfw.runtime_exceptions_enabled() then
     target("runtime-tests-exceptions")
         set_group("tests/runtime/exceptions")
         set_kind("binary")
@@ -263,7 +263,7 @@ if not smallfw.is_wasm() then
         add_rules("smallfw.generic_metadata")
         add_rules("smallfw.runtime.binary")
         add_defines("SF_TEST_SUITE_LABEL=exceptions", "SF_TEST_SUITE_PROVIDER=sf_runtime_exception_cases")
-        add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-exceptions.m", {mflags = {"-fno-objc-arc"}})
+        add_files("runtime-tests.m", "runtime-test-support.m", "runtime-test-exceptions.m", {mflags = smallfw.no_objc_arc_file_flags()})
         if has_config("runtime-exceptions") then
             add_tests("exceptions_begin_catch_passthrough", {group = "runtime", realtime_output = true, runargs = {"--case", "exceptions_begin_catch_passthrough"}})
             add_tests("exceptions_internal_helpers", {group = "runtime", realtime_output = true, runargs = {"--case", "exceptions_internal_helpers"}})

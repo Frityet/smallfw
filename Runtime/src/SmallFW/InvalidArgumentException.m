@@ -5,6 +5,8 @@
 #include "abi.h"
 #include "internal.h"
 
+#pragma clang assume_nonnull begin
+
 typedef struct SFStaticInvalidArgumentException {
     SFObjHeader_t hdr;
     Class isa;
@@ -29,3 +31,4 @@ typedef struct SFStaticInvalidArgumentException {
 }
 
 @end
+#pragma clang assume_nonnull end

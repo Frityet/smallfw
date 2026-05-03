@@ -3,19 +3,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
-@import SFRuntime;
+#if defined(SF_CLANGD_NO_MODULES)
+#    include "SmallFW/Object.h"
+#else
+    @import SFRuntime;
+#endif
 #include "internal.h"
 
 #ifndef nil
-#define nil ((id)0)
+#    define nil ((id)0)
 #endif
 #ifndef Nil
-#define Nil ((Class)0)
+#    define Nil ((Class)0)
 #endif
 
 #define SFW_NEW(T) ((T *)[[T allocWithAllocator:sf_default_allocator()] init])
 
-typedef int (*nonnil SFTestFn)(void);
+typedef bool (*nonnil SFTestFn)(void);
 
 typedef struct SFTestCase {
     const char *nonnil name;
@@ -166,39 +170,39 @@ extern int g_counter_deallocs;
 @end
 
 #if SF_RUNTIME_TAGGED_POINTERS
-@interface TaggedNumberProbe : Object
-@property(nonatomic, readonly) uintptr_t value;
-+ (instancetype nillable)numberWithValue:(uintptr_t)value;
-- (uintptr_t)value;
-- (TaggedNumberProbe *nillable)plus:(uintptr_t)delta;
-@end
+    @interface TaggedNumberProbe : Object
+    @property(nonatomic, readonly) uintptr_t value;
+    + (instancetype nillable)numberWithValue:(uintptr_t)value;
+    - (uintptr_t)value;
+    - (TaggedNumberProbe *nillable)plus:(uintptr_t)delta;
+    @end
 
-@interface TaggedStringProbe : Object
-@property(nonatomic, readonly) unsigned long length;
-+ (instancetype nillable)stringWithBytes:(const char *nillable)bytes length:(size_t)length;
-- (unsigned long)length;
-- (unsigned int)characterAtIndex:(unsigned long)index;
-@end
+    @interface TaggedStringProbe : Object
+    @property(nonatomic, readonly) unsigned long length;
+    + (instancetype nillable)stringWithBytes:(const char *nillable)bytes length:(size_t)length;
+    - (unsigned long)length;
+    - (unsigned int)characterAtIndex:(unsigned long)index;
+    @end
 
-@interface TaggedDuplicateA : Object
-@end
+    @interface TaggedDuplicateA : Object
+    @end
 
-@interface TaggedDuplicateB : Object
-@end
+    @interface TaggedDuplicateB : Object
+    @end
 
-@interface TaggedInvalidSlotProbe : Object
-@end
+    @interface TaggedInvalidSlotProbe : Object
+    @end
 
-@interface TaggedValueProbe : ValueObject
-@end
+    @interface TaggedValueProbe : ValueObject
+    @end
 #endif
 
 #if SF_RUNTIME_EXCEPTIONS
-@interface ExceptionBase : AllocationFailedException
-@end
+    @interface ExceptionBase : AllocationFailedException
+    @end
 
-@interface ExceptionChild : ExceptionBase
-@end
+    @interface ExceptionChild : ExceptionBase
+    @end
 #endif
 
 void sf_test_reset_common_state(void);
@@ -211,8 +215,8 @@ void sf_test_reset_c_dispatch_probe(void);
 int sf_test_c_dispatch_probe_argc(void);
 uintptr_t sf_test_c_dispatch_probe_value(int index);
 
-int sf_test_expect_signal(SFTestChildFn fn, void *nillable ctx, int expected_signal);
-int sf_test_expect_signal_case(const char *nonnil case_name, int expected_signal);
+bool sf_test_expect_signal(SFTestChildFn fn, void *nillable ctx, int expected_signal);
+bool sf_test_expect_signal_case(const char *nonnil case_name, int expected_signal);
 
 const SFTestCase *nillable sf_runtime_arc_cases(size_t *nillable count);
 const SFTestCase *nillable sf_runtime_parent_cases(size_t *nillable count);

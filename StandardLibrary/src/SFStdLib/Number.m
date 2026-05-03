@@ -5,6 +5,8 @@
 #include <iso646.h>
 #include <stdint.h>
 
+#pragma clang assume_nonnull begin
+
 enum {
     SF_NUMBER_KIND_SIGNED = 1U,
     SF_NUMBER_KIND_UNSIGNED = 2U,
@@ -21,8 +23,8 @@ static uint64_t sf_number_hash_word(uint64_t hash, uintptr_t word)
     return hash;
 }
 
-static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_value, unsigned long long *unsigned_value,
-                                     double *double_value)
+static bool sf_number_extract_payload(id nillable obj, uint8_t *nonnil kind, long long *nillable signed_value, unsigned long long *nillable unsigned_value,
+                                      double *nillable double_value)
 {
     auto number = (Number *)obj;
 
@@ -30,19 +32,19 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
         return 0;
     }
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (number.isTaggedPointer) {
-        *kind = SF_NUMBER_KIND_UNSIGNED;
-        if (signed_value != nullptr) {
-            *signed_value = (long long)number.taggedPointerPayload;
+        if (number.isTaggedPointer) {
+            *kind = SF_NUMBER_KIND_UNSIGNED;
+            if (signed_value != nullptr) {
+                *signed_value = (long long)number.taggedPointerPayload;
+            }
+            if (unsigned_value != nullptr) {
+                *unsigned_value = (unsigned long long)number.taggedPointerPayload;
+            }
+            if (double_value != nullptr) {
+                *double_value = (double)number.taggedPointerPayload;
+            }
+            return 1;
         }
-        if (unsigned_value != nullptr) {
-            *unsigned_value = (unsigned long long)number.taggedPointerPayload;
-        }
-        if (double_value != nullptr) {
-            *double_value = (double)number.taggedPointerPayload;
-        }
-        return 1;
-    }
 #endif
 
     *kind = number->_kind;
@@ -98,94 +100,94 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
 @implementation Number
 
 #if SF_RUNTIME_TAGGED_POINTERS
-+ (uintptr_t)taggedPointerSlot
-{
-    return 1U;
-}
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 1U;
+    }
 #endif
 
-+ (instancetype)numberWithChar:(char)value
++ (SF_ERRORABLE(instancetype))numberWithChar:(char)value
 {
     return [self numberWithLongLong:(long long)value];
 }
 
-+ (instancetype)numberWithUnsignedChar:(unsigned char)value
++ (SF_ERRORABLE(instancetype))numberWithUnsignedChar:(unsigned char)value
 {
     return [self numberWithUnsignedLongLong:(unsigned long long)value];
 }
 
-+ (instancetype)numberWithShort:(short)value
++ (SF_ERRORABLE(instancetype))numberWithShort:(short)value
 {
     return [self numberWithLongLong:(long long)value];
 }
 
-+ (instancetype)numberWithUnsignedShort:(unsigned short)value
++ (SF_ERRORABLE(instancetype))numberWithUnsignedShort:(unsigned short)value
 {
     return [self numberWithUnsignedLongLong:(unsigned long long)value];
 }
 
-+ (instancetype)numberWithInt:(int)value
++ (SF_ERRORABLE(instancetype))numberWithInt:(int)value
 {
     return [self numberWithLongLong:(long long)value];
 }
 
-+ (instancetype)numberWithUnsignedInt:(unsigned int)value
++ (SF_ERRORABLE(instancetype))numberWithUnsignedInt:(unsigned int)value
 {
     return [self numberWithUnsignedLongLong:(unsigned long long)value];
 }
 
-+ (instancetype)numberWithLong:(long)value
++ (SF_ERRORABLE(instancetype))numberWithLong:(long)value
 {
     return [self numberWithLongLong:(long long)value];
 }
 
-+ (instancetype)numberWithUnsignedLong:(unsigned long)value
++ (SF_ERRORABLE(instancetype))numberWithUnsignedLong:(unsigned long)value
 {
     return [self numberWithUnsignedLongLong:(unsigned long long)value];
 }
 
-+ (instancetype)numberWithLongLong:(long long)value
++ (SF_ERRORABLE(instancetype))numberWithLongLong:(long long)value
 {
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (value >= 0LL and (unsigned long long) value <= (unsigned long long)(UINTPTR_MAX >> 3U)) {
-        Number *tagged = [self taggedPointerWithPayload:(uintptr_t)value];
-#if SF_RUNTIME_EXCEPTIONS
-        __builtin_assume(tagged != nullptr);
-#endif
-        return tagged;
-    }
+        if (value >= 0LL and (unsigned long long) value <= (unsigned long long)(UINTPTR_MAX >> 3U)) {
+            Number *tagged = [self taggedPointerWithPayload:(uintptr_t)value];
+#    if SF_RUNTIME_EXCEPTIONS
+                __builtin_assume(tagged != nullptr);
+#    endif
+            return tagged;
+        }
 #endif
     Number *number = [[self allocWithAllocator:nullptr] initWithSignedLongLong:value];
     return [number autorelease];
 }
 
-+ (instancetype)numberWithUnsignedLongLong:(unsigned long long)value
++ (SF_ERRORABLE(instancetype))numberWithUnsignedLongLong:(unsigned long long)value
 {
 #if SF_RUNTIME_TAGGED_POINTERS
-    if (value <= (unsigned long long)(UINTPTR_MAX >> 3U)) {
-        Number *tagged = [self taggedPointerWithPayload:(uintptr_t)value];
-#if SF_RUNTIME_EXCEPTIONS
-        __builtin_assume(tagged != nullptr);
-#endif
-        return tagged;
-    }
+        if (value <= (unsigned long long)(UINTPTR_MAX >> 3U)) {
+            Number *tagged = [self taggedPointerWithPayload:(uintptr_t)value];
+#    if SF_RUNTIME_EXCEPTIONS
+                __builtin_assume(tagged != nullptr);
+#    endif
+            return tagged;
+        }
 #endif
     Number *number = [[self allocWithAllocator:nullptr] initWithUnsignedLongLong:value];
     return [number autorelease];
 }
 
-+ (instancetype)numberWithDouble:(double)value
++ (SF_ERRORABLE(instancetype))numberWithDouble:(double)value
 {
     Number *number = [[self allocWithAllocator:nullptr] initWithDoubleValue:value];
     return [number autorelease];
 }
 
-+ (instancetype)numberWithBool:(bool)value
++ (SF_ERRORABLE(instancetype))numberWithBool:(bool)value
 {
     return [self numberWithUnsignedLongLong:value ? 1ULL : 0ULL];
 }
 
-- (instancetype)initWithSignedLongLong:(long long)value
+- (instancetype nillable)initWithSignedLongLong:(long long)value
 {
     self = [super init];
     if (self == nullptr) {
@@ -196,7 +198,7 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
     return self;
 }
 
-- (instancetype)initWithUnsignedLongLong:(unsigned long long)value
+- (instancetype nillable)initWithUnsignedLongLong:(unsigned long long)value
 {
     self = [super init];
     if (self == nullptr) {
@@ -207,7 +209,7 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
     return self;
 }
 
-- (instancetype)initWithDoubleValue:(double)value
+- (instancetype nillable)initWithDoubleValue:(double)value
 {
     self = [super init];
     if (self == nullptr) {
@@ -329,7 +331,7 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
     return self.doubleValue != 0.0;
 }
 
-- (bool)isEqual:(Object *)other
+- (bool)isEqual:(Object *nillable)other
 {
     uint8_t lhs_kind = 0U;
     uint8_t rhs_kind = 0U;
@@ -393,3 +395,4 @@ static int sf_number_extract_payload(id obj, uint8_t *kind, long long *signed_va
 }
 
 @end
+#pragma clang assume_nonnull end

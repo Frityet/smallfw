@@ -6,17 +6,19 @@
 #include "abi.h"
 #include "internal.h"
 
+#pragma clang assume_nonnull begin
+
 #if SF_RUNTIME_EXCEPTIONS
-@interface AllocationFailedException (SmallFWInternal)
-+ (instancetype)allocationFailedException;
-@end
+    @interface AllocationFailedException (SmallFWInternal)
+    + (instancetype)allocationFailedException;
+    @end
 #endif
 
 @interface Object ()
 
 @end
 
-static bool sf_class_is_or_inherits_from(Class cls, Class expected)
+static bool sf_class_is_or_inherits_from(Class nillable cls, Class nillable expected)
 {
     while (cls != nullptr) {
         if (cls == expected) {
@@ -33,19 +35,19 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
 
 @implementation Object
 
-+ (instancetype)allocWithAllocator:(SFAllocator_t *)allocator
++ (SF_ERRORABLE(instancetype))allocWithAllocator:(SFAllocator_t *nillable)allocator
 {
     auto obj = sf_alloc_object((Class)self, allocator);
     if (obj == nullptr) {
         SF_THROW([AllocationFailedException allocationFailedException]);
     }
 #if SF_RUNTIME_EXCEPTIONS
-    __builtin_assume(obj != nullptr);
+        __builtin_assume(obj != nullptr);
 #endif
     return (id)obj;
 }
 
-+ (instancetype)allocInPlace:(void *)storage size:(size_t)size
++ (instancetype nillable)allocInPlace:(void *nillable)storage size:(size_t)size
 {
     size_t required = sizeof(SFObjHeader_t) + sf_class_instance_size_fast((Class)self);
     SFObjHeader_t *hdr = nullptr;
@@ -57,7 +59,7 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     memset(storage, 0, size);
     hdr = (SFObjHeader_t *)storage;
 #if SF_RUNTIME_VALIDATION
-    hdr->magic = SF_OBJ_HEADER_MAGIC;
+        hdr->magic = SF_OBJ_HEADER_MAGIC;
 #endif
     hdr->refcount = 1;
     hdr->state = SF_OBJ_STATE_LIVE;
@@ -67,9 +69,9 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     sf_header_set_aux_flags(hdr, 0U);
     sf_header_set_live_cookie(hdr);
 #if SF_RUNTIME_COMPACT_HEADERS
-    hdr->cold = nullptr;
+        hdr->cold = nullptr;
 #else
-    hdr->allocator = sf_default_allocator();
+        hdr->allocator = sf_default_allocator();
 #endif
 
     obj = (id)(void *)((uintptr_t)storage + sizeof(SFObjHeader_t));
@@ -82,12 +84,12 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     return (Class)self;
 }
 
-+ (Class)superclass
++ (Class nillable)superclass
 {
     return class_getSuperclass((Class)self);
 }
 
-+ (const struct SFEncoding *)encoding
++ (const struct SFEncoding *nillable)encoding
 {
     return sf_encoding_for_class((Class)self);
 }
@@ -105,19 +107,19 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     return allocator;
 }
 
-+ (instancetype)allocWithParent:(Object *)parent
++ (SF_ERRORABLE(instancetype))allocWithParent:(Object *nillable)parent
 {
     auto obj = sf_alloc_object_with_parent((Class)self, parent);
     if (obj == nullptr) {
         SF_THROW([AllocationFailedException allocationFailedException]);
     }
 #if SF_RUNTIME_EXCEPTIONS
-    __builtin_assume(obj != nullptr);
+        __builtin_assume(obj != nullptr);
 #endif
     return (id)obj;
 }
 
-- (Object *)parent
+- (Object *nillable)parent
 {
     SFObjHeader_t *hdr = nullptr;
     id parent = nullptr;
@@ -167,17 +169,17 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     return cls;
 }
 
-- (Class)superclass
+- (Class nillable)superclass
 {
     return class_getSuperclass(self.class);
 }
 
-- (const struct SFEncoding *)encoding
+- (const struct SFEncoding *nillable)encoding
 {
     return sf_encoding_for_class(self.class);
 }
 
-- (bool)isKindOfClass:(Class)cls
+- (bool)isKindOfClass:(Class nillable)cls
 {
     if (cls == nullptr) {
         return false;
@@ -185,12 +187,12 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
     return sf_class_is_or_inherits_from(self.class, cls);
 }
 
-- (bool)isMemberOfClass:(Class)cls
+- (bool)isMemberOfClass:(Class nillable)cls
 {
     return cls != nullptr and self.class == cls;
 }
 
-- (bool)isEqual:(Object *)other
+- (bool)isEqual:(Object *nillable)other
 {
     return self == other;
 }
@@ -201,56 +203,56 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
 }
 
 #if SF_RUNTIME_TAGGED_POINTERS
-+ (uintptr_t)taggedPointerSlot
-{
-    return 0U;
-}
+    + (uintptr_t)taggedPointerSlot
+    {
+        return 0U;
+    }
 
-+ (instancetype)taggedPointerWithPayload:(uintptr_t)payload
-{
-    return (id)sf_make_tagged_pointer((Class)self, payload);
-}
+    + (instancetype nillable)taggedPointerWithPayload:(uintptr_t)payload
+    {
+        return (id)sf_make_tagged_pointer((Class)self, payload);
+    }
 
-- (uintptr_t)taggedPointerPayload
-{
-    return sf_tagged_pointer_payload(self);
-}
+    - (uintptr_t)taggedPointerPayload
+    {
+        return sf_tagged_pointer_payload(self);
+    }
 
-- (bool)isTaggedPointer
-{
-    return sf_is_tagged_pointer(self);
-}
+    - (bool)isTaggedPointer
+    {
+        return sf_is_tagged_pointer(self);
+    }
 #endif
 
 #if SF_RUNTIME_FORWARDING
-+ (id)forwardingTargetForSelector:(SEL)selector
-{
-    (void)selector;
-    return (id)0;
-}
+    + (id nillable)forwardingTargetForSelector:(SEL nillable)selector
+    {
+        (void)selector;
+        return (id)0;
+    }
 
-- (id)forwardingTargetForSelector:(SEL)selector
-{
-    (void)selector;
-    return (id)0;
-}
+    - (id nillable)forwardingTargetForSelector:(SEL nillable)selector
+    {
+        (void)selector;
+        return (id)0;
+    }
 #endif
 
 #if SF_RUNTIME_GENERIC_METADATA
-- (Class)genericTypeClass
-{
-    return sf_object_generic_type_class(self);
-}
+    - (Class nillable)genericTypeClass
+    {
+        return sf_object_generic_type_class(self);
+    }
 #endif
 
-- (void *)allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
+- (SF_ERRORABLE(void *))allocateMemoryWithSize:(size_t)size alignment:(size_t)alignment
 {
     void *ptr = self.allocator->alloc(self.allocator->ctx, size, alignment);
     if (ptr == nullptr) {
         SF_THROW([AllocationFailedException allocationFailedException]);
     }
 #if SF_RUNTIME_EXCEPTIONS
-    __builtin_assume(ptr != nullptr);
+        __builtin_assume(ptr != nullptr);
 #endif
     return ptr;
 }
@@ -271,3 +273,4 @@ static bool sf_class_is_or_inherits_from(Class cls, Class expected)
 @implementation ValueObject
 
 @end
+#pragma clang assume_nonnull end

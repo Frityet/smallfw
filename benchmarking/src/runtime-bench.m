@@ -58,7 +58,7 @@ static uint64_t now_ns(void)
     return ((uint64_t)ts.tv_sec * UINT64_C(1000000000)) + (uint64_t)ts.tv_nsec;
 }
 
-static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
+static bool bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
 {
     BenchMono *obj = SFW_NEW(BenchMono);
     int64_t local = 0;
@@ -76,7 +76,7 @@ static int bench_dispatch_monomorphic_hot(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
+static bool bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
 {
     BenchPolyA *a = SFW_NEW(BenchPolyA);
     BenchPolyB *b = SFW_NEW(BenchPolyB);
@@ -102,7 +102,7 @@ static int bench_dispatch_polymorphic_hot(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink)
+static bool bench_arc_retain_release_heap(int iters, volatile uint64_t *sink)
 {
     BenchARC *obj = SFW_NEW(BenchARC);
 
@@ -116,7 +116,7 @@ static int bench_arc_retain_release_heap(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *sink)
+static bool bench_arc_retain_release_round_robin(int iters, volatile uint64_t *sink)
 {
     enum { pool_size = 256 };
     BenchARC *objs[pool_size];
@@ -145,7 +145,7 @@ static int bench_arc_retain_release_round_robin(int iters, volatile uint64_t *si
     return 1;
 }
 
-static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
+static bool bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
 {
     BenchARC *a = SFW_NEW(BenchARC);
     BenchARC *b = SFW_NEW(BenchARC);
@@ -168,7 +168,7 @@ static int bench_arc_store_strong_cycle(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink)
+static bool bench_alloc_init_release_plain(int iters, volatile uint64_t *sink)
 {
     uint64_t local = 0;
 
@@ -185,7 +185,7 @@ static int bench_alloc_init_release_plain(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-static int bench_parent_group_cycle(int iters, volatile uint64_t *sink)
+static bool bench_parent_group_cycle(int iters, volatile uint64_t *sink)
 {
     uint64_t local = 0;
 
@@ -206,7 +206,7 @@ static int bench_parent_group_cycle(int iters, volatile uint64_t *sink)
     return 1;
 }
 
-typedef int (*BenchFn)(int iters, volatile uint64_t *sink);
+typedef bool (*BenchFn)(int iters, volatile uint64_t *sink);
 typedef struct BenchCase {
     const char *name;
     BenchFn fn;
@@ -224,7 +224,7 @@ static const BenchCase g_benches[] = {
     {.name = "parent_group_cycle", .fn = bench_parent_group_cycle, .default_iters = 1000000},
 };
 
-static int run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink)
+static bool run_bench(const BenchCase *bench, int iters, volatile uint64_t *sink)
 {
     uint64_t t0 = now_ns();
     int ok = bench->fn(iters, sink);

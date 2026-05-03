@@ -7,17 +7,15 @@
 #include <stdint.h>
 
 #if defined(_WIN32)
-#define SF_ENCODING_EXPORT
-#elif defined(__clang__) || defined(__GNUC__)
-#define SF_ENCODING_EXPORT __attribute__((visibility("default")))
+#    define SF_ENCODING_EXPORT
 #else
-#define SF_ENCODING_EXPORT
+#    define SF_ENCODING_EXPORT __attribute__((visibility("default")))
 #endif
 
 #define SF_METHOD_ENCODING_MAX_ARGUMENTS 32U
 
 #ifdef __cplusplus
-extern "C" {
+    extern "C" {
 #endif
 
 #pragma clang assume_nonnull begin
@@ -127,7 +125,7 @@ SF_ENCODING_EXPORT bool sf_encoding_text_equal_cstr(struct SFEncodingText text, 
 #pragma clang assume_nonnull end
 
 #ifdef __cplusplus
-}
+    }
 #endif
 
 #undef SF_ENCODING_EXPORT

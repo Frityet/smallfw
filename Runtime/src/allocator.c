@@ -5,16 +5,18 @@
 #include <string.h>
 
 #if defined(_WIN32)
-#include <malloc.h>
+#    include <malloc.h>
 #endif
 #if defined(__linux__)
-#include <sys/mman.h>
-#include <unistd.h>
+#    include <sys/mman.h>
+#    include <unistd.h>
 #endif
 #include <stdlib.h>
 
+#pragma clang assume_nonnull begin
+
 typedef struct SFFreeNode {
-    struct SFFreeNode *next;
+    struct SFFreeNode *nillable next;
 } SFFreeNode_t;
 
 enum {
@@ -24,7 +26,7 @@ enum {
     SF_FAST_ALLOC_REFILL_BLOCKS = 64U,
 };
 
-static thread_local SFFreeNode_t *g_fast_alloc_bins[SF_FAST_ALLOC_BINS];
+static thread_local SFFreeNode_t *nillable g_fast_alloc_bins[SF_FAST_ALLOC_BINS];
 
 static inline size_t align_up(size_t value, size_t align)
 {
@@ -39,18 +41,18 @@ static inline size_t fast_bin_size(size_t bin)
 static inline size_t runtime_page_size(void)
 {
 #if defined(__linux__)
-    static size_t page_size = 0U;
-    if (page_size == 0U) {
-        long detected = sysconf(_SC_PAGESIZE);
-        page_size = detected > 0 ? (size_t)detected : (size_t)4096U;
-    }
-    return page_size;
+        static size_t page_size = 0U;
+        if (page_size == 0U) {
+            long detected = sysconf(_SC_PAGESIZE);
+            page_size = detected > 0 ? (size_t)detected : (size_t)4096U;
+        }
+        return page_size;
 #else
-    return 4096U;
+        return 4096U;
 #endif
 }
 
-static int refill_fast_bin(size_t bin)
+static bool refill_fast_bin(size_t bin)
 {
     const size_t block_size = fast_bin_size(bin);
     const size_t page_size = runtime_page_size();
@@ -63,12 +65,12 @@ static int refill_fast_bin(size_t bin)
     }
 
 #if defined(__linux__)
-    slab = (unsigned char *)mmap(nullptr, slab_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (slab == MAP_FAILED) {
-        slab = nullptr;
-    }
+        slab = (unsigned char *)mmap(nullptr, slab_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (slab == MAP_FAILED) {
+            slab = nullptr;
+        }
 #else
-    slab = calloc(1U, slab_bytes);
+        slab = calloc(1U, slab_bytes);
 #endif
     if (slab == nullptr) {
         return 0;
@@ -82,7 +84,7 @@ static int refill_fast_bin(size_t bin)
     return 1;
 }
 
-static int is_valid_alignment(size_t align)
+static bool is_valid_alignment(size_t align)
 {
     if (align <= sizeof(void *)) {
         return 1;
@@ -101,10 +103,10 @@ static size_t fast_bin_index(size_t size)
     return (size - 1U) / SF_FAST_ALLOC_GRANULE;
 }
 
-static void *default_alloc(void *ctx, size_t size, size_t align)
+static void *nillable default_alloc(void *nillable ctx, size_t size, size_t align)
 {
-#if !defined(_WIN32)
-    void *ptr = nullptr;
+#if not defined(_WIN32)
+        void *ptr = nullptr;
 #endif
     (void)ctx;
     if (align <= sizeof(void *)) {
@@ -124,16 +126,16 @@ static void *default_alloc(void *ctx, size_t size, size_t align)
         return nullptr;
     }
 #if defined(_WIN32)
-    return _aligned_malloc(size, align);
+        return _aligned_malloc(size, align);
 #else
-    if (posix_memalign(&ptr, align, size) != 0) {
-        return nullptr;
-    }
-    return ptr;
+        if (posix_memalign(&ptr, align, size) != 0) {
+            return nullptr;
+        }
+        return ptr;
 #endif
 }
 
-static void default_free(void *ctx, void *ptr, size_t size, size_t align)
+static void default_free(void *nillable ctx, void *nillable ptr, size_t size, size_t align)
 {
     (void)ctx;
     if (ptr == nullptr) {
@@ -153,12 +155,12 @@ static void default_free(void *ctx, void *ptr, size_t size, size_t align)
         }
     }
 #if defined(_WIN32)
-    if (align > sizeof(void *)) {
-        _aligned_free(ptr);
-        return;
-    }
+        if (align > sizeof(void *)) {
+            _aligned_free(ptr);
+            return;
+        }
 #else
-    (void)align;
+        (void)align;
 #endif
     free(ptr);
 }
@@ -173,7 +175,8 @@ SFAllocator_t *sf_default_allocator(void)
     return &allocator;
 }
 
-int sf_default_allocator_returns_zeroed(size_t size, size_t align)
+bool sf_default_allocator_returns_zeroed(size_t size, size_t align)
 {
     return align <= sizeof(void *) and fast_bin_index(size) != (size_t)-1;
 }
+#pragma clang assume_nonnull end

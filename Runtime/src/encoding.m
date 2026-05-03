@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#pragma clang assume_nonnull begin
+
 enum { SF_ENCODING_CACHE_CAPACITY = 8192U };
 
 static inline struct SFEncodingText sf_encoding_text(const char *bytes, size_t length)
@@ -50,7 +52,7 @@ static struct SFTypeEncodingCacheEntry g_type_encoding_cache[SF_ENCODING_CACHE_C
 static struct SFMethodEncodingCacheEntry g_method_encoding_cache[SF_ENCODING_CACHE_CAPACITY];
 static struct SFPropertyEncodingCacheEntry g_property_encoding_cache[SF_ENCODING_CACHE_CAPACITY];
 
-static uint64_t sf_encoding_hash_cstr(const char *bytes)
+static uint64_t sf_encoding_hash_cstr(const char *nonnil bytes)
 {
     uint64_t hash = UINT64_C(1469598103934665603);
     while (*bytes != '\0') {
@@ -61,7 +63,7 @@ static uint64_t sf_encoding_hash_cstr(const char *bytes)
     return hash != 0U ? hash : 1U;
 }
 
-static char *nillable sf_encoding_copy_cstr(const char *bytes)
+static char *nillable sf_encoding_copy_cstr(const char *nonnil bytes)
 {
     size_t length = strlen(bytes) + 1U;
     auto copy = (char *)sf_runtime_test_malloc(length);
@@ -79,7 +81,7 @@ static inline size_t sf_encoding_cache_index(uint64_t hash, size_t step)
 
 static inline bool sf_encoding_is_digit(char c)
 {
-    return c >= '0' && c <= '9';
+    return c >= '0' and c <= '9';
 }
 
 static inline uint32_t sf_encoding_qualifier_for_code(char code)
@@ -106,7 +108,7 @@ static inline uint32_t sf_encoding_qualifier_for_code(char code)
     }
 }
 
-static uint64_t sf_encoding_parse_unsigned(const char **cursor)
+static uint64_t sf_encoding_parse_unsigned(const char *nonnil *nonnil cursor)
 {
     auto p = *cursor;
     uint64_t value = 0U;
@@ -118,7 +120,7 @@ static uint64_t sf_encoding_parse_unsigned(const char **cursor)
     return value;
 }
 
-static int32_t sf_encoding_parse_signed(const char **cursor)
+static int32_t sf_encoding_parse_signed(const char *nonnil *nonnil cursor)
 {
     auto p = *cursor;
     bool negative = false;
@@ -138,24 +140,24 @@ static int32_t sf_encoding_parse_signed(const char **cursor)
     return negative ? (int32_t)-value : (int32_t)value;
 }
 
-static const char *sf_encoding_skip_quoted(const char *cursor)
+static const char *nillable sf_encoding_skip_quoted(const char *nonnil cursor)
 {
     if (*cursor != '"') {
         return nullptr;
     }
     ++cursor;
-    while (*cursor != '\0' && *cursor != '"') {
+    while (*cursor != '\0' and *cursor != '"') {
         ++cursor;
     }
     return *cursor == '"' ? cursor + 1 : nullptr;
 }
 
-static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *out);
+static const char *nillable sf_parse_encoding_type(const char *nonnil start, struct SFEncoding *nonnil out);
 
-static const char *sf_parse_encoding_aggregate(const char *cursor, char close, struct SFEncoding *out)
+static const char *nillable sf_parse_encoding_aggregate(const char *nonnil cursor, char close, struct SFEncoding *nonnil out)
 {
     auto name_start = cursor;
-    while (*cursor != '\0' && *cursor != '=' && *cursor != close) {
+    while (*cursor != '\0' and *cursor != '=' and *cursor != close) {
         ++cursor;
     }
     out->name = sf_encoding_text(name_start, (size_t)(cursor - name_start));
@@ -167,13 +169,13 @@ static const char *sf_parse_encoding_aggregate(const char *cursor, char close, s
     }
     ++cursor;
     auto fields_start = cursor;
-    while (*cursor != '\0' && *cursor != close) {
+    while (*cursor != '\0' and *cursor != close) {
         while (*cursor == '"') {
             auto quoted_end = sf_encoding_skip_quoted(cursor);
             if (quoted_end == nullptr) {
                 return nullptr;
             }
-            cursor = quoted_end;
+            cursor = (const char *nonnil)quoted_end;
         }
         if (*cursor == close) {
             break;
@@ -183,7 +185,7 @@ static const char *sf_parse_encoding_aggregate(const char *cursor, char close, s
         if (field_end == nullptr) {
             return nullptr;
         }
-        cursor = field_end;
+        cursor = (const char *nonnil)field_end;
     }
     if (*cursor != close) {
         return nullptr;
@@ -192,7 +194,7 @@ static const char *sf_parse_encoding_aggregate(const char *cursor, char close, s
     return cursor + 1;
 }
 
-static void sf_encoding_set_simple_kind(struct SFEncoding *out, char code)
+static void sf_encoding_set_simple_kind(struct SFEncoding *nonnil out, char code)
 {
     switch (code) {
         case 'v':
@@ -258,7 +260,7 @@ static void sf_encoding_set_simple_kind(struct SFEncoding *out, char code)
     }
 }
 
-static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *out)
+static const char *nillable sf_parse_encoding_type(const char *nonnil start, struct SFEncoding *nonnil out)
 {
     auto cursor = start;
     *out = sf_invalid_encoding();
@@ -310,7 +312,7 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
                         return nullptr;
                     }
                     out->name = sf_encoding_text(name_start, (size_t)(quote_end - name_start - 1));
-                    cursor = quote_end;
+                    cursor = (const char *nonnil)quote_end;
                 }
             }
             break;
@@ -327,7 +329,7 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
                 return nullptr;
             }
             out->element = element.source;
-            cursor = element_end;
+            cursor = (const char *nonnil)element_end;
             break;
         }
         case '[': {
@@ -335,27 +337,31 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
             out->type.arrayCount = sf_encoding_parse_unsigned(&cursor);
             struct SFEncoding element = sf_invalid_encoding();
             auto element_end = sf_parse_encoding_type(cursor, &element);
-            if (element_end == nullptr || *element_end != ']') {
+            if (element_end == nullptr or *element_end != ']') {
                 return nullptr;
             }
             out->element = element.source;
-            cursor = element_end + 1;
+            cursor = (const char *nonnil)(element_end + 1);
             break;
         }
-        case '{':
+        case '{': {
             out->type.kind = SF_ENCODING_KIND_STRUCT;
-            cursor = sf_parse_encoding_aggregate(cursor, '}', out);
-            if (cursor == nullptr) {
+            auto aggregate_end = sf_parse_encoding_aggregate(cursor, '}', out);
+            if (aggregate_end == nullptr) {
                 return nullptr;
             }
+            cursor = (const char *nonnil)aggregate_end;
             break;
-        case '(':
+        }
+        case '(': {
             out->type.kind = SF_ENCODING_KIND_UNION;
-            cursor = sf_parse_encoding_aggregate(cursor, ')', out);
-            if (cursor == nullptr) {
+            auto aggregate_end = sf_parse_encoding_aggregate(cursor, ')', out);
+            if (aggregate_end == nullptr) {
                 return nullptr;
             }
+            cursor = (const char *nonnil)aggregate_end;
             break;
+        }
         case 'b':
             out->type.kind = SF_ENCODING_KIND_BIT_FIELD;
             out->type.bitSize = sf_encoding_parse_unsigned(&cursor);
@@ -368,7 +374,7 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
                 return nullptr;
             }
             out->element = element.source;
-            cursor = element_end;
+            cursor = (const char *nonnil)element_end;
             break;
         }
         case '!': {
@@ -380,7 +386,7 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
                     return nullptr;
                 }
                 out->element = element.source;
-                cursor = element_end;
+                cursor = (const char *nonnil)element_end;
             }
             break;
         }
@@ -395,30 +401,35 @@ static const char *sf_parse_encoding_type(const char *start, struct SFEncoding *
     return cursor;
 }
 
-static const struct SFEncoding *nillable sf_type_encoding_cache_lookup_or_insert(const char *encoding)
+static const struct SFEncoding *nillable sf_type_encoding_cache_lookup_or_insert(const char *nonnil encoding)
 {
-    if (encoding == nullptr || *encoding == '\0') {
+    if (*encoding == '\0') {
         return nullptr;
     }
-    uint64_t hash = sf_encoding_hash_cstr(encoding);
+    uint64_t hash = sf_encoding_hash_cstr((const char *nonnil)encoding);
     sf_runtime_rwlock_wrlock(&g_encoding_cache_lock);
     for (size_t i = 0; i < SF_ENCODING_CACHE_CAPACITY; ++i) {
         auto slot = &g_type_encoding_cache[sf_encoding_cache_index(hash, i)];
         if (slot->source == nullptr) {
             auto copy = sf_encoding_copy_cstr(encoding);
             struct SFEncoding parsed = sf_invalid_encoding();
-            if (copy == nullptr || sf_parse_encoding_type(copy, &parsed) == nullptr) {
-                free(copy);
+            if (copy == nullptr) {
                 sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
                 return nullptr;
             }
-            slot->source = copy;
+            auto nonnull_copy = (char *nonnil)copy;
+            if (sf_parse_encoding_type(nonnull_copy, &parsed) == nullptr) {
+                free(nonnull_copy);
+                sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
+                return nullptr;
+            }
+            slot->source = nonnull_copy;
             slot->hash = hash;
             slot->encoding = parsed;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return &slot->encoding;
         }
-        if (slot->hash == hash && strcmp(slot->source, encoding) == 0) {
+        if (slot->hash == hash and strcmp(slot->source, encoding) == 0) {
             auto parsed = &slot->encoding;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return parsed;
@@ -428,19 +439,19 @@ static const struct SFEncoding *nillable sf_type_encoding_cache_lookup_or_insert
     return nullptr;
 }
 
-const struct SFEncoding *sf_encoding_parse(const char *encoding)
+const struct SFEncoding *nillable sf_encoding_parse(const char *nillable encoding)
 {
-    return sf_type_encoding_cache_lookup_or_insert(encoding);
+    return encoding != nullptr ? sf_type_encoding_cache_lookup_or_insert((const char *nonnil)encoding) : nullptr;
 }
 
-const struct SFEncoding *sf_encoding_for_class(Class cls)
+const struct SFEncoding *nillable sf_encoding_for_class(Class nillable cls)
 {
     return sf_class_cached_encoding(cls);
 }
 
-static bool sf_method_encoding_parse_uncached(const char *encoding, struct SFMethodEncoding *out)
+static bool sf_method_encoding_parse_uncached(const char *nonnil encoding, struct SFMethodEncoding *nonnil out)
 {
-    if (encoding == nullptr || *encoding == '\0') {
+    if (*encoding == '\0') {
         *out = sf_invalid_method_encoding();
         return false;
     }
@@ -451,8 +462,8 @@ static bool sf_method_encoding_parse_uncached(const char *encoding, struct SFMet
         *out = sf_invalid_method_encoding();
         return false;
     }
-    cursor = return_end;
-    if (*cursor == '-' || sf_encoding_is_digit(*cursor)) {
+    cursor = (const char *nonnil)return_end;
+    if (*cursor == '-' or sf_encoding_is_digit(*cursor)) {
         method.signature.frameSize = sf_encoding_parse_signed(&cursor);
     }
     while (*cursor != '\0') {
@@ -463,8 +474,8 @@ static bool sf_method_encoding_parse_uncached(const char *encoding, struct SFMet
             *out = sf_invalid_method_encoding();
             return false;
         }
-        cursor = argument_type_end;
-        if (*cursor == '-' || sf_encoding_is_digit(*cursor)) {
+        cursor = (const char *nonnil)argument_type_end;
+        if (*cursor == '-' or sf_encoding_is_digit(*cursor)) {
             argument.value.offset = sf_encoding_parse_signed(&cursor);
         }
         argument.source = sf_encoding_text(argument_start, (size_t)(cursor - argument_start));
@@ -481,30 +492,36 @@ static bool sf_method_encoding_parse_uncached(const char *encoding, struct SFMet
     return true;
 }
 
-const struct SFMethodEncoding *sf_method_encoding_parse(const char *encoding)
+const struct SFMethodEncoding *nillable sf_method_encoding_parse(const char *nillable encoding)
 {
-    if (encoding == nullptr || *encoding == '\0') {
+    if (encoding == nullptr or *encoding == '\0') {
         return nullptr;
     }
-    uint64_t hash = sf_encoding_hash_cstr(encoding);
+    auto nonnull_encoding = (const char *nonnil)encoding;
+    uint64_t hash = sf_encoding_hash_cstr(nonnull_encoding);
     sf_runtime_rwlock_wrlock(&g_encoding_cache_lock);
     for (size_t i = 0; i < SF_ENCODING_CACHE_CAPACITY; ++i) {
         auto slot = &g_method_encoding_cache[sf_encoding_cache_index(hash, i)];
         if (slot->source == nullptr) {
-            auto copy = sf_encoding_copy_cstr(encoding);
+            auto copy = sf_encoding_copy_cstr(nonnull_encoding);
             struct SFMethodEncoding parsed = sf_invalid_method_encoding();
-            if (copy == nullptr || !sf_method_encoding_parse_uncached(copy, &parsed)) {
-                free(copy);
+            if (copy == nullptr) {
                 sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
                 return nullptr;
             }
-            slot->source = copy;
+            auto nonnull_copy = (char *nonnil)copy;
+            if (not sf_method_encoding_parse_uncached(nonnull_copy, &parsed)) {
+                free(nonnull_copy);
+                sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
+                return nullptr;
+            }
+            slot->source = nonnull_copy;
             slot->hash = hash;
             slot->encoding = parsed;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return &slot->encoding;
         }
-        if (slot->hash == hash && strcmp(slot->source, encoding) == 0) {
+        if (slot->hash == hash and strcmp(slot->source, nonnull_encoding) == 0) {
             auto parsed = &slot->encoding;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return parsed;
@@ -514,18 +531,18 @@ const struct SFMethodEncoding *sf_method_encoding_parse(const char *encoding)
     return nullptr;
 }
 
-static struct SFEncodingText sf_property_attribute_value(const char *start)
+static struct SFEncodingText sf_property_attribute_value(const char *nonnil start)
 {
     auto end = start;
-    while (*end != '\0' && *end != ',') {
+    while (*end != '\0' and *end != ',') {
         ++end;
     }
     return sf_encoding_text(start, (size_t)(end - start));
 }
 
-static bool sf_property_encoding_parse_uncached(const char *encoding, struct SFPropertyEncoding *out)
+static bool sf_property_encoding_parse_uncached(const char *nonnil encoding, struct SFPropertyEncoding *nonnil out)
 {
-    if (encoding == nullptr || *encoding == '\0') {
+    if (*encoding == '\0') {
         *out = sf_invalid_property_encoding();
         return false;
     }
@@ -544,8 +561,8 @@ static bool sf_property_encoding_parse_uncached(const char *encoding, struct SFP
                     return false;
                 }
                 property.value.type = type;
-                property.state.oldStyleTypeEncoding = property.state.oldStyleTypeEncoding || attribute == 't';
-                cursor = type_end;
+                property.state.oldStyleTypeEncoding = property.state.oldStyleTypeEncoding or attribute == 't';
+                cursor = (const char *nonnil)type_end;
                 break;
             }
             case 'V':
@@ -592,7 +609,7 @@ static bool sf_property_encoding_parse_uncached(const char *encoding, struct SFP
             ++cursor;
         }
     }
-    if (!property.value.type.type.valid) {
+    if (not property.value.type.type.valid) {
         *out = sf_invalid_property_encoding();
         return false;
     }
@@ -602,30 +619,36 @@ static bool sf_property_encoding_parse_uncached(const char *encoding, struct SFP
     return true;
 }
 
-const struct SFPropertyEncoding *sf_property_encoding_parse(const char *encoding)
+const struct SFPropertyEncoding *nillable sf_property_encoding_parse(const char *nillable encoding)
 {
-    if (encoding == nullptr || *encoding == '\0') {
+    if (encoding == nullptr or *encoding == '\0') {
         return nullptr;
     }
-    uint64_t hash = sf_encoding_hash_cstr(encoding);
+    auto nonnull_encoding = (const char *nonnil)encoding;
+    uint64_t hash = sf_encoding_hash_cstr(nonnull_encoding);
     sf_runtime_rwlock_wrlock(&g_encoding_cache_lock);
     for (size_t i = 0; i < SF_ENCODING_CACHE_CAPACITY; ++i) {
         auto slot = &g_property_encoding_cache[sf_encoding_cache_index(hash, i)];
         if (slot->source == nullptr) {
-            auto copy = sf_encoding_copy_cstr(encoding);
+            auto copy = sf_encoding_copy_cstr(nonnull_encoding);
             struct SFPropertyEncoding parsed = sf_invalid_property_encoding();
-            if (copy == nullptr || !sf_property_encoding_parse_uncached(copy, &parsed)) {
-                free(copy);
+            if (copy == nullptr) {
                 sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
                 return nullptr;
             }
-            slot->source = copy;
+            auto nonnull_copy = (char *nonnil)copy;
+            if (not sf_property_encoding_parse_uncached(nonnull_copy, &parsed)) {
+                free(nonnull_copy);
+                sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
+                return nullptr;
+            }
+            slot->source = nonnull_copy;
             slot->hash = hash;
             slot->encoding = parsed;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return &slot->encoding;
         }
-        if (slot->hash == hash && strcmp(slot->source, encoding) == 0) {
+        if (slot->hash == hash and strcmp(slot->source, nonnull_encoding) == 0) {
             auto parsed = &slot->encoding;
             sf_runtime_rwlock_unlock(&g_encoding_cache_lock);
             return parsed;
@@ -635,11 +658,12 @@ const struct SFPropertyEncoding *sf_property_encoding_parse(const char *encoding
     return nullptr;
 }
 
-bool sf_encoding_text_equal_cstr(struct SFEncodingText text, const char *bytes)
+bool sf_encoding_text_equal_cstr(struct SFEncodingText text, const char *nillable bytes)
 {
-    if (text.bytes == nullptr || bytes == nullptr) {
+    if (text.bytes == nullptr or bytes == nullptr) {
         return text.bytes == bytes;
     }
     auto length = strlen(bytes);
-    return text.length == length && memcmp(text.bytes, bytes, length) == 0;
+    return text.length == length and memcmp(text.bytes, bytes, length) == 0;
 }
+#pragma clang assume_nonnull end

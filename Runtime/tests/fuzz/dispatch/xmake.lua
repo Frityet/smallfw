@@ -1,4 +1,4 @@
-if not is_plat("mingw") and not is_plat("wasm") then
+if not is_plat("mingw", "windows") and not is_plat("wasm") then
     target("runtime-fuzz-dispatch")
         set_group("tests/fuzz/dispatch")
         set_kind("binary")
@@ -16,9 +16,8 @@ if not is_plat("mingw") and not is_plat("wasm") then
         add_rules("smallfw.runtime.fuzz_sanitizer")
 
         add_files("fuzz-dispatch-parser.c")
-        if smallfw.runtime_dispatch_backend() == "asm" and is_arch("x86_64") then
+        if smallfw.runtime_dispatch_backend() ~= "c" then
             -- The parser helpers live in dispatch-c.c even when the runtime fast path is assembly.
             add_files(smallfw.project_path("Runtime", "src", "dispatch", "dispatch-c.c"), {defines = {"SF_RUNTIME_DISPATCH_PARSER_ONLY=1"}})
-            add_links("ffi")
         end
 end
