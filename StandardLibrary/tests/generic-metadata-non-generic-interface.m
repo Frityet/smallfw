@@ -1,4 +1,4 @@
-#import <smallfw/Object.h>
+#import <SmallFW/Object.h>
 
 __attribute__((sf_encode_generics))
 @interface NonGenericBox : Object

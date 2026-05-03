@@ -77,9 +77,8 @@ end
 
 local function module_map_paths()
     return {
-        smallfw.project_path("Runtime", "SFRuntime", "src", "SFRuntime.modulemap"),
-        smallfw.project_path("Runtime", "SFBlocksRuntime", "src", "SFBlocksRuntime.modulemap"),
-        smallfw.project_path("StandardLibrary", "src", "SFStandardLibrary.modulemap"),
+        path.join("Runtime", "src", "SFRuntime.modulemap"),
+        path.join("StandardLibrary", "src", "SFStdLib.modulemap"),
     }
 end
 
@@ -223,6 +222,7 @@ rule("smallfw.runtime.common")
             "-Wno-direct-ivar-access",
             "-Wno-objc-interface-ivars",
             "-Wno-unsafe-buffer-usage",
+            "-Wno-auto-var-id",
             "-Wno-keyword-macro",
             "-Wno-c++-keyword",
             "-Wno-unused-parameter",
@@ -272,7 +272,11 @@ rule("smallfw.runtime.common")
                 add_objc_language_flags_to_target(target, "-fmodule-map-file=" .. modulemap)
             end
         end
+        add_objc_language_flags_to_target(target, "-fno-implicit-module-maps")
         target_add_runtime_mode_defines(target)
+        if target:name() == "smallfw-blocksruntime" then
+            add_objc_flags_to_target(target, "-Wno-everything")
+        end
 
         if has_config("analysis-symbols") then
             target:set("symbols", "debug")
@@ -290,6 +294,9 @@ rule("smallfw.runtime.binary")
             target:add("links", "pthread")
         else
             target:add("links", "dl", "pthread")
+        end
+        if is_plat("linux") and runtime_lto_mode() ~= "full" then
+            target:add("linkgroups", "smallfw-runtime", "smallfw-blocksruntime", {name = "smallfw-runtime-libs", group = true})
         end
         if is_plat("linux") then
             add_force_flags(target, "ldflags", "-rdynamic")

@@ -82,35 +82,35 @@ end
 
 local function _coverage_targets()
     local root = task_helpers.projectdir()
-    local runtime_root = path.join(root, "Runtime", "SFRuntime", "src")
+    local runtime_root = path.join(root, "Runtime", "src")
     return {
         direct = {
-            path.join(runtime_root, "runtime/arc.c"),
-            path.join(runtime_root, "runtime/dispatch.c"),
-            path.join(runtime_root, "runtime/exceptions.c"),
-            path.join(runtime_root, "runtime/helpers.c"),
-            path.join(runtime_root, "runtime/loader/common.c"),
-            path.join(runtime_root, "runtime/loader/gnustep.c"),
+            path.join(runtime_root, "arc.c"),
+            path.join(runtime_root, "dispatch/dispatch.c"),
+            path.join(runtime_root, "exceptions/exceptions.c"),
+            path.join(runtime_root, "helpers.c"),
+            path.join(runtime_root, "loader-common.c"),
+            path.join(runtime_root, "loader-gnustep.c"),
         },
         wrappers = {
             {
-                path = path.join(runtime_root, "runtime/allocator.c"),
-                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_allocator.c.c"},
+                path = path.join(runtime_root, "allocator.c"),
+                suffixes = {"/Runtime/src/__cpp_allocator.c.c", "/Runtime/src/allocator.c"},
                 ignore_locks = false,
             },
             {
-                path = path.join(runtime_root, "runtime/dispatch-c.c"),
-                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_dispatch-c.c.c", "/Runtime/SFRuntime/src/runtime/dispatch-c.c"},
+                path = path.join(runtime_root, "dispatch/dispatch-c.c"),
+                suffixes = {"/Runtime/src/dispatch/__cpp_dispatch-c.c.c", "/Runtime/src/dispatch/dispatch-c.c"},
                 ignore_locks = true,
             },
             {
-                path = path.join(runtime_root, "runtime/testhooks.c"),
-                suffixes = {"/Runtime/SFRuntime/src/runtime/__cpp_testhooks.c.c"},
+                path = path.join(runtime_root, "testhooks.c"),
+                suffixes = {"/Runtime/src/__cpp_testhooks.c.c", "/Runtime/src/testhooks.c"},
                 ignore_locks = true,
             },
             {
-                path = path.join(runtime_root, "smallfw/Object.m"),
-                suffixes = {"/Runtime/SFRuntime/src/smallfw/__cpp_Object.m.m"},
+                path = path.join(runtime_root, "SmallFW/Object.m"),
+                suffixes = {"/Runtime/src/SmallFW/__cpp_Object.m.m", "/Runtime/src/SmallFW/Object.m"},
                 ignore_locks = true,
             },
         },

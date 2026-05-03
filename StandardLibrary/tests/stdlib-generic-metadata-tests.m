@@ -1,8 +1,8 @@
 @import SFRuntime;
-@import SFBlocksRuntime;
-@import SFStandardLibrary;
+@import SFStdLib;
+@import SFStdLib.Collections;
 
-#include "runtime/abi.h"
+#include "abi.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -172,7 +172,7 @@ static int test_single_argument_stdlib_generics(void)
 {
     Array<String *> *array =
         [[Array<String *> allocWithAllocator: nullptr] initWithObjects: (id[]){@"value"} count: 1U];
-    List<Number *> *list = [[List<Number *> allocWithAllocator: nullptr] initWithCapacity: 1U];
+    auto list = [[List<Number *> allocWithAllocator: nullptr] initWithCapacity: 1U];
 
     if (list == nullptr) {
         fprintf(stderr, "list construction failed\n");
@@ -197,19 +197,14 @@ static int test_unsupported_stdlib_generics_are_nil(void)
         [[Map<String *, Number *> allocWithAllocator: nullptr] initWithObjects: (id[]){@1}
                                                                        forKeys: (id[]){@"key"}
                                                                          count: 1U];
-    Block<int (^)(int, int)> *block =
-        [[Block<int (^)(int, int)> allocWithAllocator: nullptr] initWithBlock:^int(int lhs, int rhs) {
-            return lhs + rhs;
-        }];
 
-    return expect_generic_class("map", (Object *)map, nullptr) &&
-           expect_generic_class("block", (Object *)block, nullptr);
+    return expect_generic_class("map", (Object *)map, nullptr);
 }
 
 static int test_local_generic_interfaces(void)
 {
-    LocalBox<String *> *marked = [[LocalBox<String *> allocWithAllocator: nullptr] init];
-    PlainBox<String *> *plain = [[PlainBox<String *> allocWithAllocator: nullptr] init];
+    auto marked = [[LocalBox<String *> allocWithAllocator: nullptr] init];
+    auto plain = [[PlainBox<String *> allocWithAllocator: nullptr] init];
 
     return expect_generic_class("marked local box", (Object *)marked, String.class) &&
            expect_generic_class("plain local box", (Object *)plain, nullptr) &&
@@ -218,7 +213,7 @@ static int test_local_generic_interfaces(void)
 
 static int test_replacement_initializer_generic_metadata(void)
 {
-    ReplacementBox<String *> *replacement = [[ReplacementBox<String *> allocWithAllocator: nullptr] init];
+    auto replacement = [[ReplacementBox<String *> allocWithAllocator: nullptr] init];
 
     if (replacement == nullptr) {
         fprintf(stderr, "replacement box construction failed\n");
@@ -275,8 +270,8 @@ static int test_alloc_in_place_generic_class(void)
 
 static int test_alloc_with_parent_embedded_value(void)
 {
-    EmbeddedHolder *holder = [[EmbeddedHolder allocWithAllocator: nullptr] init];
-    EmbeddedBox<String *> *child = [[EmbeddedBox<String *> allocWithParent: holder] init];
+    auto holder = [[EmbeddedHolder allocWithAllocator: nullptr] init];
+    auto child = [[EmbeddedBox<String *> allocWithParent: holder] init];
 
     return expect_generic_class("embedded child", (Object *)child, String.class) &&
            (child.observedClass == String.class);

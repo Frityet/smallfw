@@ -7,7 +7,7 @@
 #include <time.h>
 
 @import SFRuntime;
-#include "runtime/internal.h"
+#include "internal.h"
 
 #define SFW_NEW(T) [[T allocWithAllocator:sf_default_allocator()] init]
 #define SFW_RELEASE(obj)         \

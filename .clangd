@@ -1,0 +1,81 @@
+CompileFlags:
+  Remove:
+    - -std=gnu23
+    - -fmodules-cache-path=*
+  Add:
+    - --target=x86_64-pc-linux-gnu
+    - -std=gnu2x
+    - -fmodules-cache-path=build/.clangd/clang-module-cache
+    - -fno-builtin-module-map
+    - -fno-modules-validate-system-headers
+    - "-D__SIZE_TYPE__=long unsigned int"
+    - "-D__PTRDIFF_TYPE__=long int"
+    - "-D__WCHAR_TYPE__=int"
+    - "-D__WINT_TYPE__=unsigned int"
+    - "-D__INT64_TYPE__=long int"
+    - "-D__UINT64_TYPE__=long unsigned int"
+    - "-D__INTPTR_TYPE__=long int"
+    - "-D__UINTPTR_TYPE__=long unsigned int"
+    - "-D__UINT64_MAX__=18446744073709551615UL"
+    - "-D__UINTPTR_MAX__=18446744073709551615UL"
+    - -D__x86_64__=1
+    - -D__LP64__=1
+    - -D__linux__=1
+    - -D__gnu_linux__=1
+---
+If:
+  PathMatch: .*\.(m|mm)$
+CompileFlags:
+  Add:
+    - -D__OBJC__=1
+    - -D__unsafe_unretained=
+---
+If:
+  PathMatch: .*Runtime/src/.*\.h
+CompileFlags:
+  Remove:
+    - -fmodule-map-file=Runtime/src/SFRuntime.modulemap
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - cert-dcl37-c
+      - cert-dcl51-cpp
+      - bugprone-reserved-identifier
+---
+If:
+  PathMatch: .*Runtime/src/(SmallFW|Blocks)/.*\.h
+CompileFlags:
+  Add:
+    - -D__OBJC__=1
+    - -D__unsafe_unretained=
+---
+If:
+  PathMatch: .*Runtime/src/.*\.m
+CompileFlags:
+  Remove:
+    - -fmodule-map-file=Runtime/src/SFRuntime.modulemap
+    - -fmodule-map-file=StandardLibrary/src/SFStdLib.modulemap
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - "*"
+---
+If:
+  PathMatch: .*StandardLibrary/src/SFStdLib/.*\.h
+CompileFlags:
+  Remove:
+    - -fmodule-map-file=Runtime/src/SFRuntime.modulemap
+    - -fmodule-map-file=StandardLibrary/src/SFStdLib.modulemap
+  Add:
+    - -D__OBJC__=1
+    - -D__unsafe_unretained=
+---
+If:
+  PathMatch: .*StandardLibrary/src/SFStdLib/.*\.m
+CompileFlags:
+  Remove:
+    - -fmodule-map-file=StandardLibrary/src/SFStdLib.modulemap
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - "*"

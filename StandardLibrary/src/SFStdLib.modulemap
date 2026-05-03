@@ -1,0 +1,22 @@
+module SFStdLib {
+  header "SFStdLib/Number.h"
+  header "SFStdLib/String.h"
+  textual header "SFStdLib/runtime-import.h"
+  textual header "SFStdLib/c2x-compat.h"
+  use SFRuntime
+  export *
+  explicit module Collections {
+    header "SFStdLib/Collections/Array.h"
+    header "SFStdLib/Collections/List.h"
+    header "SFStdLib/Collections/Map.h"
+    export *
+  }
+  explicit module Exceptions {
+    header "SFStdLib/Exceptions/Exception.h"
+    export *
+  }
+  explicit module Reflection {
+    header "SFStdLib/Reflection/Reflection.h"
+    export *
+  }
+}

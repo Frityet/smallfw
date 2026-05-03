@@ -8,8 +8,7 @@ if not smallfw.is_wasm() then
         end
         add_options(smallfw.runtime_build_options)
         add_deps(smallfw.runtime_binary_dependency())
-        add_includedirs(smallfw.project_path("Runtime", "SFRuntime", "src"))
-        add_includedirs(smallfw.project_path("Runtime", "SFBlocksRuntime", "src"))
+        add_includedirs(smallfw.project_path("Runtime", "src"))
         add_rules("smallfw.runtime.common")
         add_rules("smallfw.generic_metadata")
         add_rules("smallfw.runtime.binary")
@@ -79,8 +78,7 @@ if not smallfw.is_wasm() then
                 "-fmodules",
                 "-fimplicit-modules",
                 "-fmodules-cache-path=" .. module_cache,
-                "-fmodule-map-file=" .. projectdir .. "/Runtime/SFRuntime/src/SFRuntime.modulemap",
-                "-fmodule-map-file=" .. projectdir .. "/Runtime/SFBlocksRuntime/src/SFBlocksRuntime.modulemap",
+                "-fmodule-map-file=" .. projectdir .. "/Runtime/src/SFRuntime.modulemap",
             }
 
             local function append_all(dst, src)
@@ -98,8 +96,7 @@ if not smallfw.is_wasm() then
                     "-fobjc-arc",
                     "-fblocks",
                     "-fobjc-runtime=" .. objc_runtime,
-                    "-I" .. projectdir .. "/Runtime/SFRuntime/src",
-                    "-I" .. projectdir .. "/Runtime/SFBlocksRuntime/src",
+                    "-I" .. projectdir .. "/Runtime/src",
                     "-fplugin=" .. plugin,
                     "-fpass-plugin=" .. plugin,
                     source,
@@ -131,8 +128,7 @@ if not smallfw.is_wasm() then
                     "-fobjc-arc",
                     "-fblocks",
                     "-fobjc-runtime=" .. objc_runtime,
-                    "-I" .. projectdir .. "/Runtime/SFRuntime/src",
-                    "-I" .. projectdir .. "/Runtime/SFBlocksRuntime/src",
+                    "-I" .. projectdir .. "/Runtime/src",
                     "-fplugin=" .. plugin,
                     "-fpass-plugin=" .. plugin,
                     source,

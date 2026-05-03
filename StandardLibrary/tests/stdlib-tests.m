@@ -1,16 +1,13 @@
 @import SFRuntime;
-@import SFBlocksRuntime;
-@import SFStandardLibrary;
+@import SFStdLib;
+@import SFStdLib.Collections;
+@import SFStdLib.Exceptions;
+@import SFStdLib.Reflection;
 
 #include <iso646.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
-typedef struct StdlibTestAllocatorState {
-    size_t alloc_calls;
-    size_t free_calls;
-} StdlibTestAllocatorState_t;
 
 #if SF_RUNTIME_GENERIC_METADATA
 __attribute__((sf_encode_generics))
@@ -46,27 +43,44 @@ __attribute__((sf_encode_generics))
 @end
 #endif
 
-static void *stdlib_test_alloc(void *ctx, size_t size, size_t align)
-{
-    StdlibTestAllocatorState_t *state = (StdlibTestAllocatorState_t *)ctx;
-    void *ptr = NULL;
-    size_t use_align = align < sizeof(void *) ? sizeof(void *) : align;
-
-    if (posix_memalign(&ptr, use_align, size) != 0) {
-        return NULL;
-    }
-    state->alloc_calls += 1U;
-    return ptr;
+@interface StdlibReflectionBase : Object {
+  @public
+    int _baseValue;
 }
+- (int)basePing;
+@end
 
-static void stdlib_test_free(void *ctx, void *ptr, size_t size, size_t align)
+@implementation StdlibReflectionBase
+- (int)basePing
 {
-    StdlibTestAllocatorState_t *state = (StdlibTestAllocatorState_t *)ctx;
-    (void)size;
-    (void)align;
-    state->free_calls += 1U;
-    free(ptr);
+    return 7;
 }
+@end
+
+@interface StdlibReflectionProbe : StdlibReflectionBase {
+  @public
+    String *_name;
+    Number *_count;
+}
++ (int)classPing;
+- (int)instancePing;
+- (String *)namedValue;
+@end
+
+@implementation StdlibReflectionProbe
++ (int)classPing
+{
+    return 11;
+}
+- (int)instancePing
+{
+    return 13;
+}
+- (String *)namedValue
+{
+    return @"reflection";
+}
+@end
 
 static int expect_utf8_equal(const char *label, const char *actual, const char *expected)
 {
@@ -84,7 +98,7 @@ static int expect_utf8_equal(const char *label, const char *actual, const char *
 static int test_short_string_literal(void)
 {
     String *short_literal = @"hello";
-    String *heap_copy = [[String allocWithAllocator:nullptr] initWithUTF8String:"hello"];
+    auto heap_copy = [[String allocWithAllocator:nullptr] initWithUTF8String:"hello"];
     if (short_literal == nullptr) {
         fprintf(stderr, "short literal was nullptr\n");
         return 0;
@@ -120,7 +134,7 @@ static int test_long_and_unicode_strings(void)
 {
     String *long_literal = @"abcdefghi";
     String *unicode_literal = @"\u2603";
-    String *unicode_heap = [[String allocWithAllocator:nullptr] initWithUTF8String:"\xE2\x98\x83"];
+    auto unicode_heap = [[String allocWithAllocator:nullptr] initWithUTF8String:"\xE2\x98\x83"];
 
     return long_literal != nullptr and
            long_literal.length == 9U and
@@ -137,7 +151,7 @@ static int test_long_and_unicode_strings(void)
 static int test_number_literals(void)
 {
     Number *boxed = @123;
-    Number *wide = [Number numberWithLongLong:-7LL];
+    auto wide = [Number numberWithLongLong:-7LL];
     Number *real = @1.5;
 
     return boxed != NULL and
@@ -153,8 +167,8 @@ static int test_number_literals(void)
 
 static int test_exception_message(void)
 {
-    Exception *with_message = [Exception exceptionWithMessage:@"boom"];
-    Exception *without_message = [Exception exceptionWithMessage:nullptr];
+    auto with_message = [Exception exceptionWithMessage:@"boom"];
+    auto without_message = [Exception exceptionWithMessage:nullptr];
 
     return with_message != nullptr and
            with_message.message != nullptr and
@@ -198,7 +212,7 @@ static int test_framework_exceptions(void)
 
 static int test_list_bounds_exception(void)
 {
-    List<Number *> *list = [[List<Number *> allocWithAllocator:nullptr] initWithCapacity:1U];
+    auto list = [[List<Number *> allocWithAllocator:nullptr] initWithCapacity:1U];
     int caught = 0;
 
     if (list == nullptr) {
@@ -219,8 +233,8 @@ static int test_list_bounds_exception(void)
 
 static int test_object_runtime_api(void)
 {
-    Object *plain = [[Object allocWithAllocator:NULL] init];
-    Object *other = [[Object allocWithAllocator:NULL] init];
+    auto plain = [[Object allocWithAllocator:NULL] init];
+    auto other = [[Object allocWithAllocator:NULL] init];
     Array *array = @[ @"one" ];
     Number *number = @123;
     String *string = @"hello";
@@ -338,7 +352,7 @@ static int test_object_runtime_api(void)
 static int test_array_literal(void)
 {
     Array *array = @[ @"one", @2, @"three" ];
-    Array *same = [Array arrayWithObjects:(id[]) { @"one", @2, @"three" } count:3U];
+    auto same = [Array arrayWithObjects:(id[]) { @"one", @2, @"three" } count:3U];
 
     return array != NULL and
            same != NULL and
@@ -353,7 +367,7 @@ static int test_map_literal(void)
 {
     Map *map = @{@"alpha" : @1,
                  @"beta" : @2};
-    Map *deduped = [Map dictionaryWithObjects:(id[]) { @1, @2, @3 }
+    auto deduped = [Map dictionaryWithObjects:(id[]) { @1, @2, @3 }
                                       forKeys:(id[]){@"alpha", @"beta", @"alpha"}
                                         count:3U];
 
@@ -367,47 +381,105 @@ static int test_map_literal(void)
            ((Number *)[deduped objectForKey:@"beta"]).intValue == 2;
 }
 
-static int test_block_allocator_wrapper(void)
+static int test_reflection_library(void)
 {
-    StdlibTestAllocatorState_t allocator_state = {0U, 0U};
-    SFAllocator_t allocator = {
-        .alloc = stdlib_test_alloc,
-        .free = stdlib_test_free,
-        .ctx = &allocator_state,
-    };
-    int answer = 0;
+    auto info = [Reflection classNamed:"StdlibReflectionProbe"];
+    auto named_again = [ReflectionClass classNamed:"StdlibReflectionProbe"];
+    auto object = [[StdlibReflectionProbe allocWithAllocator:nullptr] init];
+    auto object_info = [Reflection classOfObject:object];
+    auto instance_sel = [Reflection selectorNamed:"instancePing"];
+    auto class_sel = [Reflection selectorNamed:"classPing"];
+    int found_class = 0;
 
-    {
-        int captured = 21;
-        Block<int (^)(int, int)> *adder =
-            [[Block<int (^)(int, int)> allocWithAllocator:&allocator] initWithBlock:^int(int lhs, int rhs) {
-              return lhs + rhs + captured;
-            }];
+    if (info == nullptr or named_again == nullptr or object == nullptr or object_info == nullptr) {
+        fprintf(stderr, "reflection basic construction failed\n");
+        return 0;
+    }
 
-        if (adder == NULL || adder.block == NULL) {
-            fprintf(stderr, "block wrapper construction failed\n");
-            return 0;
+    if (info.reflectedClass != StdlibReflectionProbe.class or named_again.reflectedClass != info.reflectedClass or object_info.reflectedClass != info.reflectedClass) {
+        fprintf(stderr, "reflection class identity mismatch\n");
+        return 0;
+    }
+    if (info.name == nullptr or strcmp(info.name, "StdlibReflectionProbe") != 0 or info.nameString == nullptr or strcmp(info.nameString.UTF8String, "StdlibReflectionProbe") != 0) {
+        fprintf(stderr, "reflection class name mismatch\n");
+        return 0;
+    }
+    if (info.reflectedSuperclass != StdlibReflectionBase.class or info.superclassReflection == nullptr or info.superclassReflection.reflectedClass != StdlibReflectionBase.class) {
+        fprintf(stderr, "reflection superclass mismatch\n");
+        return 0;
+    }
+    if (not[info isSubclassOfClass:StdlibReflectionBase.class] or not[info isSubclassOfReflectedClass:info.superclassReflection] or [info isSubclassOfClass:Number.class]) {
+        fprintf(stderr, "reflection subclass relationship mismatch\n");
+        return 0;
+    }
+    if (info.instanceSize < sizeof(void *)) {
+        fprintf(stderr, "reflection instance size mismatch\n");
+        return 0;
+    }
+
+    auto instance_method = [info instanceMethodForSelector:instance_sel];
+    auto instance_by_name = [info instanceMethodNamed:"instancePing"];
+    auto class_method = [info classMethodForSelector:class_sel];
+    auto class_by_name = [info classMethodNamed:"classPing"];
+    if (instance_method == nullptr or instance_by_name == nullptr or class_method == nullptr or class_by_name == nullptr) {
+        fprintf(stderr, "reflection method lookup failed\n");
+        return 0;
+    }
+    if (not instance_method.instanceMethod or instance_method.classMethod or instance_method.selector == nullptr or not[instance_method matchesSelector:instance_sel] or not[instance_method matchesName:"instancePing"]) {
+        fprintf(stderr, "reflection instance method metadata mismatch\n");
+        return 0;
+    }
+    if (instance_method.nameString == nullptr or strcmp(instance_method.nameString.UTF8String, "instancePing") != 0 or instance_method.typeEncoding == nullptr or instance_method.typeEncodingString == nullptr or instance_method.implementation == nullptr) {
+        fprintf(stderr, "reflection instance method strings mismatch\n");
+        return 0;
+    }
+    if (not class_method.classMethod or class_method.instanceMethod or not[class_method matchesName:"classPing"]) {
+        fprintf(stderr, "reflection class method metadata mismatch\n");
+        return 0;
+    }
+
+    auto methods = info.instanceMethods;
+    auto all_methods = info.allInstanceMethods;
+    auto method_map = info.instanceMethodsByName;
+    auto all_method_map = info.allInstanceMethodsByName;
+    if (methods == nullptr or methods.count == 0U or all_methods == nullptr or all_methods.count < methods.count or method_map == nullptr or all_method_map == nullptr) {
+        fprintf(stderr, "reflection method collections failed\n");
+        return 0;
+    }
+    if (method_map[@"instancePing"] == nullptr or all_method_map[@"basePing"] == nullptr) {
+        fprintf(stderr, "reflection method map lookup failed\n");
+        return 0;
+    }
+
+    auto ivar = [info instanceVariableNamed:"_name"];
+    auto inherited_ivar_map = info.allInstanceVariablesByName;
+    auto local_ivar_map = info.instanceVariablesByName;
+    if (ivar == nullptr or not[ivar matchesName:"_name"] or ivar.nameString == nullptr or strcmp(ivar.nameString.UTF8String, "_name") != 0 or ivar.typeEncoding == nullptr or ivar.typeEncodingString == nullptr or ivar.offset < 0) {
+        fprintf(stderr, "reflection ivar metadata mismatch\n");
+        return 0;
+    }
+    if (local_ivar_map == nullptr or local_ivar_map[@"_count"] == nullptr or inherited_ivar_map == nullptr or inherited_ivar_map[@"_baseValue"] == nullptr) {
+        fprintf(stderr, "reflection ivar map lookup failed\n");
+        return 0;
+    }
+
+    auto classes = [Reflection allClasses];
+    if (classes == nullptr or classes.count == 0U) {
+        fprintf(stderr, "reflection allClasses failed\n");
+        return 0;
+    }
+    for (size_t i = 0U; i < classes.count; ++i) {
+        auto cls = (ReflectionClass *)classes[i];
+        if (cls.reflectedClass == StdlibReflectionProbe.class) {
+            found_class = 1;
+            break;
         }
-        int (^native_adder)(int, int) = adder.block;
-        answer = native_adder(10, 11);
-        native_adder = NULL;
-        adder = nullptr;
+    }
+    if (not found_class) {
+        fprintf(stderr, "reflection allClasses missing probe\n");
+        return 0;
     }
 
-    if (answer != 42) {
-        fprintf(stderr, "block wrapper result mismatch: %d\n", answer);
-        return 0;
-    }
-    if (allocator_state.alloc_calls < 2U) {
-        fprintf(stderr, "custom allocator did not receive block copy: %zu\n", allocator_state.alloc_calls);
-        return 0;
-    }
-    if (allocator_state.free_calls != allocator_state.alloc_calls) {
-        fprintf(stderr, "custom allocator free mismatch: alloc=%zu free=%zu\n",
-                allocator_state.alloc_calls,
-                allocator_state.free_calls);
-        return 0;
-    }
     return 1;
 }
 
@@ -440,21 +512,17 @@ static int expect_generic_class(const char *label, Object *obj, Class expected)
 
 static int test_runtime_generic_metadata(void)
 {
-    Array<String *> *array = [[Array<String *> allocWithAllocator:nullptr]
+    auto array = [[Array<String *> allocWithAllocator:nullptr]
         initWithObjects:(id[]){@"one"}
                   count:1U];
-    List<Number *> *list = [[List<Number *> allocWithAllocator:nullptr] initWithCapacity:2U];
-    Map<String *, Number *> *map = [[Map<String *, Number *> allocWithAllocator:nullptr]
+    auto list = [[List<Number *> allocWithAllocator:nullptr] initWithCapacity:2U];
+    auto map = [[Map<String *, Number *> allocWithAllocator:nullptr]
         initWithObjects:(id[]) { @1 }
                 forKeys:(id[]){@"one"}
                   count:1U];
-    Block<int (^)(int, int)> *block =
-        [[Block<int (^)(int, int)> allocWithAllocator:nullptr] initWithBlock:^int(int lhs, int rhs) {
-          return lhs + rhs;
-        }];
-    StdlibGenericBox<String *> *box = [[StdlibGenericBox<String *> allocWithAllocator:nullptr] init];
-    StdlibPlainGenericBox<String *> *plain = [[StdlibPlainGenericBox<String *> allocWithAllocator:nullptr] init];
-    StdlibInlineGenericHolder *holder = [[StdlibInlineGenericHolder allocWithAllocator:nullptr] init];
+    auto box = [[StdlibGenericBox<String *> allocWithAllocator:nullptr] init];
+    auto plain = [[StdlibPlainGenericBox<String *> allocWithAllocator:nullptr] init];
+    auto holder = [[StdlibInlineGenericHolder allocWithAllocator:nullptr] init];
     StdlibInlineGenericValue<String *> *inline_value =
         [[StdlibInlineGenericValue<String *> allocWithParent:holder] init];
 
@@ -473,15 +541,12 @@ static int test_runtime_generic_metadata(void)
     if (!expect_generic_class("list", (Object *)list, Number.class)) {
         return 0;
     }
-    Number *first = [list objectAtIndex:0U];
+    auto first = [list objectAtIndex:0U];
     if (first == nullptr or first.intValue != 1) {
         fprintf(stderr, "generic list element mismatch\n");
         return 0;
     }
     if (!expect_generic_class("map", (Object *)map, NULL)) {
-        return 0;
-    }
-    if (!expect_generic_class("block", (Object *)block, NULL)) {
         return 0;
     }
     if (!expect_generic_class("box", (Object *)box, String.class)) {
@@ -544,8 +609,8 @@ int main(void)
         fprintf(stderr, "map literal test failed\n");
         return 1;
     }
-    if (not test_block_allocator_wrapper()) {
-        fprintf(stderr, "block allocator wrapper test failed\n");
+    if (not test_reflection_library()) {
+        fprintf(stderr, "reflection library test failed\n");
         return 1;
     }
 #if SF_RUNTIME_GENERIC_METADATA

@@ -1,0 +1,13 @@
+module SFRuntime {
+  header "encoding.h"
+  header "objc-runtime-exports.h"
+  header "sf-allocator.h"
+  header "SmallFW/Object.h"
+  export *
+}
+
+module SFBlocksRuntime {
+  header "Blocks/Block.h"
+  use SFRuntime
+  export *
+}
